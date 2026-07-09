@@ -1,0 +1,9 @@
+[project]
+name = "twbpatch"
+version = "0.1.0"
+description = "TWB/TWBX inspector, patcher, and editor"
+requires-python = ">=3.10"
+dependencies = ["lxml>=5.0.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

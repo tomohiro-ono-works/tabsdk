@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name="ds1" caption="売上データ">
+      <column name="[Sales]" caption="売上" datatype="real" role="measure" type="quantitative" />
+      <column name="[Profit]" caption="粗利" datatype="real" role="measure" type="quantitative" />
+    </datasource>
+  </datasources>
+</workbook>
