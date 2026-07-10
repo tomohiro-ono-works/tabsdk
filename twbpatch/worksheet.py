@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from lxml import etree as ET
 from .errors import NotFoundError, AmbiguousCaptionError
-from .models import TwbWorksheet
+from .field_ref import attrs, build_column_index, resolve_field
+from .models import TwbReferenceLine, TwbWorksheet
+from .window import bool_attr, window_attrs_by_name
 
 
 def worksheet_elements(tree: ET._ElementTree) -> list[ET._Element]:
@@ -27,18 +29,62 @@ def _first_text(node: ET._Element, xpath: str) -> str | None:
     return str(value).strip()
 
 
-def _attrs(node: ET._Element) -> dict[str, str]:
+def _raw_attrs(node: ET._Element) -> dict[str, str]:
     return {str(k): str(v) for k, v in node.attrib.items()}
 
 
-def materialize_worksheet(ws_el: ET._Element) -> TwbWorksheet:
+def _reference_lines(
+    ws_el: ET._Element,
+    worksheet: str,
+    *,
+    columns: dict[tuple[str, str], ET._Element] | None = None,
+) -> list[TwbReferenceLine]:
+    lines: list[TwbReferenceLine] = []
+    worksheet_id = ws_el.get("name")
+    columns = columns or {}
+
+    for refline in ws_el.xpath(".//*[local-name()='reference-line']"):
+        axis_column = refline.get("axis-column")
+        value_column = refline.get("value-column")
+        axis_caption, axis_role = resolve_field(axis_column, columns)
+        value_caption, value_role = resolve_field(value_column, columns)
+
+        lines.append(
+            TwbReferenceLine(
+                worksheet=worksheet,
+                worksheet_id=worksheet_id,
+                id=refline.get("id"),
+                axis_column=axis_column,
+                axis_caption=axis_caption,
+                axis_role=axis_role,
+                value_column=value_column,
+                value_caption=value_caption,
+                value_role=value_role,
+                formula=refline.get("formula"),
+                scope=refline.get("scope"),
+                label_type=refline.get("label-type"),
+                tooltip_type=refline.get("tooltip-type"),
+                attrs=attrs(refline),
+            )
+        )
+
+    return lines
+
+
+def materialize_worksheet(
+    ws_el: ET._Element,
+    *,
+    window_attrs: dict[str, str] | None = None,
+    columns: dict[tuple[str, str], ET._Element] | None = None,
+) -> TwbWorksheet:
     name = ws_el.get("name") or ""
     caption = ws_el.get("caption") or name
+    hidden = bool(bool_attr((window_attrs or {}).get("hidden"), False))
 
     rows_text = _first_text(ws_el, ".//*[local-name()='rows']/text()")
     cols_text = _first_text(ws_el, ".//*[local-name()='cols']/text()")
 
-    filters = [_attrs(f) for f in ws_el.xpath(".//*[local-name()='filter']")]
+    filters = [_raw_attrs(f) for f in ws_el.xpath(".//*[local-name()='filter']")]
 
     datasource_names: list[str] = []
     for ds_dep in ws_el.xpath(".//*[local-name()='datasource-dependencies']"):
@@ -61,11 +107,22 @@ def materialize_worksheet(ws_el: ET._Element) -> TwbWorksheet:
         filters=filters,
         datasource_names=datasource_names,
         used_columns=used_columns,
+        reference_lines=_reference_lines(ws_el, caption, columns=columns),
+        visible=not hidden,
     )
 
 
 def list_worksheets_from_tree(tree: ET._ElementTree) -> list[TwbWorksheet]:
-    return [materialize_worksheet(ws) for ws in worksheet_elements(tree)]
+    windows = window_attrs_by_name(tree, "worksheet")
+    columns = build_column_index(tree)
+    return [
+        materialize_worksheet(
+            ws,
+            window_attrs=windows.get(ws.get("name") or ""),
+            columns=columns,
+        )
+        for ws in worksheet_elements(tree)
+    ]
 
 
 def resolve_worksheet_el(tree: ET._ElementTree, worksheet: str, *, by: str = "auto") -> ET._Element:
@@ -84,4 +141,27 @@ def resolve_worksheet_el(tree: ET._ElementTree, worksheet: str, *, by: str = "au
 
 
 def get_worksheet_from_tree(tree: ET._ElementTree, worksheet: str, *, by: str = "auto") -> TwbWorksheet:
-    return materialize_worksheet(resolve_worksheet_el(tree, worksheet, by=by))
+    ws_el = resolve_worksheet_el(tree, worksheet, by=by)
+    windows = window_attrs_by_name(tree, "worksheet")
+    return materialize_worksheet(
+        ws_el,
+        window_attrs=windows.get(ws_el.get("name") or ""),
+        columns=build_column_index(tree),
+    )
+
+
+def list_reference_lines_from_tree(
+    tree: ET._ElementTree,
+    worksheet: str | None = None,
+    *,
+    by: str = "auto",
+) -> list[TwbReferenceLine]:
+    columns = build_column_index(tree)
+    worksheet_els = [resolve_worksheet_el(tree, worksheet, by=by)] if worksheet is not None else worksheet_elements(tree)
+    lines: list[TwbReferenceLine] = []
+
+    for ws_el in worksheet_els:
+        caption = ws_el.get("caption") or ws_el.get("name") or ""
+        lines.extend(_reference_lines(ws_el, caption, columns=columns))
+
+    return lines

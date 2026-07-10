@@ -22,6 +22,23 @@ ENCODING_TYPE_LABELS = {
     "angle": "角度",
 }
 
+AGGREGATION_LABELS = {
+    "sum": "SUM",
+    "avg": "AVG",
+    "average": "AVG",
+    "median": "MEDIAN",
+    "min": "MIN",
+    "max": "MAX",
+    "cnt": "COUNT",
+    "count": "COUNT",
+    "ctd": "COUNTD",
+    "countd": "COUNTD",
+    "stdev": "STDEV",
+    "stdevp": "STDEVP",
+    "var": "VAR",
+    "varp": "VARP",
+}
+
 
 def _worksheet_map(tree: ET._ElementTree) -> dict[str, ET._Element]:
     return {str(ws.get("name")): ws for ws in tree.getroot().xpath("/workbook/worksheets/worksheet") if ws.get("name")}
@@ -48,6 +65,19 @@ def _field_name_from_token(token: str) -> str:
         return token
     parts = token.split(":")
     return parts[1] if len(parts) >= 3 else token
+
+
+def _aggregation_from_ref(ref: str | None) -> str | None:
+    match = re.match(r"^\[[^\]]+\]\.\[([^\]]+)\]$", ref or "")
+    if not match:
+        return None
+    token = match.group(1)
+    if token.startswith(":"):
+        return None
+    parts = token.split(":")
+    if len(parts) < 3:
+        return None
+    return AGGREGATION_LABELS.get(parts[0].lower())
 
 
 def _resolve_field(ref: str | None, columns: dict[tuple[str, str], ET._Element]) -> tuple[str | None, str | None]:
@@ -131,13 +161,25 @@ def _append_field(
     fields: list[TwbWorksheetField],
     *,
     worksheet: str,
+    category: str,
     type_: str,
     ref: str | None,
     columns: dict[tuple[str, str], ET._Element],
     values: str | None = None,
 ) -> None:
     caption, role = _resolve_field(ref, columns)
-    fields.append(TwbWorksheetField(worksheet=worksheet, type=type_, role=role, caption=caption, id=ref, values=values))
+    fields.append(
+        TwbWorksheetField(
+            worksheet=worksheet,
+            type=type_,
+            role=role,
+            caption=caption,
+            id=ref,
+            values=values,
+            category=category,
+            aggregation=_aggregation_from_ref(ref),
+        )
+    )
 
 
 def list_dashboard_fields_from_tree(
@@ -162,6 +204,7 @@ def list_dashboard_fields_from_tree(
                 _append_field(
                     fields,
                     worksheet=ws.caption or ws.name,
+                    category="フィルタ",
                     type_="フィルタ",
                     ref=filter_el.get("column"),
                     columns=columns,
@@ -169,21 +212,28 @@ def list_dashboard_fields_from_tree(
                 )
 
             for ref in _refs_from_text(_first_text(ws_el, "rows")):
-                _append_field(fields, worksheet=ws.caption or ws.name, type_="行", ref=ref, columns=columns)
+                _append_field(fields, worksheet=ws.caption or ws.name, category="軸", type_="y軸", ref=ref, columns=columns)
 
             for ref in _refs_from_text(_first_text(ws_el, "cols")):
-                _append_field(fields, worksheet=ws.caption or ws.name, type_="列", ref=ref, columns=columns)
+                _append_field(fields, worksheet=ws.caption or ws.name, category="軸", type_="x軸", ref=ref, columns=columns)
 
             for pane in ws_el.xpath(".//*[local-name()='pane']"):
-                for attr in ("x-axis-name", "y-axis-name"):
+                for attr, type_ in (("x-axis-name", "x軸"), ("y-axis-name", "y軸")):
                     if pane.get(attr):
-                        _append_field(fields, worksheet=ws.caption or ws.name, type_="ペイン", ref=pane.get(attr), columns=columns)
+                        _append_field(
+                            fields,
+                            worksheet=ws.caption or ws.name,
+                            category="軸",
+                            type_=type_,
+                            ref=pane.get(attr),
+                            columns=columns,
+                        )
 
                 for el in pane.xpath(".//*[local-name()='encodings']/*[@column]"):
                     type_ = ENCODING_TYPE_LABELS.get(_local_name(el), _local_name(el))
-                    _append_field(fields, worksheet=ws.caption or ws.name, type_=type_, ref=el.get("column"), columns=columns)
+                    _append_field(fields, worksheet=ws.caption or ws.name, category="ペイン", type_=type_, ref=el.get("column"), columns=columns)
 
                 for el in pane.xpath(".//*[@column and not(ancestor::*[local-name()='encodings'])]"):
-                    _append_field(fields, worksheet=ws.caption or ws.name, type_="ペイン", ref=el.get("column"), columns=columns)
+                    _append_field(fields, worksheet=ws.caption or ws.name, category="その他", type_="その他", ref=el.get("column"), columns=columns)
 
     return fields

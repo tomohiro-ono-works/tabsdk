@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dataclass_field
 
 
 @dataclass
@@ -42,8 +42,8 @@ class TwbColumn:
     hidden: bool = False
     formula: str | None = None
     raw_formula: str | None = None
-    referenced_columns: list[str] = field(default_factory=list)
-    format: list[dict[str, str]] = field(default_factory=list)
+    referenced_columns: list[str] = dataclass_field(default_factory=list)
+    format: list[dict[str, str]] = dataclass_field(default_factory=list)
     folder: str | None = None
 
     @property
@@ -56,7 +56,7 @@ class TwbFolder:
     name: str
     id: str | None = None
     role: str | None = None
-    items: list[str] = field(default_factory=list)
+    items: list[str] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -68,8 +68,8 @@ class TwbParameter:
     value: str | None = None
     value_display: str | None = None
     domain_type: str | None = None
-    allowable_values: list[dict[str, str | None]] = field(default_factory=list)
-    aliases: list[dict[str, str | None]] = field(default_factory=list)
+    allowable_values: list[dict[str, str | None]] = dataclass_field(default_factory=list)
+    aliases: list[dict[str, str | None]] = dataclass_field(default_factory=list)
     default_value_field: str | None = None
     hidden: bool = False
 
@@ -86,15 +86,88 @@ class TwbDatasource:
 
 
 @dataclass
+class TwbReferenceLine:
+    worksheet: str
+    worksheet_id: str | None = None
+    id: str | None = None
+    axis_column: str | None = None
+    axis_caption: str | None = None
+    axis_role: str | None = None
+    value_column: str | None = None
+    value_caption: str | None = None
+    value_role: str | None = None
+    formula: str | None = None
+    scope: str | None = None
+    label_type: str | None = None
+    tooltip_type: str | None = None
+    attrs: dict[str, str] = dataclass_field(default_factory=dict)
+
+
+@dataclass
+class TwbWorksheetFilter:
+    worksheet: str
+    worksheet_id: str | None = None
+    column: str | None = None
+    field: str | None = None
+    role: str | None = None
+    filter_class: str | None = None
+    filter_group: str | None = None
+    domain: str | None = None
+    enumeration: str | None = None
+    value_scope: str | None = None
+    value_scope_label: str | None = None
+    apply_scope: str | None = None
+    apply_scope_label: str | None = None
+    selection_type: str | None = None
+    values: list[str] = dataclass_field(default_factory=list)
+    functions: list[str] = dataclass_field(default_factory=list)
+    attrs: dict[str, str] = dataclass_field(default_factory=dict)
+    groupfilter_attrs: list[dict[str, str]] = dataclass_field(default_factory=list)
+
+
+@dataclass
+class TwbFilterControl:
+    dashboard: str
+    dashboard_id: str | None = None
+    id: str | None = None
+    name: str | None = None
+    worksheet: str | None = None
+    worksheet_id: str | None = None
+    column: str | None = None
+    field: str | None = None
+    role: str | None = None
+    mode: str | None = None
+    filter_class: str | None = None
+    domain: str | None = None
+    enumeration: str | None = None
+    value_scope: str | None = None
+    value_scope_label: str | None = None
+    apply_scope: str | None = None
+    apply_scope_label: str | None = None
+    selection_type: str | None = None
+    values: list[str] = dataclass_field(default_factory=list)
+    show_apply: bool | None = None
+    show_title: bool | None = None
+    show_caption: bool | None = None
+    x: str | None = None
+    y: str | None = None
+    width: str | None = None
+    height: str | None = None
+    attrs: dict[str, str] = dataclass_field(default_factory=dict)
+
+
+@dataclass
 class TwbWorksheet:
     name: str
     id: str | None = None
     caption: str | None = None
-    rows: list[str] = field(default_factory=list)
-    columns: list[str] = field(default_factory=list)
-    filters: list[dict[str, str]] = field(default_factory=list)
-    datasource_names: list[str] = field(default_factory=list)
-    used_columns: list[str] = field(default_factory=list)
+    rows: list[str] = dataclass_field(default_factory=list)
+    columns: list[str] = dataclass_field(default_factory=list)
+    filters: list[dict[str, str]] = dataclass_field(default_factory=list)
+    datasource_names: list[str] = dataclass_field(default_factory=list)
+    used_columns: list[str] = dataclass_field(default_factory=list)
+    reference_lines: list[TwbReferenceLine] = dataclass_field(default_factory=list)
+    visible: bool = True
 
 
 @dataclass
@@ -102,7 +175,8 @@ class TwbDashboard:
     name: str
     id: str | None = None
     caption: str | None = None
-    worksheets: list[TwbWorksheet] = field(default_factory=list)
+    worksheets: list[TwbWorksheet] = dataclass_field(default_factory=list)
+    visible: bool = True
 
 
 @dataclass
@@ -113,6 +187,8 @@ class TwbWorksheetField:
     caption: str | None
     id: str | None = None
     values: str | None = None
+    category: str | None = None
+    aggregation: str | None = None
 
 
 @dataclass

@@ -4,7 +4,23 @@ from dataclasses import asdict
 from lxml import etree as ET
 from .parser import ParsedWorkbook, open_workbook_file
 from .writer import save_twb, save_twbx
-from .models import TwbDatasource, TwbColumn, TwbDashboard, TwbWorksheet, TwbWorksheetField, TwbParameter, TwbValidationMessage, TwbUnsupportedFeature, BigQuerySource, ExcelSource, CsvSource, UnknownSource
+from .models import (
+    BigQuerySource,
+    CsvSource,
+    ExcelSource,
+    TwbColumn,
+    TwbDashboard,
+    TwbDatasource,
+    TwbFilterControl,
+    TwbParameter,
+    TwbReferenceLine,
+    TwbUnsupportedFeature,
+    TwbValidationMessage,
+    TwbWorksheet,
+    TwbWorksheetField,
+    TwbWorksheetFilter,
+    UnknownSource,
+)
 from .datasource import list_datasources_from_tree, resolve_datasource_el, update_source_el
 from .column import list_columns_from_datasource, resolve_column_el, rename_column_el, reset_column_caption_el, update_column_el
 from .calculation import create_calculated_field_el, update_formula_el
@@ -14,7 +30,8 @@ from .validator import validate_tree
 from .unsupported import unsupported_features_from_tree
 from .dashboard import list_dashboards_from_tree, get_dashboard_from_tree
 from .dashboard_field import list_dashboard_fields_from_tree
-from .worksheet import list_worksheets_from_tree, get_worksheet_from_tree
+from .filter import list_dashboard_filter_controls_from_tree, list_filters_from_tree
+from .worksheet import list_reference_lines_from_tree, list_worksheets_from_tree, get_worksheet_from_tree
 from .errors import SaveError, ValidationError
 
 
@@ -80,6 +97,20 @@ class TwbWorkbook:
 
     def get_worksheet(self, worksheet: str, *, by: str = "auto") -> TwbWorksheet:
         return get_worksheet_from_tree(self.tree, worksheet, by=by)
+
+    def list_reference_lines(self, worksheet: str | None = None, *, by: str = "auto") -> list[TwbReferenceLine]:
+        return list_reference_lines_from_tree(self.tree, worksheet, by=by)
+
+    def list_filters(self, worksheet: str | None = None, *, by: str = "auto") -> list[TwbWorksheetFilter]:
+        return list_filters_from_tree(self.tree, worksheet, by=by)
+
+    def list_dashboard_filter_controls(
+        self,
+        dashboard: str | None = None,
+        *,
+        by: str = "auto",
+    ) -> list[TwbFilterControl]:
+        return list_dashboard_filter_controls_from_tree(self.tree, dashboard, by=by)
 
     def list_datasources(self) -> list[TwbDatasource]:
         return list_datasources_from_tree(self.tree)
