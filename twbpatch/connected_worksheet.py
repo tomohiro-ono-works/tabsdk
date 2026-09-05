@@ -202,6 +202,14 @@ def _rename_worksheet_references(
     ):
         zone.set("name", new_id)
 
+    # ダッシュボードの window が持つ viewpoint も worksheet の内部 ID を指す
+    for viewpoint in root.xpath(
+        "/workbook/windows/window/*[local-name()='viewpoints']"
+        "/*[local-name()='viewpoint'][@name=$old_id]",
+        old_id=old_id,
+    ):
+        viewpoint.set("name", new_id)
+
     for action in root.xpath("/workbook/actions/action"):
         for element in action.iterdescendants():
             for attribute, value in list(element.attrib.items()):

@@ -174,3 +174,59 @@ def test_spacer_zone_can_be_updated_and_deleted(tmp_path) -> None:
 
     zone.delete()
     assert container.get_zones() == []
+
+
+# --- worksheet.update(name=...) の参照更新 ----------------------------------
+
+
+def test_worksheet_rename_updates_every_reference(tmp_path) -> None:
+    """§3.5: Worksheet の name 変更は内部 ID の変更なので、参照側も同時に直す。"""
+    path = tmp_path / "rename.twb"
+    path.write_text(
+        """<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name="ds1" caption="売上データ">
+      <column name="[Sales]" caption="売上" datatype="real" role="measure" type="quantitative" />
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="S1">
+      <table>
+        <view />
+        <panes><pane id="1"><mark class="Automatic" /><encodings /></pane></panes>
+      </table>
+    </worksheet>
+  </worksheets>
+  <dashboards>
+    <dashboard name="D1">
+      <zones><zone id="1" type-v2="layout-flow" param="vert">
+        <zone id="2" name="S1" />
+      </zone></zones>
+    </dashboard>
+  </dashboards>
+  <windows>
+    <window class="worksheet" name="S1" hidden="false" />
+    <window class="dashboard" name="D1">
+      <viewpoints><viewpoint name="S1" /></viewpoints>
+    </window>
+  </windows>
+  <actions>
+    <action name="A1"><source worksheet="S1" /><target worksheet="S1" /></action>
+  </actions>
+</workbook>
+""",
+        encoding="utf-8",
+    )
+    workbook = TwbWorkbook.open(str(path))
+    workbook.get_worksheets()[0].update(name="RENAMED")
+    root = workbook.tree.getroot()
+
+    assert root.xpath("/workbook/worksheets/worksheet/@name") == ["RENAMED"]
+    assert root.xpath("/workbook/windows/window[@class='worksheet']/@name") == ["RENAMED"]
+    assert root.xpath("//*[local-name()='zone'][@name]/@name") == ["RENAMED"]
+    assert root.xpath("//*[local-name()='viewpoint']/@name") == ["RENAMED"]
+    assert root.xpath("/workbook/actions/action/source/@worksheet") == ["RENAMED"]
+    assert root.xpath("/workbook/actions/action/target/@worksheet") == ["RENAMED"]
+    # 旧 ID がどこにも残っていない
+    assert root.xpath("//*[@name='S1']") == []
