@@ -8,12 +8,16 @@ def test_create_calculated_field(tmp_path):
         caption="粗利率",
         formula="SUM([粗利]) / SUM([売上])",
         folder="KPI",
+        number_format="%",
     )
     assert col.name.startswith("[Calculation_")
     assert col.caption == "粗利率"
     assert col.formula == "SUM([粗利]) / SUM([売上])"
     assert col.raw_formula == "SUM([Profit]) / SUM([Sales])"
     assert col.folder == "KPI"
+    assert wb.tree.xpath(
+        'string(/workbook/datasources/datasource/column[@caption="粗利率"]/@default-format)'
+    ) == "p0%"
     out = tmp_path / "out.twb"
     wb.save(str(out), overwrite=True)
     assert out.exists()
