@@ -14,10 +14,17 @@ from .workbook import TwbWorkbook
 from .export import write_dicts_csv
 
 # 接続型モデル（新 API）
-from .connected import TwbDatasource, TwbField, TwbFolder
+from .connected import (
+    TwbDatasource,
+    TwbField,
+    TwbFolder,
+    TwbRelation,
+    TwbRelationship,
+)
 from .connected_parameter import TwbParameter
 from .connected_worksheet import (
     TwbPane,
+    TwbReferenceLine,
     TwbWorksheet,
     TwbWorksheetField,
     TwbWorksheetFilter,
@@ -45,9 +52,6 @@ from .models import (
     CsvSource,
     UnknownSource,
     TwbColumn,
-    TwbRelation,
-    TwbRelationship,
-    TwbReferenceLine,
     TwbValidationMessage,
     TwbUnsupportedFeature,
 )

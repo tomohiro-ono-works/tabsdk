@@ -73,6 +73,43 @@ def _serialize_zone(zone: Any) -> dict[str, Any]:
     }
 
 
+def _serialize_relation(relation: Any, datasource_name: str | None) -> dict[str, Any]:
+    return {
+        "datasource": datasource_name,
+        "datasource_id": relation.datasource_id,
+        "id": relation.id,
+        "type": relation.type,
+        "name": relation.name,
+        "table": relation.table,
+        "connection": relation.connection,
+        "join": relation.join,
+        "custom_sql": relation.custom_sql,
+        "scope": relation.scope,
+        "logical_table": relation.logical_table,
+        "logical_table_id": relation.logical_table_id,
+        "clauses": relation.clauses,
+        "children": [
+            _serialize_relation(child, datasource_name)
+            for child in relation.get_children()
+        ],
+        "attrs": relation.attrs,
+    }
+
+
+def _serialize_relationship(relationship: Any, datasource_name: str | None) -> dict[str, Any]:
+    return {
+        "datasource": datasource_name,
+        "datasource_id": relationship.datasource_id,
+        "id": relationship.id,
+        "left_object": relationship.left_object,
+        "left_object_id": relationship.left_object_id,
+        "right_object": relationship.right_object,
+        "right_object_id": relationship.right_object_id,
+        "expression": relationship.expression,
+        "attrs": relationship.attrs,
+    }
+
+
 def serialize_workbook(workbook: Any) -> dict[str, Any]:
     datasources: list[dict[str, Any]] = []
     for datasource in workbook.get_datasources():
@@ -84,8 +121,14 @@ def serialize_workbook(workbook: Any) -> dict[str, Any]:
             "source": _normalize_projection(source),
             "fields": [],
             "folders": [],
-            "relations": _normalize_projection(datasource.get_relations()),
-            "relationships": _normalize_projection(datasource.get_relationships()),
+            "relations": [
+                _serialize_relation(relation, datasource.name)
+                for relation in datasource.get_relations()
+            ],
+            "relationships": [
+                _serialize_relationship(relationship, datasource.name)
+                for relationship in datasource.get_relationships()
+            ],
         }
         for field in datasource.get_fields():
             folder = field.folder

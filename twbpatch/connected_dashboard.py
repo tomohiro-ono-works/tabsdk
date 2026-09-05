@@ -734,7 +734,7 @@ class TwbDashboard(ConnectedModel):
         *,
         id: str | None = None,
         name: str | None = None,
-    ) -> list[Any]:
+    ) -> list[TwbDashboardAction]:
         _validate_get_args(id, name)
         actions = list_actions_from_tree(self._context.tree, self._resolve_element())
         result: list[TwbDashboardAction] = []

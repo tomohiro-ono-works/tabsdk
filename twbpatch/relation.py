@@ -150,3 +150,45 @@ def list_relationships_from_datasource(datasource_el: ET._Element) -> list[TwbRe
         )
 
     return result
+
+
+def relation_elements_in_order(datasource_el: ET._Element) -> list[ET._Element]:
+    """接続型モデルが位置で解決するための、relation 要素の並び。
+
+    `relations_in_order()` と同じ走査順にすること。両者の添字を対応させている。
+    """
+    roots, _ = _relation_roots(datasource_el)
+    result: list[ET._Element] = []
+
+    def walk(element: ET._Element) -> None:
+        result.append(element)
+        for child in element:
+            if _local_name(child) == "relation":
+                walk(child)
+
+    for root in roots:
+        walk(root)
+    return result
+
+
+def relations_in_order(datasource_el: ET._Element) -> list[TwbRelation]:
+    """`relation_elements_in_order()` と同じ並びで materialize した結果。"""
+    result: list[TwbRelation] = []
+
+    def walk(item: TwbRelation) -> None:
+        result.append(item)
+        for child in item.children:
+            walk(child)
+
+    for root in list_relations_from_datasource(datasource_el):
+        walk(root)
+    return result
+
+
+def relationship_elements(datasource_el: ET._Element) -> list[ET._Element]:
+    return list(
+        datasource_el.xpath(
+            ".//*[local-name()='object-graph']//*[local-name()='relationships']"
+            "/*[local-name()='relationship']"
+        )
+    )

@@ -23,7 +23,13 @@ from .errors import (
 )
 from .folder import _ensure_folders_common, move_column_to_folder_el, remove_column_from_folder_el
 from .models import BigQuerySource, CsvSource, ExcelSource, UnknownSource
-from .relation import list_relations_from_datasource, list_relationships_from_datasource
+from .relation import (
+    list_relations_from_datasource,
+    list_relationships_from_datasource,
+    relation_elements_in_order,
+    relations_in_order,
+    relationship_elements,
+)
 from .references import datasource_references, field_references
 from .sources import detect_source
 
@@ -311,15 +317,18 @@ class TwbDatasource(ConnectedModel):
         *,
         id: str | None = None,
         name: str | None = None,
-    ) -> list[Any]:
+    ) -> list[TwbRelation]:
+        """ルートのリレーション。入れ子は `TwbRelation.get_children()` で辿る。"""
         _validate_get_args(id, name)
-        result = list_relations_from_datasource(self._resolve_element())
+        datasource_el = self._resolve_element()
+        ordered = relations_in_order(datasource_el)
+        roots = list_relations_from_datasource(datasource_el)
         return [
-            item
-            for item in result
+            TwbRelation(self._context, self._id, ordered.index(root))
+            for root in roots
             if _matches(
-                model_id=item.id or "",
-                model_name=item.name or item.id or "",
+                model_id=root.id or "",
+                model_name=root.name or root.id or "",
                 id=id,
                 name=name,
             )
@@ -330,12 +339,12 @@ class TwbDatasource(ConnectedModel):
         *,
         id: str | None = None,
         name: str | None = None,
-    ) -> list[Any]:
+    ) -> list[TwbRelationship]:
         _validate_get_args(id, name)
         result = list_relationships_from_datasource(self._resolve_element())
         return [
-            item
-            for item in result
+            TwbRelationship(self._context, self._id, index)
+            for index, item in enumerate(result)
             if _matches(
                 model_id=item.id or "",
                 model_name=item.id or "",
@@ -802,6 +811,160 @@ class TwbDatasource(ConnectedModel):
         parent.remove(datasource_el)
         self._context.mark_dirty()
         self._detach()
+
+
+class TwbRelation(ConnectedModel):
+    """データソースの物理リレーション（`relation` 要素）。**読み取り専用。**
+
+    join / union / カスタム SQL の編集は H-8 として見送っているため、
+    `update()` と `delete()` は用意しない。追加する手段も無いので、
+    消せないことは欠落ではない。
+
+    ネストするため、位置（走査順の添字）で対象要素を解決する。
+    """
+
+    def __init__(self, context: WorkbookContext, datasource_id: str, index: int):
+        super().__init__(context)
+        self._datasource_id = datasource_id
+        self._index = index
+
+    def _resolve_datasource_element(self) -> ET._Element:
+        return TwbDatasource(self._context, self._datasource_id)._resolve_element()
+
+    def _resolve_element(self) -> ET._Element:
+        self._ensure_attached()
+        elements = relation_elements_in_order(self._resolve_datasource_element())
+        if self._index >= len(elements):
+            self._detach()
+            raise DetachedModelError(f"relation is detached: {self._index}")
+        return elements[self._index]
+
+    def _snapshot(self):
+        self._resolve_element()
+        return relations_in_order(self._resolve_datasource_element())[self._index]
+
+    @property
+    def id(self) -> str | None:
+        return self._snapshot().id
+
+    @property
+    def name(self) -> str | None:
+        snapshot = self._snapshot()
+        return snapshot.name or snapshot.id
+
+    @property
+    def datasource_id(self) -> str:
+        return self._datasource_id
+
+    @property
+    def type(self) -> str | None:
+        return self._snapshot().type
+
+    @property
+    def table(self) -> str | None:
+        return self._snapshot().table
+
+    @property
+    def connection(self) -> str | None:
+        return self._snapshot().connection
+
+    @property
+    def join(self) -> str | None:
+        return self._snapshot().join
+
+    @property
+    def custom_sql(self) -> str | None:
+        return self._snapshot().custom_sql
+
+    @property
+    def scope(self) -> str | None:
+        return self._snapshot().scope
+
+    @property
+    def logical_table(self) -> str | None:
+        return self._snapshot().logical_table
+
+    @property
+    def logical_table_id(self) -> str | None:
+        return self._snapshot().logical_table_id
+
+    @property
+    def clauses(self) -> list[dict[str, object]]:
+        return self._snapshot().clauses
+
+    @property
+    def attrs(self) -> dict[str, str]:
+        return self._snapshot().attrs
+
+    def get_children(self) -> list["TwbRelation"]:
+        """入れ子になったリレーション。join / union は子を持つ。"""
+        element = self._resolve_element()
+        elements = relation_elements_in_order(self._resolve_datasource_element())
+        return [
+            TwbRelation(self._context, self._datasource_id, elements.index(child))
+            for child in element
+            if ET.QName(child).localname == "relation"
+        ]
+
+
+class TwbRelationship(ConnectedModel):
+    """論理テーブル間のリレーションシップ。**読み取り専用**（`TwbRelation` と同じ理由）。"""
+
+    def __init__(self, context: WorkbookContext, datasource_id: str, index: int):
+        super().__init__(context)
+        self._datasource_id = datasource_id
+        self._index = index
+
+    def _resolve_datasource_element(self) -> ET._Element:
+        return TwbDatasource(self._context, self._datasource_id)._resolve_element()
+
+    def _resolve_element(self) -> ET._Element:
+        self._ensure_attached()
+        elements = relationship_elements(self._resolve_datasource_element())
+        if self._index >= len(elements):
+            self._detach()
+            raise DetachedModelError(f"relationship is detached: {self._index}")
+        return elements[self._index]
+
+    def _snapshot(self):
+        self._resolve_element()
+        return list_relationships_from_datasource(self._resolve_datasource_element())[self._index]
+
+    @property
+    def id(self) -> str | None:
+        return self._snapshot().id
+
+    @property
+    def name(self) -> str | None:
+        return self._snapshot().id
+
+    @property
+    def datasource_id(self) -> str:
+        return self._datasource_id
+
+    @property
+    def left_object(self) -> str | None:
+        return self._snapshot().left_object
+
+    @property
+    def left_object_id(self) -> str | None:
+        return self._snapshot().left_object_id
+
+    @property
+    def right_object(self) -> str | None:
+        return self._snapshot().right_object
+
+    @property
+    def right_object_id(self) -> str | None:
+        return self._snapshot().right_object_id
+
+    @property
+    def expression(self) -> dict[str, object] | None:
+        return self._snapshot().expression
+
+    @property
+    def attrs(self) -> dict[str, str]:
+        return self._snapshot().attrs
 
 
 class TwbField(ConnectedModel):

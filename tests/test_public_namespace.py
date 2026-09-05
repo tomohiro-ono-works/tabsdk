@@ -21,14 +21,14 @@ DUPLICATED = [
     # A-2 で接続型モデル化した分
     "TwbWorksheetFilter",
     "TwbFilterControl",
-]
-
-# 接続型モデルがまだ無く、models.py から公開し続けるもの（A-2 の残り）
-MODELS_ONLY = [
-    "TwbColumn",
+    "TwbReferenceLine",
     "TwbRelation",
     "TwbRelationship",
-    "TwbReferenceLine",
+]
+
+# 接続型モデルを持たない値オブジェクト
+MODELS_ONLY = [
+    "TwbColumn",
     "TwbValidationMessage",
     "TwbUnsupportedFeature",
 ]

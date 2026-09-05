@@ -875,15 +875,16 @@ class TwbWorksheet(ConnectedModel):
         *,
         id: str | None = None,
         name: str | None = None,
-    ) -> list[Any]:
+    ) -> list[TwbReferenceLine]:
         _validate_get_args(id, name)
         lines = list_reference_lines_from_tree(self._context.tree, self._id, by="name")
         return [
-            line
+            TwbReferenceLine(self._context, self._id, line.id or "")
             for line in lines
-            if _matches(
-                model_id=line.id or "",
-                model_name=line.id or "",
+            if line.id
+            and _matches(
+                model_id=line.id,
+                model_name=line.id,
                 id=id,
                 name=name,
             )
@@ -898,7 +899,7 @@ class TwbWorksheet(ConnectedModel):
         label_type: str = "value",
         probability: int = 95,
         z_order: int = 1,
-    ) -> Any:
+    ) -> TwbReferenceLine:
         if not isinstance(field, TwbWorksheetField):
             raise TypeError("field must be TwbWorksheetField")
         if field._context is not self._context or field._worksheet_id != self._id:
@@ -1755,6 +1756,150 @@ class TwbWorksheet(ConnectedModel):
                 parent.remove(window)
         self._context.tree._setroot(updated_root)
         self._context.mark_dirty()
+        self._detach()
+
+
+_REFERENCE_LINE_FORMULAS = {"average", "median", "minimum", "maximum"}
+
+
+class TwbReferenceLine(ConnectedModel):
+    """ペインに置かれたリファレンスライン（`pane/reference-line[@id]`）。
+
+    `id` は XML の `@id`。表示名を持たない要素なので `name` は `id` と同じ。
+    """
+
+    def __init__(self, context: WorkbookContext, worksheet_id: str, line_id: str):
+        super().__init__(context)
+        self._worksheet_id = worksheet_id
+        self._id = line_id
+
+    def _resolve_worksheet_element(self) -> ET._Element:
+        return TwbWorksheet(self._context, self._worksheet_id)._resolve_element()
+
+    def _resolve_element(self) -> ET._Element:
+        self._ensure_attached()
+        matches = self._resolve_worksheet_element().xpath(
+            ".//*[local-name()='reference-line'][@id=$line_id]",
+            line_id=self._id,
+        )
+        if not matches:
+            self._detach()
+            raise DetachedModelError(f"reference line is detached: {self._id}")
+        return matches[0]
+
+    def _snapshot(self):
+        """読み取りは既存の materialize を使い回す（実装を二重に持たない）。"""
+        self._resolve_element()
+        for item in list_reference_lines_from_tree(
+            self._context.tree, self._worksheet_id, by="name"
+        ):
+            if item.id == self._id:
+                return item
+        raise DetachedModelError(f"reference line is detached: {self._id}")
+
+    @property
+    def id(self) -> str:
+        return self._id
+
+    @property
+    def name(self) -> str:
+        return self._id
+
+    @property
+    def worksheet_id(self) -> str:
+        return self._worksheet_id
+
+    @property
+    def axis_column(self) -> str | None:
+        return self._snapshot().axis_column
+
+    @property
+    def axis_caption(self) -> str | None:
+        return self._snapshot().axis_caption
+
+    @property
+    def axis_role(self) -> str | None:
+        return self._snapshot().axis_role
+
+    @property
+    def value_column(self) -> str | None:
+        return self._snapshot().value_column
+
+    @property
+    def value_caption(self) -> str | None:
+        return self._snapshot().value_caption
+
+    @property
+    def value_role(self) -> str | None:
+        return self._snapshot().value_role
+
+    @property
+    def formula(self) -> str | None:
+        return self._snapshot().formula
+
+    @property
+    def scope(self) -> str | None:
+        return self._snapshot().scope
+
+    @property
+    def label_type(self) -> str | None:
+        return self._snapshot().label_type
+
+    @property
+    def tooltip_type(self) -> str | None:
+        return self._snapshot().tooltip_type
+
+    @property
+    def attrs(self) -> dict[str, str]:
+        return self._snapshot().attrs
+
+    def update(
+        self,
+        *,
+        formula: str | _UnsetType = UNSET,
+        scope: str | _UnsetType = UNSET,
+        label_type: str | _UnsetType = UNSET,
+    ) -> TwbReferenceLine:
+        """`add_reference_line()` で指定できる値を後から変える。"""
+        if formula is not UNSET:
+            if not isinstance(formula, str):
+                raise TypeError("formula must be a string")
+            formula = formula.lower()
+            if formula not in _REFERENCE_LINE_FORMULAS:
+                raise ValueError("unsupported reference line formula")
+        for argument, value in (("scope", scope), ("label_type", label_type)):
+            if value is not UNSET:
+                if not isinstance(value, str):
+                    raise TypeError(f"{argument} must be a string")
+                if not value.strip():
+                    raise ValueError(f"{argument} must not be empty")
+
+        worksheet_el = self._resolve_worksheet_element()
+        updated = copy.deepcopy(worksheet_el)
+        line = updated.xpath(
+            ".//*[local-name()='reference-line'][@id=$line_id]",
+            line_id=self._id,
+        )[0]
+        if formula is not UNSET:
+            line.set("formula", formula)
+        if scope is not UNSET:
+            line.set("scope", scope)
+        if label_type is not UNSET:
+            line.set("label-type", label_type)
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def delete(self) -> None:
+        worksheet_el = self._resolve_worksheet_element()
+        updated = copy.deepcopy(worksheet_el)
+        for line in updated.xpath(
+            ".//*[local-name()='reference-line'][@id=$line_id]",
+            line_id=self._id,
+        ):
+            parent = line.getparent()
+            assert parent is not None
+            parent.remove(line)
+        _replace_if_changed(worksheet_el, updated, self._context)
         self._detach()
 
 
