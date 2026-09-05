@@ -61,7 +61,7 @@ def test_draw_functions_use_connected_models() -> None:
     assert yoy.get_panes()[0].mark_type == "line"
     assert bar.get_panes()[0].mark_type == "bar"
     assert card.get_panes()[0].mark_type == "automatic"
-    assert card.get_panes()[0].get_customized_label() == {
+    assert card.get_panes()[0].customized_label == {
         "main_metric": "売上",
         "sub_metric": "利益",
         "main_color": "#602fff",
@@ -124,7 +124,7 @@ def test_workbook_draw_methods_accept_datasource_field_tuples() -> None:
         "/format[@attr='mark-color']/@value)"
     ) == "#602fff"
     assert bar.get_panes()[0].mark_type == "bar"
-    assert card.get_panes()[0].get_customized_label()["main_metric"] == "売上"
+    assert card.get_panes()[0].customized_label["main_metric"] == "売上"
 
 
 def test_workbook_draw_bar_resolves_fields_from_different_datasources(tmp_path) -> None:
@@ -262,7 +262,7 @@ def test_draw_colored_yoy_sheet_builds_fixed_hidden_bar_axes_per_metric(tmp_path
         [("#ff007f", None), ("#602fff", None), ("#555555", "7")],
         [("#ff007f", None), ("#602fff", None), ("#555555", "7")],
     ]
-    assert worksheet.get_table_style() == {
+    assert worksheet.table_style == {
         "header_background": "#f5f5f5",
         "header_bold": True,
         "header_color": "#555555",
@@ -344,7 +344,7 @@ def test_draw_quadrant_builds_scatter_medians_and_four_colors(tmp_path) -> None:
         "rows": "agg",
     }
     assert next(field for field in worksheet.get_fields() if field.encoding == "size").aggregation == "agg"
-    assert worksheet.get_panes()[0].get_mark_opacity() == pytest.approx(0.6, abs=0.01)
+    assert worksheet.get_panes()[0].mark_opacity == pytest.approx(0.6, abs=0.01)
     assert workbook.tree.xpath(
         "string(/workbook/worksheets/worksheet[@name='商品ポジショニング']"
         "/table/panes/pane/style/style-rule[@element='mark']"

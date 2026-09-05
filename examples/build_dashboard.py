@@ -10,7 +10,7 @@
 1. フィールド整理     apply_field_config() による英名 → 和名・フォルダ分類
 2. 計算フィールド     create_calculated_field(s) / create_yoy_calculated_fields()
 3. グラフ生成         draw_* 7 種
-4. 表スタイル         update_table_style() / set_title()
+4. 表スタイル         update(table_style=...) / set_title()
 5. ダッシュボード     build_report() と create_container() の 2 通り
 6. ペイン直接操作     draw_* に無いグラフ（円グラフ）を get_panes() で作る
 """
@@ -124,12 +124,14 @@ def main() -> None:
             (DATASOURCE, "サブカテゴリ"),
         ],
     )
-    report.update_table_style(
-        header_background="#f5f5f5",
-        header_bold=True,
-        header_color="#555555",
-        row_band=False,
-        column_widths={"#": 36},
+    report.update(
+        table_style={
+            "header_background": "#f5f5f5",
+            "header_bold": True,
+            "header_color": "#555555",
+            "row_band": False,
+            "column_widths": {"#": 36},
+        }
     )
 
     # 前年差帳票。色分けは draw_colored_yoy_sheet が引数でまとめて受ける。
@@ -196,12 +198,14 @@ def main() -> None:
     # build_report() を使わず 1 段ずつ組む場合。細部を指定したいときはこちら。
     manual = workbook.create_dashboard(name="手組みレイアウト", width=1169, height=600)
     root = manual.create_container(direction="vertical", friendly_name="contents")
-    root.update_style(background_color="#f5f5f5", border_style="none", margin=8)
+    root.update(
+        style={"background_color": "#f5f5f5", "border_style": "none", "margin": 8}
+    )
 
     header = root.create_container(
         direction="horizontal", fixed_size=43, friendly_name="header"
     )
-    header.update_style(background_color="#333333", border_style="none")
+    header.update(style={"background_color": "#333333", "border_style": "none"})
     header.add_text(
         "  ECサイト分析",
         bold=True,
@@ -210,7 +214,7 @@ def main() -> None:
     )
 
     body = root.create_container(direction="vertical", friendly_name="body")
-    body.update_style(background_color="#e6e6e6", border_style="none")
+    body.update(style={"background_color": "#e6e6e6", "border_style": "none"})
     score_area = body.create_container(
         direction="horizontal", fixed_size=100, friendly_name="スコアエリア"
     )
@@ -221,13 +225,15 @@ def main() -> None:
     # add_worksheet() はシート名ではなく TwbWorksheet オブジェクトを受け取る。
     score_card = workbook.get_worksheets(name="スコアカード_売上")[0]
     card = score_area.add_worksheet(score_card, fixed_size=267, show_title=False)
-    card.update_style(
-        background_color="#ffffff",
-        border_style="none",
-        margin=4,
-        margin_left=0,
-        margin_right=8,
-        padding=8,
+    card.update(
+        style={
+            "background_color": "#ffffff",
+            "border_style": "none",
+            "margin": 4,
+            "margin_left": 0,
+            "margin_right": 8,
+            "padding": 8,
+        }
     )
 
     workbook.set_default_font()

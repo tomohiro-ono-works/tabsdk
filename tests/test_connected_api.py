@@ -161,13 +161,13 @@ def test_datasource_field_grouping_can_be_saved_as_folder_mode() -> None:
     workbook = TwbWorkbook.open(SAMPLE)
     datasource = workbook.get_datasources()[0]
 
-    assert datasource.get_field_grouping() is None
+    assert datasource.field_grouping is None
     assert datasource.update(field_grouping="folder") is datasource
-    assert datasource.get_field_grouping() == "folder"
+    assert datasource.field_grouping == "folder"
     assert datasource._resolve_element().xpath("string(./layout/@show-structure)") == "false"
 
     datasource.update(field_grouping="table")
-    assert datasource.get_field_grouping() == "table"
+    assert datasource.field_grouping == "table"
     assert datasource._resolve_element().xpath("string(./layout/@show-structure)") == "true"
 
 
@@ -184,7 +184,7 @@ def test_datasource_applies_yaml_field_config(tmp_path) -> None:
     datasource = workbook.get_datasources()[0]
 
     assert datasource.apply_field_config(config) is datasource
-    assert datasource.get_field_grouping() == "folder"
+    assert datasource.field_grouping == "folder"
     folder = datasource.get_folders(name="Measure")[0]
     assert [field.name for field in folder.get_fields()] == ["純売上", "利益"]
 
@@ -321,7 +321,7 @@ def test_workbook_applies_datasource_first_yaml_field_config(tmp_path) -> None:
 
     assert workbook.apply_field_config(config) is workbook
     datasource = workbook.get_datasources(name="売上データ")[0]
-    assert datasource.get_field_grouping() == "folder"
+    assert datasource.field_grouping == "folder"
     assert [field.name for field in datasource.get_folders(name="Measure")[0].get_fields()] == [
         "純売上",
         "利益",

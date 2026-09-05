@@ -9,7 +9,13 @@ from lxml import etree as ET
 
 from .connected import get_datasources, get_display_name, _matches, _validate_get_args
 from .connected_worksheet import TwbWorksheet, TwbWorksheetField, get_worksheets
-from .context import UNSET, ConnectedModel, WorkbookContext, _UnsetType
+from .context import (
+    UNSET,
+    ConnectedModel,
+    WorkbookContext,
+    _UnsetType,
+    validate_style_group as _validate_style_group,
+)
 from .dashboard import dashboard_elements
 from .dashboard_action import list_actions_from_tree
 from .errors import (
@@ -907,7 +913,7 @@ class TwbDashboard(ConnectedModel):
         )
         effective_content_style = dict(_DEFAULT_REPORT_CONTENT_STYLE)
         effective_content_style.update(content_style or {})
-        root.update_style(**effective_content_style)
+        root.update(style=effective_content_style)
         filter_containers: dict[str, TwbDashboardContainer] = {}
         for container_name, items in struct.items():
             fixed_size = container_sizes.get(
@@ -957,7 +963,7 @@ class TwbDashboard(ConnectedModel):
                         if sheet_index > 0:
                             zone_style["padding_top"] = 0
                             zone_style["margin_top"] = 0
-                    zone.update_style(**zone_style)
+                    zone.update(style=zone_style)
         for container_name, items in struct.items():
             if container_name not in filter_containers:
                 continue
@@ -966,11 +972,13 @@ class TwbDashboard(ConnectedModel):
                 assert isinstance(item, tuple)
                 worksheet, reference = filter_fields[item]
                 zone = container._add_filter_reference(worksheet, reference)
-                zone.update_style(
-                    background_color="#ffffff",
-                    border_style="none",
-                    margin=4,
-                    padding=4,
+                zone.update(
+                    style={
+                        "background_color": "#ffffff",
+                        "border_style": "none",
+                        "margin": 4,
+                        "padding": 4,
+                    }
                 )
         root.add_spacer(
             style={"background_color": "#f5f5f5", "border_style": "none", "margin": 0}
@@ -1177,19 +1185,10 @@ class TwbDashboardContainer(ConnectedModel):
     def hidden(self) -> bool:
         return (self._resolve_element().get("hidden-by-user") or "false").lower() == "true"
 
-    def get_style(self) -> dict[str, str]:
+    @property
+    def style(self) -> dict[str, str]:
+        """ゾーンスタイル。`update(style=...)` と対になる。"""
         return _zone_style_values(self._resolve_element())
-
-    def update_style(self, **styles: str | int | None) -> TwbDashboardContainer:
-        dashboard_el = self._resolve_dashboard_element()
-        updated_dashboard = copy.deepcopy(dashboard_el)
-        updated = _resolve_zone(updated_dashboard, self._id)
-        _set_zone_styles(updated, styles)
-        weights = dict(self._context.layout_weights)
-        _layout_container(self._dashboard_id, updated, weights)
-        _replace_if_changed(dashboard_el, updated_dashboard, self._context)
-        self._context.layout_weights = weights
-        return self
 
     @property
     def direction(self) -> str:
@@ -1524,7 +1523,9 @@ class TwbDashboardContainer(ConnectedModel):
         friendly_name: str | None | _UnsetType = UNSET,
         hidden: bool | _UnsetType = UNSET,
         distribute_evenly: bool | _UnsetType = UNSET,
+        style: dict[str, str | int | None] | _UnsetType = UNSET,
     ) -> TwbDashboardContainer:
+        style = _validate_style_group("style", style)
         if direction is not UNSET:
             if not isinstance(direction, str):
                 raise TypeError("direction must be a string")
@@ -1573,6 +1574,9 @@ class TwbDashboardContainer(ConnectedModel):
                 container.set("layout-strategy-id", "distribute-evenly")
             else:
                 container.attrib.pop("layout-strategy-id", None)
+        if style is not UNSET:
+            _set_zone_styles(container, style)
+            _layout_container(self._dashboard_id, container, weights)
         if not is_root:
             if order is not UNSET:
                 _move_zone(parent, container, order)
@@ -1663,15 +1667,10 @@ class TwbDashboardZone(ConnectedModel):
         formatted = _direct_child(self._resolve_element(), "formatted-text")
         return None if formatted is None else "".join(formatted.itertext())
 
-    def get_style(self) -> dict[str, str]:
+    @property
+    def style(self) -> dict[str, str]:
+        """ゾーンスタイル。`update(style=...)` と対になる。"""
         return _zone_style_values(self._resolve_element())
-
-    def update_style(self, **styles: str | int | None) -> TwbDashboardZone:
-        current = self._resolve_element()
-        updated = copy.deepcopy(current)
-        _set_zone_styles(updated, styles)
-        _replace_if_changed(current, updated, self._context)
-        return self
 
     @property
     def worksheet_id(self) -> str | None:
@@ -1750,7 +1749,9 @@ class TwbDashboardZone(ConnectedModel):
         fixed_size: int | None | _UnsetType = UNSET,
         friendly_name: str | None | _UnsetType = UNSET,
         hidden: bool | _UnsetType = UNSET,
+        style: dict[str, str | int | None] | _UnsetType = UNSET,
     ) -> TwbDashboardZone:
+        style = _validate_style_group("style", style)
         mode = self.placement_mode
         coordinate_values = (x, y, width, height)
         if mode == "tiled" and any(value is not UNSET for value in coordinate_values):
@@ -1818,6 +1819,8 @@ class TwbDashboardZone(ConnectedModel):
                 zone.set("hidden-by-user", "true")
             else:
                 zone.attrib.pop("hidden-by-user", None)
+        if style is not UNSET:
+            _set_zone_styles(zone, style)
         _replace_if_changed(dashboard_el, updated, self._context)
         self._context.layout_weights = weights
         return self

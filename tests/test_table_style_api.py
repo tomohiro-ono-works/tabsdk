@@ -34,21 +34,23 @@ def test_get_and_update_table_style_round_trip(tmp_path) -> None:
     worksheet.add_field(datasource.get_fields(name="#")[0], shelf="rows")
     worksheet.add_field(datasource.get_fields(name="カテゴリ")[0], shelf="rows")
 
-    assert worksheet.get_table_style() == {
+    assert worksheet.table_style == {
         "header_background": None,
         "header_bold": None,
         "header_color": None,
         "row_band": None,
         "column_widths": {},
     }
-    assert worksheet.update_table_style(
-        header_background="#f5f5f5",
-        header_bold=True,
-        header_color="#555555",
-        row_band=False,
-        column_widths={"#": 36},
+    assert worksheet.update(
+        table_style={
+            "header_background": "#f5f5f5",
+            "header_bold": True,
+            "header_color": "#555555",
+            "row_band": False,
+            "column_widths": {"#": 36},
+        }
     ) is worksheet
-    assert worksheet.get_table_style() == {
+    assert worksheet.table_style == {
         "header_background": "#f5f5f5",
         "header_bold": True,
         "header_color": "#555555",
@@ -64,7 +66,7 @@ def test_get_and_update_table_style_round_trip(tmp_path) -> None:
 
     output = tmp_path / "styled.twb"
     workbook.save(str(output))
-    assert TwbWorkbook.open(str(output)).get_worksheets(name="一覧")[0].get_table_style() == worksheet.get_table_style()
+    assert TwbWorkbook.open(str(output)).get_worksheets(name="一覧")[0].table_style == worksheet.table_style
 
 
 def test_worksheet_supports_explicit_table_down_calculation(tmp_path) -> None:
@@ -150,13 +152,13 @@ def test_draw_card_builds_formatted_main_and_sub_metrics(tmp_path) -> None:
     )
 
     pane = worksheet.get_panes()[0]
-    assert pane.get_customized_label() == {
+    assert pane.customized_label == {
         "main_metric": "売上",
         "sub_metric": "利益",
         "main_color": "#602fff",
         "value_color": "#333333",
     }
-    assert worksheet.get_title_style() == {
+    assert worksheet.title_style == {
         "background_color": "#602fff",
         "border_width": "0",
         "border_style": "none",

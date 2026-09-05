@@ -344,7 +344,9 @@ class TwbDatasource(ConnectedModel):
             )
         ]
 
-    def get_field_grouping(self) -> str | None:
+    @property
+    def field_grouping(self) -> str | None:
+        """フィールドの grouping 方式。"""
         layout = _datasource_layout(self._resolve_element())
         if layout is None:
             return None

@@ -4,18 +4,43 @@ import copy
 import re
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 
 from lxml import etree as ET
 
 from .connected import TwbField, get_display_name, get_xml_id, _matches, _validate_get_args
-from .context import UNSET, ConnectedModel, WorkbookContext, _UnsetType
+from .context import (
+    UNSET,
+    ConnectedModel,
+    WorkbookContext,
+    _UnsetType,
+    validate_style_group as _validate_style_group,
+)
 from .errors import DetachedModelError, ResourceInUseError, UnsupportedFeatureError
 from .field_ref import FIELD_REF_RE, field_name_from_token
 from .filter import list_filters_from_tree
 from .references import worksheet_references
 from .worksheet import list_reference_lines_from_tree, worksheet_elements
 
+
+class TableStyle(TypedDict, total=False):
+    """`TwbWorksheet.update(table_style=...)` が受け取る表スタイル。"""
+
+    header_background: str | None
+    header_bold: bool | None
+    header_color: str | None
+    row_band: bool | None
+    column_widths: dict[str, int]
+
+
+class TitleStyle(TypedDict, total=False):
+    """`TwbWorksheet.update(title_style=...)` が受け取るタイトルスタイル。"""
+
+    background_color: str
+
+
+_TABLE_STYLE_KEYS = frozenset(TableStyle.__annotations__)
+_TITLE_STYLE_KEYS = frozenset(TitleStyle.__annotations__)
 
 _FIELD_REF = re.compile(r"^\[([^\]]+)\]\.\[([^\]]+)\]$")
 _SHELVES = {"rows": "rows", "columns": "cols", "pages": "pages"}
@@ -928,7 +953,9 @@ class TwbWorksheet(ConnectedModel):
             )
         ]
 
-    def get_table_style(self) -> dict[str, Any]:
+    @property
+    def table_style(self) -> dict[str, Any]:
+        """表スタイル。`update(table_style=...)` と対になる。"""
         worksheet_el = self._resolve_element()
         table_el = _direct_child(worksheet_el, "table")
         style_el = _direct_child(table_el, "style") if table_el is not None else None
@@ -982,7 +1009,7 @@ class TwbWorksheet(ConnectedModel):
             "column_widths": widths,
         }
 
-    def update_table_style(
+    def _apply_table_style(
         self,
         *,
         header_background: str | None | _UnsetType = UNSET,
@@ -1078,7 +1105,9 @@ class TwbWorksheet(ConnectedModel):
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
 
-    def get_title_style(self) -> dict[str, Any]:
+    @property
+    def title_style(self) -> dict[str, Any]:
+        """タイトルスタイル。`update(title_style=...)` と対になる。"""
         worksheet_el = self._resolve_element()
         table_el = _direct_child(worksheet_el, "table")
         style_el = _direct_child(table_el, "style") if table_el is not None else None
@@ -1134,7 +1163,7 @@ class TwbWorksheet(ConnectedModel):
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
 
-    def update_title_style(self, *, background_color: str) -> TwbWorksheet:
+    def _apply_title_style(self, *, background_color: str) -> TwbWorksheet:
         if not isinstance(background_color, str) or not background_color.strip():
             raise ValueError("background_color must be a non-empty string")
         worksheet_el = self._resolve_element()
@@ -1638,8 +1667,16 @@ class TwbWorksheet(ConnectedModel):
         *,
         name: str | _UnsetType = UNSET,
         visible: bool | _UnsetType = UNSET,
+        table_style: TableStyle | _UnsetType = UNSET,
+        title_style: TitleStyle | _UnsetType = UNSET,
     ) -> TwbWorksheet:
         worksheet_el = self._resolve_element()
+        table_style = _validate_style_group(
+            "table_style", table_style, _TABLE_STYLE_KEYS
+        )
+        title_style = _validate_style_group(
+            "title_style", title_style, _TITLE_STYLE_KEYS
+        )
         if name is not UNSET:
             if not isinstance(name, str):
                 raise TypeError("name must be a string")
@@ -1651,6 +1688,11 @@ class TwbWorksheet(ConnectedModel):
                     raise ValueError(f"worksheet name already exists: {name}")
         if visible is not UNSET and not isinstance(visible, bool):
             raise TypeError("visible must be bool")
+
+        if table_style is not UNSET:
+            self._apply_table_style(**table_style)
+        if title_style is not UNSET:
+            self._apply_title_style(**title_style)
 
         root = self._context.tree.getroot()
         updated_root = copy.deepcopy(root)
@@ -1776,7 +1818,9 @@ class TwbPane(ConnectedModel):
             if field.pane_id == self._id and field.encoding is not None
         ]
 
-    def get_customized_label(self) -> dict[str, str | None] | None:
+    @property
+    def customized_label(self) -> dict[str, str | None] | None:
+        """カスタムラベルの構成。`set_customized_label()` と対になる。"""
         pane_el = self._resolve_element()
         customized = _direct_child(pane_el, "customized-label")
         if customized is None:
@@ -1807,7 +1851,7 @@ class TwbPane(ConnectedModel):
             "value_color": value_color,
         }
 
-    def update_customized_label(
+    def set_customized_label(
         self,
         *,
         main_metric: TwbWorksheetField,
@@ -1891,7 +1935,9 @@ class TwbPane(ConnectedModel):
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
-    def get_mark_opacity(self) -> float | None:
+    @property
+    def mark_opacity(self) -> float | None:
+        """マークの不透明度。"""
         style = _direct_child(self._resolve_element(), "style")
         if style is None:
             return None

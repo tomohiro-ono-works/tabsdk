@@ -15,6 +15,29 @@ class _UnsetType:
 UNSET = _UnsetType()
 
 
+def validate_style_group(
+    argument: str,
+    value: object,
+    allowed_keys: frozenset[str] | None = None,
+) -> dict | _UnsetType:
+    """`update()` が受け取る属性グループを検証して dict へ正規化する。
+
+    `allowed_keys` が None のときはキー集合が開いているグループとして、
+    キー名が文字列であることだけを確認する。
+    """
+    if value is UNSET:
+        return UNSET
+    if not isinstance(value, dict):
+        raise TypeError(f"{argument} must be a dict")
+    for key in value:
+        if not isinstance(key, str):
+            raise TypeError(f"{argument} keys must be strings")
+        if allowed_keys is not None and key not in allowed_keys:
+            expected = ", ".join(sorted(allowed_keys))
+            raise ValueError(f"unknown {argument} key: {key} (expected: {expected})")
+    return dict(value)
+
+
 class WorkbookContext:
     def __init__(self, tree: ET._ElementTree):
         self.tree = tree

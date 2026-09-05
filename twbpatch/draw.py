@@ -230,12 +230,16 @@ def draw_colored_yoy_sheet(
         show_axes=show_axes,
         bar_opacity=bar_opacity,
     )
-    worksheet.update_table_style(
-        header_background="#f5f5f5",
-        header_bold=True,
-        header_color="#555555",
-        row_band=False,
-        column_widths={"#": 36} if any(item.name == "#" for item in resolved_items) else {},
+    worksheet.update(
+        table_style={
+            "header_background": "#f5f5f5",
+            "header_bold": True,
+            "header_color": "#555555",
+            "row_band": False,
+            "column_widths": (
+                {"#": 36} if any(item.name == "#" for item in resolved_items) else {}
+            ),
+        }
     )
     return worksheet
 
@@ -361,15 +365,15 @@ def draw_card(
         aggregation=resolved_main_aggregation,
         discrete=False,
     )
-    pane.update_customized_label(
+    pane.set_customized_label(
         main_metric=main_placement,
         sub_metric=sub_placement,
         main_color=main_color,
         value_color=value_color,
         vertical_alignment=vertical_alignment,
     )
-    worksheet.update_title_style(
-        background_color=title_background_color or main_color
+    worksheet.update(
+        title_style={"background_color": title_background_color or main_color}
     )
     return worksheet
 

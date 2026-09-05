@@ -130,7 +130,7 @@ def test_build_report_creates_named_rows_and_resolves_worksheet_names(tmp_path) 
     assert [item.fixed_size for item in root.get_containers()] == [50, 250, 300]
     assert outer.get_zones()[0].text == "経営ダッシュボード"
     assert root.get_containers()[0].get_zones() == []
-    assert root.get_containers()[1].get_zones()[0].get_style() == {
+    assert root.get_containers()[1].get_zones()[0].style == {
         "background_color": "#ffffff",
         "border_style": "none",
         "margin": "4",
@@ -178,10 +178,10 @@ def test_build_report_places_vertical_worksheet_groups_in_columns(tmp_path) -> N
     ]
     assert [zone.fixed_size for zone in columns[0].get_zones()] == [None, None]
     assert [zone.weight for zone in columns[0].get_zones()] == [1.0, 1.0]
-    assert columns[0].get_zones()[0].get_style()["padding_bottom"] == "0"
-    assert columns[0].get_zones()[1].get_style()["padding_top"] == "0"
-    assert columns[0].get_zones()[0].get_style()["margin_bottom"] == "0"
-    assert columns[0].get_zones()[1].get_style()["margin_top"] == "0"
+    assert columns[0].get_zones()[0].style["padding_bottom"] == "0"
+    assert columns[0].get_zones()[1].style["padding_top"] == "0"
+    assert columns[0].get_zones()[0].style["margin_bottom"] == "0"
+    assert columns[0].get_zones()[1].style["margin_top"] == "0"
 
     row_el = row._resolve_element()
     assert tuple(int(row_el.get(attr) or 0) for attr in ("x", "y", "w", "h")) == (
@@ -402,7 +402,7 @@ def test_layout_flow_objects_fixed_sizes_and_styles(tmp_path) -> None:
     worksheet = workbook.get_worksheets(id="SheetA")[0]
 
     root = dashboard.create_container(direction="vertical", friendly_name="contents")
-    root.update_style(background_color="#f5f5f5", border_style="none")
+    root.update(style={"background_color": "#f5f5f5", "border_style": "none"})
     header = root.create_container(
         direction="horizontal",
         fixed_size=40,
@@ -427,10 +427,10 @@ def test_layout_flow_objects_fixed_sizes_and_styles(tmp_path) -> None:
         worksheet,
         show_title=False,
     )
-    sheet.update_style(background_color="#ffffff", padding=8)
+    sheet.update(style={"background_color": "#ffffff", "padding": 8})
 
     assert dashboard.get_containers(name="contents")[0].id == root.id
-    assert (root.name, root.direction, root.get_style()["background_color"]) == (
+    assert (root.name, root.direction, root.style["background_color"]) == (
         "contents", "vertical", "#f5f5f5"
     )
     assert (header.fixed_size, header.name) == (40, "header")
@@ -438,9 +438,9 @@ def test_layout_flow_objects_fixed_sizes_and_styles(tmp_path) -> None:
         ("image", 50), ("text", None), ("spacer", 6), ("worksheet", None)
     ]
     assert text.text == "Dashboard"
-    assert image.get_style()["margin"] == "0"
-    assert spacer.get_style()["background_color"] == "#602fff"
-    assert sheet.get_style()["padding"] == "8"
+    assert image.style["margin"] == "0"
+    assert spacer.style["background_color"] == "#602fff"
+    assert sheet.style["padding"] == "8"
 
     root_el = root._resolve_element()
     assert root_el.get("type-v2") == "layout-flow"
