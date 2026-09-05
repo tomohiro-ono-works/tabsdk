@@ -241,7 +241,10 @@ from twbpatch import TwbWorksheet   # → models.py の dataclass（旧 API）
 `pyproject.toml` の `[tool.pytest.ini_options]` に `addopts` を入れれば、
 人間が手で叩いても同じ結果になる。**ただしアプリ側の設定変更なので要判断。**
 
-> **次のアクション**: 分解不要。設定 1 行の追加可否を判断するだけ。
+**決定（2026-09-05・完了）**: 入れる。`pyproject.toml` の `[tool.pytest.ini_options]` へ
+`addopts = "--basetemp=tmp/pytest"` と `cache_dir = "tmp/pytest_cache"` を追加した。
+`cache_dir` は D-3 の迂回策を兼ねる。以降は素の `uv run --no-sync pytest -q` で通る。
+`CLAUDE.md` の「`--basetemp` を手で付ける」という記述も更新済み。
 
 ---
 
@@ -282,9 +285,17 @@ from twbpatch import TwbWorksheet   # → models.py の dataclass（旧 API）
 
 作業単位に分けてコミットしないと、レビューも巻き戻しもできない。
 
-> **次のアクション**: **個別タスクに分解する。** 14 ファイルの変更内容を読んで、
-> 意味のある単位（メタデータ API 追加 / 検証ロジック追加 / README 更新など）へ仕分ける。
-> 仕分け結果がそのままコミット計画になる。`main` 直コミットを避けるならブランチ方針も決める。
+**決定（2026-09-05・完了）**
+
+- **ブランチ方針**: `main` 直コミットは避け、`chore/phase0-cleanup` を切ってそこへ積む。push はしない。
+- **粒度**: 5 コミット。①設定とリポジトリ整理 ②接続型モデル API ③テスト ④文書 ⑤サンプル。
+- **これ以上割らない理由**: 新モジュール 12 本はすべて `workbook.py:69` の
+  `from .serialization import serialize_workbook` と `__init__.py` の
+  `from .connected import ...` を経由して連結している。機能単位で割ると、
+  途中のコミット単体ではテストが通らない。
+- **agent 系はコミットしない**: `.claude/` と `CLAUDE.md` は追跡対象から外す（G-4 で反映）。
+  エージェントの作業用設定であってライブラリの成果物ではないため。
+  `git add -A` は使わず、対象を明示して stage する。
 
 ### D-2 【低】ルート直下に未追跡ファイルが 46 件
 
@@ -300,7 +311,18 @@ from twbpatch import TwbWorksheet   # → models.py の dataclass（旧 API）
 `pytest` 実行のたびに `could not create cache path ... [WinError 183]` が出る。
 7 月 8 日作成のディレクトリで、現在は読み取りもできない。作り直すか除外する。
 
-> **次のアクション**: 分解不要。削除して再作成させるだけ。
+**決定（2026-09-05・完了）**: 「削除して作り直す」は**できなかった**ので「除外」を採った。
+
+`.pytest_cache` は ACL が壊れていて、`Remove-Item -Recurse -Force` も `takeown /f` も
+`Access is denied`。所有権の取得に管理者権限が要る。ディレクトリはその場に残したまま、
+`pyproject.toml` の `cache_dir = "tmp/pytest_cache"` でキャッシュ先を `tmp/` 配下へ逃がした（B-4 と同時）。
+
+消したい場合は管理者の PowerShell で:
+
+```powershell
+takeown /f .pytest_cache /r /d y
+Remove-Item -Recurse -Force .pytest_cache
+```
 
 ---
 
@@ -393,8 +415,22 @@ C-1 / C-2 / D-2 を置き換える。既存のサンプルを直して残すの�
 | `workbook/test.ipynb` | 1 件（追跡済み） |
 | `workbook/*.twbx` | 1 件・2.5MB（追跡済み。参照用として残すか要判断） |
 
-> **次のアクション**: 個別タスクに分解する。「利用していない」の線引き（テストが参照しているか、
-> 仕様書から参照されているか）を先に決める。追跡済みファイルの削除はコミット履歴に残る点に注意。
+**決定（2026-09-05・完了）**
+
+線引きは「テストまたは仕様書から参照されているか」。実測したところ、下記はいずれも参照 0 件だった。
+
+| 対象 | 判断 |
+|---|---|
+| `outputs/` の生成物すべて（`ec_site_test/` 含む・約 1.7MB） | 削除 |
+| ルート直下の差分メモ `.md` 3 件 | 削除 |
+| ルート直下の検証用 `.py`（`field_organization_test.py` ほか） | 削除（G-2 の 20 本に含む） |
+| `ec_site_fields.yaml` | 削除（書式は `examples/sample_ec_fields.yaml` へ引き継ぎ） |
+| `workbook/~RETAIL...twbr`（Tableau の復元残骸・未追跡） | 削除 |
+| `workbook/test.ipynb`（追跡済み） | **削除** |
+| `workbook/*.twbx`（追跡済み・2.5MB） | **残す**（参照用） |
+
+`.twbx` を残したのは、追跡済みファイルを消しても過去のコミットにデータが残るため
+**リポジトリの容量が減らない**から。削除の利得がなく、参照用として使う可能性がある。
 
 ### G-2 【高】サンプルスクリプトの削除
 
@@ -406,8 +442,13 @@ C-1 / C-2 / D-2 を置き換える。既存のサンプルを直して残すの�
 **副次的な効果**: 削除後は C-1 のデータ損失リスクが消える。
 PreToolUse フック（`.claude/hooks/`）の役割も再評価できる。
 
-> **次のアクション**: 個別タスクに分解する。削除前に、各スクリプトが持つ知見
-> （どの API をどう組み合わせているか）で G-3 に引き継ぐべきものを洗い出す。
+**決定（2026-09-05・完了）**: 20 本すべてと `ec_site_fields.yaml` を削除した。
+
+- 知見は削除前に `docs/tasks/G2_sample_inventory.md` へ書き出した（6 パターンに整理）。G-3 の入力。
+- **PreToolUse フックは残す**。対象スクリプトは消えたが、フックは
+  「リポジトリ外の絶対パスを指す `.twb` / `.twbx` への書き込み」を汎用的に止めるので、
+  今後書くコードにも効く。役割は「20 本を守る」から「うっかりを止める」へ変わった。
+- 新しい `examples/build_dashboard.py` はリポジトリ内で完結するためフックに掛からない。
 
 ### G-3 【中】展開用サンプルの作成
 
@@ -422,7 +463,20 @@ PreToolUse フック（`.claude/hooks/`）の役割も再評価できる。
 
 置き場所（`examples/` など）、対象とする API の範囲、README からの参照方法を決める。
 
-> **次のアクション**: 個別タスクに分解する。G-2 の洗い出し結果を入力にする。
+**決定（2026-09-05・完了）**: Phase 0 で前倒し実施した。
+
+- **置き場所**: `examples/`
+- **本数**: **1 本**（`examples/build_dashboard.py`）。旧サンプル 20 本は重複が多く、
+  内容は 6 パターンに縮まったため、パターンごとに分けず 1 本へまとめた
+- **入力**: `examples/sample_ec.twb` を新規に作った。
+  **`tests/sample_minimal.twb` は使えない。** measure 2 列だけでディメンションが無く、
+  `draw_sheet` / `draw_crosstab` / `draw_quadrant` などが動かせないため
+- **出力**: `outputs/`（`.gitignore` 済み）
+- **カバー範囲**: フィールド整理 / 計算フィールド / `draw_*` 7 種 / 表スタイル /
+  `build_report()` と `create_container()` の 2 通り / ペイン直接操作
+- **README からの参照**: 未実施。README は全編が旧 API のままなので **F-1 の全面改訂と同時**にする
+
+実行して 8 シート・2 ダッシュボード・検証エラー 0 を確認済み。
 
 ### G-4 【中】`.gitignore` の整理
 
@@ -435,7 +489,17 @@ PreToolUse フック（`.claude/hooks/`）の役割も再評価できる。
 - `.codex/` と `.agents/` を ignore しているが、両ディレクトリは空
 - G-3 の `examples/` は追跡対象にする
 
-> **次のアクション**: 分解不要。ただし G-1 〜 G-3 の方針が決まってから反映する。
+**決定（2026-09-05・完了）**
+
+| 追加 | 理由 |
+|---|---|
+| `outputs/` | 生成 `.twb` を追跡しない。`examples/` の出力先 |
+| `.claude/` | エージェントの作業用設定。ライブラリの成果物ではない |
+| `CLAUDE.md` | 同上 |
+
+- `.codex/` と `.agents/` は空のままだが、同じ「agent 系は追跡しない」方針なので残す。
+- `examples/` は追跡対象（ignore しない）。
+- `tmp/` は既存のまま。`--basetemp` と `cache_dir` の両方がここを使う（B-4 / D-3）。
 
 ---
 
