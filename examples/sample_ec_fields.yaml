@@ -1,0 +1,16 @@
+# apply_field_config() の設定ファイル
+# データソース名 → フォルダ名 → {元のフィールド名: 表示名} の 3 階層
+"EC Orders":
+  Dim注文:
+    Order ID: 注文ID
+    Order Date: 注文日
+  Dim顧客:
+    Customer ID: 顧客ID
+    Segment: 顧客セグメント
+  Dim商品:
+    Category: カテゴリ
+    Sub-Category: サブカテゴリ
+  Measure:
+    Sales: 売上
+    Profit: 利益
+    Quantity: 数量

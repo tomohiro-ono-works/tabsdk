@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name="ec" caption="EC Orders">
+      <column name="[Order ID]" caption="Order ID" datatype="string" role="dimension" type="nominal" />
+      <column name="[Order Date]" caption="Order Date" datatype="date" role="dimension" type="ordinal" />
+      <column name="[Customer ID]" caption="Customer ID" datatype="string" role="dimension" type="nominal" />
+      <column name="[Segment]" caption="Segment" datatype="string" role="dimension" type="nominal" />
+      <column name="[Category]" caption="Category" datatype="string" role="dimension" type="nominal" />
+      <column name="[Sub-Category]" caption="Sub-Category" datatype="string" role="dimension" type="nominal" />
+      <column name="[Sales]" caption="Sales" datatype="real" role="measure" type="quantitative" />
+      <column name="[Profit]" caption="Profit" datatype="real" role="measure" type="quantitative" />
+      <column name="[Quantity]" caption="Quantity" datatype="integer" role="measure" type="quantitative" />
+    </datasource>
+  </datasources>
+</workbook>
