@@ -2,8 +2,25 @@
 name = "twbpatch"
 version = "0.1.0"
 description = "TWB/TWBX inspector, patcher, and editor"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["lxml>=5.0.0"]
+dependencies = ["lxml>=5.0.0", "PyYAML>=6.0"]
+
+[project.urls]
+Repository = "https://github.com/tomohiro-ono-works/tabsdk"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=9.1.1"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+# tmp_path fixture の既定の basetemp は Windows で PermissionError になるため、
+# リポジトリ内の tmp/ 配下へ固定する（tmp/ は .gitignore 済み）。
+addopts = "--basetemp=tmp/pytest"
+# 既定の .pytest_cache は ACL が壊れていて書き込めない（毎回 WinError 183）。
+# キャッシュも tmp/ 配下へ逃がす。
+cache_dir = "tmp/pytest_cache"

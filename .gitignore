@@ -47,3 +47,8 @@ desktop.ini
 # Local Codex/agent workspace metadata
 .codex/
 .agents/
+.claude/
+CLAUDE.md
+
+# Generated workbooks (examples/ の出力先。成果物は追跡しない)
+outputs/
