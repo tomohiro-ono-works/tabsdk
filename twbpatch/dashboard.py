@@ -5,7 +5,10 @@ from .errors import NotFoundError, AmbiguousCaptionError
 from .field_ref import build_column_index
 from .models import TwbDashboard, TwbWorksheet
 from .worksheet import materialize_worksheet
+from .worksheet_field import build_datasource_labels
 from .window import bool_attr, window_attrs_by_name
+from .dashboard_action import list_actions_from_tree
+from .dashboard_zone import list_zones_from_dashboard
 
 
 def dashboard_elements(tree: ET._ElementTree) -> list[ET._Element]:
@@ -27,6 +30,7 @@ def materialize_dashboard(
     window_attrs: dict[str, str] | None = None,
     worksheet_windows: dict[str, dict[str, str]] | None = None,
     columns: dict[tuple[str, str], ET._Element] | None = None,
+    datasource_labels: dict[str, str] | None = None,
 ) -> TwbDashboard:
     name = dash_el.get("name") or ""
     caption = dash_el.get("caption") or name
@@ -45,6 +49,7 @@ def materialize_dashboard(
                     worksheets_by_name[ws_name],
                     window_attrs=worksheet_windows.get(ws_name),
                     columns=columns,
+                    datasource_labels=datasource_labels,
                 )
             )
             seen.add(ws_name)
@@ -54,6 +59,8 @@ def materialize_dashboard(
         id=name,
         caption=caption,
         worksheets=linked,
+        zones=list_zones_from_dashboard(dash_el),
+        actions=list_actions_from_tree(dash_el.getroottree(), dash_el),
         visible=not hidden,
     )
 
@@ -63,6 +70,7 @@ def list_dashboards_from_tree(tree: ET._ElementTree) -> list[TwbDashboard]:
     dashboard_windows = window_attrs_by_name(tree, "dashboard")
     worksheet_windows = window_attrs_by_name(tree, "worksheet")
     columns = build_column_index(tree)
+    datasource_labels = build_datasource_labels(tree)
     return [
         materialize_dashboard(
             dash,
@@ -70,6 +78,7 @@ def list_dashboards_from_tree(tree: ET._ElementTree) -> list[TwbDashboard]:
             window_attrs=dashboard_windows.get(dash.get("name") or ""),
             worksheet_windows=worksheet_windows,
             columns=columns,
+            datasource_labels=datasource_labels,
         )
         for dash in dashboard_elements(tree)
     ]
@@ -99,4 +108,5 @@ def get_dashboard_from_tree(tree: ET._ElementTree, dashboard: str, *, by: str = 
         window_attrs=window_attrs_by_name(tree, "dashboard").get(dash_el.get("name") or ""),
         worksheet_windows=window_attrs_by_name(tree, "worksheet"),
         columns=build_column_index(tree),
+        datasource_labels=build_datasource_labels(tree),
     )

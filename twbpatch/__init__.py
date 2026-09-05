@@ -1,5 +1,17 @@
 from .workbook import TwbWorkbook
+from .connected import TwbField
+from .connected_worksheet import TwbPane
+from .connected_dashboard import TwbDashboardContainer
 from .export import write_dicts_csv
+from .draw import (
+    draw_bar,
+    draw_card,
+    draw_colored_yoy_sheet,
+    draw_crosstab,
+    draw_quadrant,
+    draw_sheet,
+    draw_yoy,
+)
 from .models import (
     BigQuerySource,
     ExcelSource,
@@ -9,7 +21,11 @@ from .models import (
     TwbDatasource,
     TwbFolder,
     TwbParameter,
+    TwbRelation,
+    TwbRelationship,
     TwbDashboard,
+    TwbDashboardAction,
+    TwbDashboardZone,
     TwbWorksheet,
     TwbWorksheetField,
     TwbReferenceLine,
@@ -26,20 +42,37 @@ from .errors import (
     ValidationError,
     UnsupportedFeatureError,
     SaveError,
+    DetachedModelError,
+    ResourceInUseError,
+    ResourceReference,
 )
 
 __all__ = [
     "TwbWorkbook",
     "write_dicts_csv",
+    "draw_bar",
+    "draw_card",
+    "draw_colored_yoy_sheet",
+    "draw_crosstab",
+    "draw_quadrant",
+    "draw_sheet",
+    "draw_yoy",
     "BigQuerySource",
     "ExcelSource",
     "CsvSource",
     "UnknownSource",
     "TwbColumn",
+    "TwbField",
+    "TwbPane",
+    "TwbDashboardContainer",
     "TwbDatasource",
     "TwbFolder",
     "TwbParameter",
+    "TwbRelation",
+    "TwbRelationship",
     "TwbDashboard",
+    "TwbDashboardAction",
+    "TwbDashboardZone",
     "TwbWorksheet",
     "TwbWorksheetField",
     "TwbReferenceLine",
@@ -54,4 +87,7 @@ __all__ = [
     "ValidationError",
     "UnsupportedFeatureError",
     "SaveError",
+    "DetachedModelError",
+    "ResourceInUseError",
+    "ResourceReference",
 ]

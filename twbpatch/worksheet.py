@@ -3,8 +3,9 @@ from __future__ import annotations
 from lxml import etree as ET
 from .errors import NotFoundError, AmbiguousCaptionError
 from .field_ref import attrs, build_column_index, resolve_field
-from .models import TwbReferenceLine, TwbWorksheet
+from .models import TwbReferenceLine, TwbWorksheet, TwbWorksheetField
 from .window import bool_attr, window_attrs_by_name
+from .worksheet_field import build_datasource_labels, worksheet_fields_from_element
 
 
 def worksheet_elements(tree: ET._ElementTree) -> list[ET._Element]:
@@ -76,6 +77,7 @@ def materialize_worksheet(
     *,
     window_attrs: dict[str, str] | None = None,
     columns: dict[tuple[str, str], ET._Element] | None = None,
+    datasource_labels: dict[str, str] | None = None,
 ) -> TwbWorksheet:
     name = ws_el.get("name") or ""
     caption = ws_el.get("caption") or name
@@ -108,6 +110,11 @@ def materialize_worksheet(
         datasource_names=datasource_names,
         used_columns=used_columns,
         reference_lines=_reference_lines(ws_el, caption, columns=columns),
+        fields=worksheet_fields_from_element(
+            ws_el,
+            columns=columns,
+            datasource_labels=datasource_labels,
+        ),
         visible=not hidden,
     )
 
@@ -115,11 +122,13 @@ def materialize_worksheet(
 def list_worksheets_from_tree(tree: ET._ElementTree) -> list[TwbWorksheet]:
     windows = window_attrs_by_name(tree, "worksheet")
     columns = build_column_index(tree)
+    datasource_labels = build_datasource_labels(tree)
     return [
         materialize_worksheet(
             ws,
             window_attrs=windows.get(ws.get("name") or ""),
             columns=columns,
+            datasource_labels=datasource_labels,
         )
         for ws in worksheet_elements(tree)
     ]
@@ -143,11 +152,40 @@ def resolve_worksheet_el(tree: ET._ElementTree, worksheet: str, *, by: str = "au
 def get_worksheet_from_tree(tree: ET._ElementTree, worksheet: str, *, by: str = "auto") -> TwbWorksheet:
     ws_el = resolve_worksheet_el(tree, worksheet, by=by)
     windows = window_attrs_by_name(tree, "worksheet")
+    columns = build_column_index(tree)
     return materialize_worksheet(
         ws_el,
         window_attrs=windows.get(ws_el.get("name") or ""),
-        columns=build_column_index(tree),
+        columns=columns,
+        datasource_labels=build_datasource_labels(tree),
     )
+
+
+def list_worksheet_fields_from_tree(
+    tree: ET._ElementTree,
+    worksheet: str | None = None,
+    *,
+    by: str = "auto",
+    max_filter_value_chars: int = 40,
+) -> list[TwbWorksheetField]:
+    columns = build_column_index(tree)
+    datasource_labels = build_datasource_labels(tree)
+    worksheet_els = (
+        [resolve_worksheet_el(tree, worksheet, by=by)]
+        if worksheet is not None
+        else worksheet_elements(tree)
+    )
+    fields: list[TwbWorksheetField] = []
+    for ws_el in worksheet_els:
+        fields.extend(
+            worksheet_fields_from_element(
+                ws_el,
+                columns=columns,
+                datasource_labels=datasource_labels,
+                max_filter_value_chars=max_filter_value_chars,
+            )
+        )
+    return fields
 
 
 def list_reference_lines_from_tree(

@@ -75,6 +75,38 @@ class TwbParameter:
 
 
 @dataclass
+class TwbRelation:
+    datasource: str
+    datasource_id: str | None = None
+    id: str | None = None
+    type: str | None = None
+    name: str | None = None
+    table: str | None = None
+    connection: str | None = None
+    join: str | None = None
+    custom_sql: str | None = None
+    scope: str | None = None
+    logical_table: str | None = None
+    logical_table_id: str | None = None
+    clauses: list[dict[str, object]] = dataclass_field(default_factory=list)
+    children: list[TwbRelation] = dataclass_field(default_factory=list)
+    attrs: dict[str, str] = dataclass_field(default_factory=dict)
+
+
+@dataclass
+class TwbRelationship:
+    datasource: str
+    datasource_id: str | None = None
+    id: str | None = None
+    left_object: str | None = None
+    left_object_id: str | None = None
+    right_object: str | None = None
+    right_object_id: str | None = None
+    expression: dict[str, object] | None = None
+    attrs: dict[str, str] = dataclass_field(default_factory=dict)
+
+
+@dataclass
 class TwbDatasource:
     name: str | None
     caption: str | None
@@ -83,6 +115,8 @@ class TwbDatasource:
     columns: list[TwbColumn]
     folders: list[TwbFolder]
     id: str | None = None
+    relations: list[TwbRelation] = dataclass_field(default_factory=list)
+    relationships: list[TwbRelationship] = dataclass_field(default_factory=list)
 
 
 @dataclass
@@ -157,6 +191,69 @@ class TwbFilterControl:
 
 
 @dataclass
+class TwbDashboardZone:
+    dashboard: str
+    dashboard_id: str | None = None
+    id: str | None = None
+    parent_id: str | None = None
+    depth: int = 0
+    name: str | None = None
+    type: str | None = None
+    worksheet: str | None = None
+    worksheet_id: str | None = None
+    mode: str | None = None
+    param: str | None = None
+    url: str | None = None
+    text: str | None = None
+    layout: str = "default"
+    sizing_mode: str | None = None
+    dashboard_width_px: int | None = None
+    dashboard_height_px: int | None = None
+    x_raw: int | None = None
+    x_px: int | None = None
+    y_raw: int | None = None
+    y_px: int | None = None
+    width_raw: int | None = None
+    width_px: int | None = None
+    height_raw: int | None = None
+    height_px: int | None = None
+    fixed_size: int | None = None
+    is_fixed: bool | None = None
+    is_scaled: bool | None = None
+    show_title: bool | None = None
+    show_caption: bool | None = None
+    show_apply: bool | None = None
+    attrs: dict[str, str] = dataclass_field(default_factory=dict)
+
+
+@dataclass
+class TwbDashboardAction:
+    dashboard: str | None = None
+    dashboard_id: str | None = None
+    id: str | None = None
+    caption: str | None = None
+    type: str | None = None
+    activation: str | None = None
+    command: str | None = None
+    source_type: str | None = None
+    source_dashboard: str | None = None
+    source_dashboard_id: str | None = None
+    source_worksheets: list[str] = dataclass_field(default_factory=list)
+    source_worksheet_ids: list[str] = dataclass_field(default_factory=list)
+    excluded_source_worksheets: list[str] = dataclass_field(default_factory=list)
+    target_type: str | None = None
+    target_dashboard: str | None = None
+    target_dashboard_id: str | None = None
+    target_worksheets: list[str] = dataclass_field(default_factory=list)
+    target_worksheet_ids: list[str] = dataclass_field(default_factory=list)
+    excluded_target_worksheets: list[str] = dataclass_field(default_factory=list)
+    links: list[dict[str, str]] = dataclass_field(default_factory=list)
+    params: dict[str, str] = dataclass_field(default_factory=dict)
+    attrs: dict[str, str] = dataclass_field(default_factory=dict)
+    details: dict[str, object] = dataclass_field(default_factory=dict)
+
+
+@dataclass
 class TwbWorksheet:
     name: str
     id: str | None = None
@@ -167,6 +264,7 @@ class TwbWorksheet:
     datasource_names: list[str] = dataclass_field(default_factory=list)
     used_columns: list[str] = dataclass_field(default_factory=list)
     reference_lines: list[TwbReferenceLine] = dataclass_field(default_factory=list)
+    fields: list[TwbWorksheetField] = dataclass_field(default_factory=list)
     visible: bool = True
 
 
@@ -176,6 +274,8 @@ class TwbDashboard:
     id: str | None = None
     caption: str | None = None
     worksheets: list[TwbWorksheet] = dataclass_field(default_factory=list)
+    zones: list[TwbDashboardZone] = dataclass_field(default_factory=list)
+    actions: list[TwbDashboardAction] = dataclass_field(default_factory=list)
     visible: bool = True
 
 
@@ -189,6 +289,13 @@ class TwbWorksheetField:
     values: str | None = None
     category: str | None = None
     aggregation: str | None = None
+    worksheet_id: str | None = None
+    datasource: str | None = None
+    datasource_id: str | None = None
+    field_id: str | None = None
+    pane_id: str | None = None
+    mark_type: str | None = None
+    attrs: dict[str, str] = dataclass_field(default_factory=dict)
 
 
 @dataclass

@@ -26,6 +26,14 @@ def normalize_formula_for_datasource(
     return replace_formula_captions(formula, mapping, strict=strict, ref_map=ref_map)
 
 
+def normalize_number_format(number_format: str | None) -> str | None:
+    if number_format is None:
+        return None
+    if number_format == "%":
+        return "p0%"
+    raise ValueError("number_format must be '%' or None")
+
+
 def create_calculated_field_el(
     datasource_el: ET._Element,
     *,
@@ -35,7 +43,8 @@ def create_calculated_field_el(
     datatype: str = "real",
     role: str = "measure",
     discrete: bool | None = False,
-    hidden: bool = False,
+    hidden: bool | None = False,
+    number_format: str | None = None,
     formula_ref: str = "auto",
     strict: bool = False,
     ref_map: dict[str, str] | None = None,
@@ -60,6 +69,9 @@ def create_calculated_field_el(
         discrete=discrete,
         hidden=hidden,
     )
+    normalized_format = normalize_number_format(number_format)
+    if normalized_format is not None:
+        element.set("default-format", normalized_format)
     anchor = find_last_sibling_of_type(datasource_el, tag_local)
     if anchor is not None:
         anchor.addnext(element)
@@ -74,7 +86,7 @@ def create_calculated_field_el(
         datatype=datatype,
         role=role,
         discrete=discrete,
-        hidden=hidden,
+        hidden=bool(hidden),
         formula=display_formula,
         raw_formula=formula_norm,
         referenced_columns=referenced_columns,

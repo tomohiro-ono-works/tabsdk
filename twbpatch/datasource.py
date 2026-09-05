@@ -6,6 +6,7 @@ from .models import TwbDatasource, BigQuerySource, ExcelSource, CsvSource, Unkno
 from .sources import detect_source
 from .column import list_columns_from_datasource
 from .folder import list_folders_from_datasource
+from .relation import list_relations_from_datasource, list_relationships_from_datasource
 
 
 def is_parameter_datasource(datasource_el: ET._Element) -> bool:
@@ -32,6 +33,8 @@ def list_datasources_from_tree(tree: ET._ElementTree) -> list[TwbDatasource]:
             columns=list_columns_from_datasource(ds),
             folders=list_folders_from_datasource(ds),
             id=name,
+            relations=list_relations_from_datasource(ds),
+            relationships=list_relationships_from_datasource(ds),
         ))
     return result
 

@@ -21,16 +21,17 @@ def make_calculated_element(
     datatype: str = "real",
     role: str = "measure",
     discrete: bool | None = False,
-    hidden: bool = False,
+    hidden: bool | None = False,
 ) -> ET._Element:
     attrib = {
         "caption": caption,
         "datatype": datatype,
-        "hidden": "true" if hidden else "false",
         "name": normalize_column_name(name),
         "role": role,
         "type": tableau_type_from_discrete(discrete),
     }
+    if hidden is not None:
+        attrib["hidden"] = "true" if hidden else "false"
     el = ET.Element(tag_local, attrib=attrib)
     calc = ET.SubElement(el, "calculation")
     calc.set("class", "tableau")
