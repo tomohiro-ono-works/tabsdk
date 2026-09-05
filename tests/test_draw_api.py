@@ -1,20 +1,41 @@
-from pathlib import Path
-
 import pytest
 
 from twbpatch import NotFoundError, TwbWorkbook
 
 
-CORRECT_WORKBOOK = Path(
-    r"C:\Users\tomoh\ドキュメント\マイ Tableau リポジトリ\ワークブック"
-    r"\ECサイト分析_別名2_計算フィールド追加_正解.twb"
-)
+DATASOURCE_ID = "federated.00vlmup0b8v7m212i5x9f03fouo2"
+DATASOURCE_NAME = "Orders++ (sample_-_superstore)"
 
 
-@pytest.mark.skipif(not CORRECT_WORKBOOK.exists(), reason="Tableau integration fixture is missing")
-def test_draw_methods_with_a_datasource_accept_plain_field_names() -> None:
-    workbook = TwbWorkbook.open(str(CORRECT_WORKBOOK))
-    datasource = workbook.get_datasources(name="Orders++ (sample_-_superstore)")[0]
+def _superstore_workbook(tmp_path):
+    """実ワークブックを模した最小構成。
+
+    データソースの `@name` は Tableau が実際に付ける `federated.xxx` 形式にしてある。
+    `draw_*` が組み立てる参照文字列がこの形式を前提にしているため。
+    """
+    path = tmp_path / "superstore.twb"
+    path.write_text(
+        f"""<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name="{DATASOURCE_ID}" caption="{DATASOURCE_NAME}">
+      <column name="[Category]" caption="カテゴリ" datatype="string" role="dimension" type="nominal" />
+      <column name="[Sub-Category]" caption="サブカテゴリ" datatype="string" role="dimension" type="nominal" />
+      <column name="[Order Date]" caption="注文日" datatype="date" role="dimension" type="ordinal" />
+      <column name="[Sales]" caption="売上" datatype="real" role="measure" type="quantitative" />
+      <column name="[Profit]" caption="利益" datatype="real" role="measure" type="quantitative" />
+    </datasource>
+  </datasources>
+</workbook>
+""",
+        encoding="utf-8",
+    )
+    return TwbWorkbook.open(str(path))
+
+
+def test_draw_methods_with_a_datasource_accept_plain_field_names(tmp_path) -> None:
+    workbook = _superstore_workbook(tmp_path)
+    datasource = workbook.get_datasources(name=DATASOURCE_NAME)[0]
     sheet = workbook.draw_sheet(
         datasource,
         name="API_一覧",
@@ -43,8 +64,8 @@ def test_draw_methods_with_a_datasource_accept_plain_field_names() -> None:
     assert workbook.tree.xpath(
         "string(/workbook/worksheets/worksheet[@name='API_一覧']/table/rows)"
     ) == (
-        "[federated.00vlmup0b8v7m212i5x9f03fouo2].[none:Category:nk]"
-        " / [federated.00vlmup0b8v7m212i5x9f03fouo2].[none:Sub-Category:nk]"
+        f"[{DATASOURCE_ID}].[none:Category:nk]"
+        f" / [{DATASOURCE_ID}].[none:Sub-Category:nk]"
     )
     assert yoy.get_panes()[0].mark_type == "line"
     assert bar.get_panes()[0].mark_type == "bar"
@@ -68,10 +89,9 @@ def test_draw_methods_with_a_datasource_accept_plain_field_names() -> None:
     assert workbook.get_worksheets(name="API_不正") == []
 
 
-@pytest.mark.skipif(not CORRECT_WORKBOOK.exists(), reason="Tableau integration fixture is missing")
-def test_workbook_draw_methods_accept_datasource_field_tuples() -> None:
-    workbook = TwbWorkbook.open(str(CORRECT_WORKBOOK))
-    datasource_name = "Orders++ (sample_-_superstore)"
+def test_workbook_draw_methods_accept_datasource_field_tuples(tmp_path) -> None:
+    workbook = _superstore_workbook(tmp_path)
+    datasource_name = DATASOURCE_NAME
 
     sheet = workbook.draw_sheet(
         name="API_タプル一覧",

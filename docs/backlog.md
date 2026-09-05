@@ -271,6 +271,13 @@ from twbpatch.models import TwbWorksheet   # dataclass（旧）
 
 ## B. テストの空白
 
+**2026-09-05 追記**: `tests/test_draw_api.py` の 2 件が実 Tableau リポジトリの絶対パスを
+前提にしていて、常に skip されていた（CLAUDE.md の「テストが触ってよいのは
+`sample_minimal.twb` と `tmp_path` のみ」にも反していた）。データソースの `@name` を
+`federated.xxx` 形式にした `tmp_path` の fixture で再現し、**2 件とも実際に通るようにした。**
+これで skip は 0 件。副次的に PreToolUse フックがこのファイルの編集を止めることも無くなった。
+
+
 ### B-1 【高】4 メソッドが完全に未検証
 
 テストからも SDK 内部からも一度も呼ばれていない。**動作未確認のまま公開されている。**
