@@ -8,12 +8,11 @@
 
 | 記号 | 意味 |
 |---|---|
-| **変更** | 今回の方針決定（公開 `update_*()` の廃止）で名称が変わるもの。旧名を併記 |
-| **提案** | 上記に伴い整合させるべきだが、未決定のもの |
 | `UNSET` | 非公開センチネル。「指定なし＝変更しない」を `None`（値の削除）と区別する |
 
-すべての `get_*()` はキーワード専用の `id=` / `name=` で絞り込み、常に `list` を返す。
+リソースを取得する `get_*()` はキーワード専用の `id=` / `name=` で絞り込み、常に `list` を返す。
 `id` と `name` の同時指定は `ValueError`。一致なしは空リスト。
+引数を取らない属性の読み取りはプロパティで公開する（§4.1）。
 
 ---
 
@@ -109,7 +108,7 @@ Worksheet のみ `id == name == XML @name`。
 | `name` | `str` | 表示名 |
 | `source_type` | `str` | 接続種別（`bigquery` / `excel` / `csv` など） |
 | `source` | `Source` | 接続先の値オブジェクト（§6） |
-| `field_grouping` **提案** | `str \| None` | フィールドの grouping 方式。現行は `get_field_grouping()` |
+| `field_grouping` | `str \| None` | フィールドの grouping 方式 |
 
 **メソッド**
 
@@ -200,8 +199,8 @@ Worksheet のみ `id == name == XML @name`。
 | `id` / `name` | `str` | 常に XML の `@name` と一致。`update(name=...)` は内部 ID の変更でもある |
 | `visible` | `bool` | 表示 / 非表示 |
 | `title` | `str \| None` | タイトル文字列 |
-| `table_style` **提案** | `dict[str, Any]` | 表スタイル。現行は `get_table_style()` |
-| `title_style` **提案** | `dict[str, Any]` | タイトルスタイル。現行は `get_title_style()` |
+| `table_style` | `dict[str, Any]` | 表スタイル |
+| `title_style` | `dict[str, Any]` | タイトルスタイル |
 
 **メソッド**
 
@@ -218,7 +217,7 @@ Worksheet のみ `id == name == XML @name`。
 | `add_reference_line` | `field: TwbWorksheetField, *, formula="median", scope="per-table", label_type="value", probability=95, z_order=1` | `TwbReferenceLine` | リファレンスラインを追加 |
 | `set_title` | `title: str \| None` | `TwbWorksheet` | タイトルを設定。`None` で解除 |
 | `set_axis_visibility` | `field: TwbWorksheetField, *, visible: bool` | `TwbWorksheet` | 軸の表示 / 非表示 |
-| `update` **変更** | `*, name=UNSET, visible=UNSET, table_style=UNSET, title_style=UNSET` | `TwbWorksheet` | 自身を更新。**旧 `update_table_style()` / `update_title_style()` を統合** |
+| `update` | `*, name=UNSET, visible=UNSET, table_style=UNSET, title_style=UNSET` | `TwbWorksheet` | 自身を更新。**旧 `update_table_style()` / `update_title_style()` を統合** |
 | `delete` | — | `None` | 削除。ダッシュボードから参照されていれば `ResourceInUseError` |
 
 `table_style` に渡す辞書（`TypedDict`、すべて任意）:
@@ -248,8 +247,8 @@ Worksheet のみ `id == name == XML @name`。
 | `id` | `str` | Pane ID |
 | `name` | `str` | 表示名。無ければ Pane ID |
 | `mark_type` | `str` | `bar` / `line` / `circle` / `square` / `text` など |
-| `mark_opacity` **提案** | `float \| None` | 不透明度。現行は `get_mark_opacity()` |
-| `customized_label` **提案** | `dict \| None` | カスタムラベル構成。現行は `get_customized_label()` |
+| `mark_opacity` | `float \| None` | 不透明度 |
+| `customized_label` | `dict \| None` | カスタムラベル構成 |
 
 **メソッド**
 
@@ -257,7 +256,7 @@ Worksheet のみ `id == name == XML @name`。
 |---|---|---|---|
 | `get_fields` | `*, id=None, name=None` | `list[TwbWorksheetField]` | このペインに配置されたフィールド |
 | `add_field` | `field: TwbField, *, encoding: str, aggregation=None, discrete=None, table_calculation=None, table_calculation_field=None` | `TwbWorksheetField` | エンコーディングへ配置。`encoding` は `color` / `label` / `tooltip` / `size` / `shape` / `detail` / `path` / `angle` |
-| `set_customized_label` **変更** | `*, main_metric: TwbWorksheetField, sub_metric: TwbWorksheetField \| None, main_color: str, value_color="#333333", vertical_alignment="center"` | `TwbPane` | カード用のラベル構成を組み立てる。**旧 `update_customized_label()`。自身の値の更新ではなく他フィールドを受け取る操作のため動詞名へ** |
+| `set_customized_label` | `*, main_metric: TwbWorksheetField, sub_metric: TwbWorksheetField \| None, main_color: str, value_color="#333333", vertical_alignment="center"` | `TwbPane` | カード用のラベル構成を組み立てる。**旧 `update_customized_label()`。自身の値の更新ではなく他フィールドを受け取る操作のため動詞名へ** |
 | `set_label_style` | `*, show: bool = True, cull: bool = False` | `TwbPane` | ラベルの表示と重なり除去 |
 | `set_mark_opacity` | `opacity: float` | `TwbPane` | 不透明度を設定 |
 | `set_mark_size` | `size: float` | `TwbPane` | マークサイズを設定 |
@@ -327,7 +326,7 @@ Worksheet のみ `id == name == XML @name`。
 | `weight` | `float \| None` | 親の中での比率 |
 | `fixed_size` | `int \| None` | 固定サイズ（px） |
 | `hidden` | `bool` | 非表示か |
-| `style` **提案** | `dict[str, str]` | ゾーンスタイル。現行は `get_style()` |
+| `style` | `dict[str, str]` | ゾーンスタイル |
 
 **メソッド**
 
@@ -342,7 +341,7 @@ Worksheet のみ `id == name == XML @name`。
 | `add_image` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | 画像枠を配置 |
 | `add_spacer` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | 余白を配置 |
 | `add_dashboard_object` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | その他のダッシュボードオブジェクトを配置 |
-| `update` **変更** | `*, direction=UNSET, order=UNSET, weight=UNSET, fixed_size=UNSET, friendly_name=UNSET, hidden=UNSET, distribute_evenly=UNSET, style=UNSET` | `TwbDashboardContainer` | 自身を更新。**旧 `update_style()` を `style=` へ統合** |
+| `update` | `*, direction=UNSET, order=UNSET, weight=UNSET, fixed_size=UNSET, friendly_name=UNSET, hidden=UNSET, distribute_evenly=UNSET, style=UNSET` | `TwbDashboardContainer` | 自身を更新。**旧 `update_style()` を `style=` へ統合** |
 | `delete` | — | `None` | 削除。子要素を持つ場合は `ResourceInUseError` |
 
 `style` は `dict[str, str \| int \| None]`。キーは Tableau のゾーンスタイル属性名を
@@ -368,11 +367,11 @@ Worksheet のみ `id == name == XML @name`。
 | `show_title` | `bool \| None` | タイトル表示 |
 | `fixed_size` | `int \| None` | 固定サイズ |
 | `hidden` | `bool` | 非表示か |
-| `style` **提案** | `dict[str, str]` | ゾーンスタイル。現行は `get_style()` |
+| `style` | `dict[str, str]` | ゾーンスタイル |
 
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
-| `update` **変更** | `*, order=UNSET, weight=UNSET, x=UNSET, y=UNSET, width=UNSET, height=UNSET, show_title=UNSET, fixed_size=UNSET, friendly_name=UNSET, hidden=UNSET, style=UNSET` | `TwbDashboardZone` | 自身を更新。**旧 `update_style()` を統合**。タイル配置に `x`/`y`、浮動配置に `order`/`weight` を渡すと `ValueError` |
+| `update` | `*, order=UNSET, weight=UNSET, x=UNSET, y=UNSET, width=UNSET, height=UNSET, show_title=UNSET, fixed_size=UNSET, friendly_name=UNSET, hidden=UNSET, style=UNSET` | `TwbDashboardZone` | 自身を更新。**旧 `update_style()` を統合**。タイル配置に `x`/`y`、浮動配置に `order`/`weight` を渡すと `ValueError` |
 | `delete` | — | `None` | **配置だけ**を削除。ワークシート本体は削除しない |
 
 ### 3.11 `TwbDashboardAction`
@@ -452,7 +451,7 @@ draw_quadrant, draw_crosstab, draw_colored_yoy_sheet
 
 ---
 
-## 8. 今回の改名一覧
+## 8. 改名の記録（A-6・完了）
 
 | 旧名 | 新名 | 理由 |
 |---|---|---|
@@ -462,16 +461,27 @@ draw_quadrant, draw_crosstab, draw_colored_yoy_sheet
 | `TwbWorksheet.update_title_style(...)` | `update(title_style={...})` | 同上 |
 | `TwbPane.update_customized_label(...)` | `set_customized_label(...)` | 自身の値の更新ではなく、他フィールドを受け取る操作のため |
 
-**移行方法（仕様 §11）**: 新 API を先に追加し、旧メソッドは残す。全 Phase 完了後にまとめて削除を判断する。
+旧名はいずれも接続型モデルに後から入った未リリースのメソッドで、移行期に守るべき §11 の旧 API（`TwbWorkbook.list_*()` と `models.py` の dataclass 群）ではない。新形式へ委譲する薄いラッパーになった時点で削除した。**旧名はもう存在しない。**
 
-### 未決定（提案）
+### 取得側のプロパティ化（完了）
 
-`update_*()` と対になる取得側は `get_style()` / `get_table_style()` / `get_title_style()` /
-`get_customized_label()` / `get_mark_opacity()` / `get_field_grouping()` の6件。
-いずれも `list` を返さない単数取得で、§4.1 との整合が取れていない。
+`update_*()` と対になる取得側は **6種7メソッド**（`get_style()` が
+`TwbDashboardContainer` と `TwbDashboardZone` の2クラスにある）。
+いずれも `list` を返さない単数取得で、§4.1 との整合が取れていなかった。
 
-**提案**: 引数を取らないこれら6件はプロパティへ移す（`zone.style`、`worksheet.table_style` など）。
-`update(style=...)` で書き、`.style` で読む形になり対称性が取れる。
+**決定**: 仕様 §4.1 の「`get_*()` は `list` を返す」はリソース取得の規則であり、
+属性の読み取りは対象外とする。引数を取らないこの7メソッドはプロパティへ移した。
+`update(style=...)` で書き、`.style` で読む対称形になる。**旧名はもう存在しない。**
+
+| 旧名 | 新名 |
+|---|---|
+| `TwbDatasource.get_field_grouping()` | `field_grouping` |
+| `TwbWorksheet.get_table_style()` | `table_style` |
+| `TwbWorksheet.get_title_style()` | `title_style` |
+| `TwbPane.get_customized_label()` | `customized_label` |
+| `TwbPane.get_mark_opacity()` | `mark_opacity` |
+| `TwbDashboardContainer.get_style()` | `style` |
+| `TwbDashboardZone.get_style()` | `style` |
 
 `get_categorical_colors(field)` / `set_categorical_colors(field, colors)` は引数を取るため
 プロパティにできない。現状の `get_` / `set_` 対を維持する。

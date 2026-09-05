@@ -177,6 +177,22 @@ display_name = get_display_name(element)
 
 公開 `update_*()` は使用しない。formula、source、value、values など、モデル自身が所有する更新可能な値はすべて `update()` のキーワード引数として受け取る。値固有の変換と検証は `update()` 内部で処理する。
 
+属性のグループも同様に `update()` のキーワード引数で受け取る。引数名はグループ名とする。
+
+```python
+worksheet.update(table_style={"header_bold": True, "column_widths": {"#": 36}})
+container.update(style={"background_color": "#e6e6e6", "margin": 0})
+```
+
+- 引数名は `style=` / `table_style=` / `title_style=` のようにグループ名そのものとする。
+- キー集合が固定のグループは `TypedDict`（`total=False`）で型を与える。
+- キー集合が開いているグループは `dict[str, str | int | None]` とする。
+- グループ内のキーを個別の引数へ展開しない。`update(header_bold=True)` の形は使用しない。
+
+自身が所有する値の更新ではない操作は `update()` へ統合しない。他モデルを引数に取るもの、
+または副作用として別要素を作るものは、動作を表す動詞名で公開する
+（`set_customized_label(main_metric=...)` など）。
+
 ### 3.4 クラス名・変数名
 
 - クラス名は単数形とする。
@@ -214,6 +230,16 @@ worksheets = workbook.get_worksheets()
 - 1件でも要素そのものには変換しない。
 - 複数件でも例外にしない。
 - 結果順は原則として XML の出現順とする。
+
+**この規則の対象はリソースの取得である。** リソースとは、独立して
+`update()` / `delete()` できる接続型モデルを指す。属性の読み取りは対象外とする。
+
+- 引数を取らない属性の読み取りはプロパティとして公開する
+  （`worksheet.table_style`、`zone.style`、`pane.mark_opacity`）。
+  `update()` の同名キーワード引数で書き、同名のプロパティで読む対称形にする。
+- 引数を取る取得はプロパティにできないため、`get_` / `set_` の対を維持する
+  （`pane.get_categorical_colors(field)` / `set_categorical_colors(field, colors)`）。
+  この `get_` はリソース取得ではないため `list` を返す義務を負わない。
 
 ### 4.2 絞り込み
 
