@@ -37,8 +37,8 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | ID | 優先度 | 課題 | 分解 | 切り出し先 |
 |---|---|---|---|---|
 | A-1 | **完了** | 新 API のモデルが `import` できない | 済 | 完了（2026-09-05） |
-| A-2 | 中 | 5 リソースが接続型モデル化されていない | **要** | フィルタ系 2 件は完了 |
-| A-3 | 低 | 型注釈の漏れ | 不要 | — |
+| A-2 | **完了** | 5 リソースが接続型モデル化されていない | 済 | 完了（2026-09-05） |
+| A-3 | **完了** | 型注釈の漏れ | 不要 | 完了（2026-09-05） |
 | A-4 | 中 | `draw_*` が 2 箇所に定義されている | **要** | 未 |
 | A-5 | 低 | `TwbWorkbook` に重複メソッド | 不要 | — |
 | A-6 | **完了** | 公開 `update_*()` の廃止 | 済 | 完了（2026-09-05） |
@@ -140,15 +140,15 @@ from twbpatch.models import TwbWorksheet   # dataclass（旧）
 **破壊的変更の影響**: `from twbpatch import TwbWorksheet` を型注釈に使っている外部コードだけ。
 コード全体に `isinstance` 判定は 0 件で、ライブラリは未リリース。
 
-### A-2 【進行中】5 リソースが接続型モデル化されていない（残り 3）
+### A-2 【完了】5 リソースが接続型モデル化されていない
 
 以下は接続型モデルではなく **旧 dataclass をそのまま返している**。
 
 | メソッド | 場所 | 返しているもの |
 |---|---|---|
-| `TwbDatasource.get_relations()` | `connected.py` | `list_relations_from_datasource()` の結果 |
-| `TwbDatasource.get_relationships()` | `connected.py` | `list_relationships_from_datasource()` の結果 |
-| `TwbWorksheet.get_reference_lines()` | `connected_worksheet.py` | `list_reference_lines_from_tree()` の結果 |
+| ~~`TwbDatasource.get_relations()`~~ | — | **完了。`TwbRelation`（接続型・読み取り専用）を返す** |
+| ~~`TwbDatasource.get_relationships()`~~ | — | **完了。`TwbRelationship`（接続型・読み取り専用）を返す** |
+| ~~`TwbWorksheet.get_reference_lines()`~~ | — | **完了。`TwbReferenceLine`（接続型）を返す** |
 | ~~`TwbWorksheet.get_filters()`~~ | — | **完了。`TwbWorksheetFilter`（接続型）を返す** |
 | ~~`TwbDashboard.get_filter_controls()`~~ | — | **完了。`TwbFilterControl`（接続型）を返す** |
 
@@ -182,11 +182,32 @@ from twbpatch.models import TwbWorksheet   # dataclass（旧）
 **書き込みの範囲**: `delete()` と `update(values=...)` まで。表示形式（単一/複数選択）や
 適用範囲の変更は、要求している課題がまだ無いので入れていない。
 
-> **次のアクション**: 残り 3 リソース（`TwbReferenceLine` / `TwbRelation` / `TwbRelationship`）。
-> 1 リソースあたり「接続型モデルの定義 → `get_*()` の戻り値差し替え → `update()` / `delete()` →
-> テスト」で 1 単位。
+#### 残り 3 リソース【完了 2026-09-05】
 
-### A-3 【低】型注釈の漏れ
+**`TwbReferenceLine`**（`connected_worksheet.py`）
+
+- 対象要素は `pane/reference-line[@id]`。表示名を持たない要素なので `name` は `id` と同じ
+- `update(formula=, scope=, label_type=)` — **`add_reference_line()` で指定できる値と同じ範囲**。
+  `formula` は `average` / `median` / `minimum` / `maximum` のみ受け付け、小文字へ正規化する
+- `delete()` — `add_reference_line()` はあるのに消せなかった欠落を埋める
+
+**`TwbRelation` / `TwbRelationship`**（`connected.py`）— **読み取り専用**
+
+- `update()` も `delete()` も持たない。**join / union / カスタム SQL の編集は H-8 として
+  見送り済み**で、要求している課題が無い。追加する手段（`create_relation()` 等）も無いので、
+  消せないことは欠落ではない
+- リレーションは入れ子になるうえ `@id` が一意とは限らないため、走査順の添字で対象要素を解決する。
+  `relation.py` に `relation_elements_in_order()` / `relations_in_order()` を足し、
+  要素と materialize 結果の添字を対応させている
+- 入れ子は `TwbRelation.get_children()` で辿る（§4.1 に従い `list` を返す）
+- `export_json()` が dataclass の `asdict()` に依存していたため、
+  `serialization.py` に `_serialize_relation()` / `_serialize_relationship()` を足した。
+  **出力の形は変えていない**（テストで固定）
+
+**ついでに解消した A-3**: `get_actions()` の戻り値注釈が `list[Any]` のままだったので
+`list[TwbDashboardAction]` に直した。これで `twbpatch/` から `list[Any]` は無くなった。
+
+### A-3 【完了】型注釈の漏れ
 
 `TwbDashboard.get_actions()`（`connected_dashboard.py:726`）は
 実体として `TwbDashboardAction` の接続型モデルを構築しているが、注釈が `list[Any]`。
@@ -194,7 +215,14 @@ from twbpatch.models import TwbWorksheet   # dataclass（旧）
 
 `TwbWorksheet.add_reference_line()`（`:867`）の `-> Any` も要確認。
 
-> **次のアクション**: 分解不要。A-2 の作業時に同じファイルを触るので、ついでに直す。
+**決定（2026-09-05・完了）**: A-2 のついでに直した。
+
+- `TwbDashboard.get_actions()` → `list[TwbDashboardAction]`
+- `TwbWorksheet.add_reference_line()` → `TwbReferenceLine`
+- `get_filters()` / `get_filter_controls()` / `get_reference_lines()` /
+  `get_relations()` / `get_relationships()` は接続型モデル化に伴って実型が付いた
+
+`twbpatch/` から `list[Any]` は無くなった。
 
 ### A-4 【中】`draw_*` が 2 箇所に定義されている
 
