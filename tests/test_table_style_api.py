@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from twbpatch import TwbWorkbook, draw_sheet
+from twbpatch import TwbWorkbook
 
 
 def _workbook(tmp_path):
@@ -72,7 +72,7 @@ def test_get_and_update_table_style_round_trip(tmp_path) -> None:
 def test_worksheet_supports_explicit_table_down_calculation(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
-    worksheet = draw_sheet(workbook, datasource, name="一覧")
+    worksheet = workbook.draw_sheet(datasource, name="一覧")
     worksheet.add_field(
         datasource.get_fields(name="#")[0],
         shelf="rows",
@@ -106,8 +106,8 @@ def test_draw_sheet_allows_omitted_and_empty_items(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
 
-    omitted = draw_sheet(workbook, datasource, name="項目省略")
-    empty = draw_sheet(workbook, datasource, name="空配列", items=[])
+    omitted = workbook.draw_sheet(datasource, name="項目省略")
+    empty = workbook.draw_sheet(datasource, name="空配列", items=[])
 
     assert omitted.get_fields() == []
     assert empty.get_fields() == []
@@ -118,8 +118,7 @@ def test_draw_sheet_allows_omitted_and_empty_items(tmp_path) -> None:
 def test_index_uses_unspecified_table_calculation(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
-    worksheet = draw_sheet(
-        workbook,
+    worksheet = workbook.draw_sheet(
         datasource,
         name="既定表計算",
         items=["#", "カテゴリ"],
@@ -138,12 +137,10 @@ def test_index_uses_unspecified_table_calculation(tmp_path) -> None:
 
 
 def test_draw_card_builds_formatted_main_and_sub_metrics(tmp_path) -> None:
-    from twbpatch import draw_card
 
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
-    worksheet = draw_card(
-        workbook,
+    worksheet = workbook.draw_card(
         datasource,
         name="カード",
         main_metric="売上",
@@ -178,12 +175,10 @@ def test_draw_card_builds_formatted_main_and_sub_metrics(tmp_path) -> None:
 
 
 def test_draw_yoy_uses_continuous_month_date(tmp_path) -> None:
-    from twbpatch import draw_yoy
 
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
-    worksheet = draw_yoy(
-        workbook,
+    worksheet = workbook.draw_yoy(
         datasource,
         name="時系列",
         item="注文日",

@@ -2,15 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from twbpatch import (
-    NotFoundError,
-    TwbWorkbook,
-    draw_bar,
-    draw_card,
-    draw_colored_yoy_sheet,
-    draw_sheet,
-    draw_yoy,
-)
+from twbpatch import NotFoundError, TwbWorkbook
 
 
 CORRECT_WORKBOOK = Path(
@@ -20,31 +12,27 @@ CORRECT_WORKBOOK = Path(
 
 
 @pytest.mark.skipif(not CORRECT_WORKBOOK.exists(), reason="Tableau integration fixture is missing")
-def test_draw_functions_use_connected_models() -> None:
+def test_draw_methods_with_a_datasource_accept_plain_field_names() -> None:
     workbook = TwbWorkbook.open(str(CORRECT_WORKBOOK))
     datasource = workbook.get_datasources(name="Orders++ (sample_-_superstore)")[0]
-    sheet = draw_sheet(
-        workbook,
+    sheet = workbook.draw_sheet(
         datasource,
         name="API_一覧",
         items=["カテゴリ", "サブカテゴリ"],
     )
-    yoy = draw_yoy(
-        workbook,
+    yoy = workbook.draw_yoy(
         datasource,
         name="API_前年比",
         item="注文日",
         metric="売上",
     )
-    bar = draw_bar(
-        workbook,
+    bar = workbook.draw_bar(
         datasource,
         name="API_棒",
         item="サブカテゴリ",
         metric="売上",
     )
-    card = draw_card(
-        workbook,
+    card = workbook.draw_card(
         datasource,
         name="API_カード",
         main_metric="売上",
@@ -71,8 +59,7 @@ def test_draw_functions_use_connected_models() -> None:
     assert not [message for message in workbook.validate() if message.severity == "error"]
 
     with pytest.raises(NotFoundError, match="field not found"):
-        draw_bar(
-            workbook,
+        workbook.draw_bar(
             datasource,
             name="API_不正",
             item="存在しない項目",
@@ -193,7 +180,6 @@ def test_draw_colored_yoy_sheet_builds_fixed_hidden_bar_axes_per_metric(tmp_path
     datasource.create_yoy_calculated_fields(metric="売上", year_category="当年昨年区分")
     datasource.create_yoy_calculated_fields(metric="粗利", year_category="当年昨年区分")
 
-    assert callable(draw_colored_yoy_sheet)
     worksheet = workbook.draw_colored_yoy_sheet(
         name="前年差帳票",
         items=[("売上データ", "#"), ("売上データ", "カテゴリ")],

@@ -308,6 +308,7 @@ class TwbWorkbook:
 
     def draw_sheet(
         self,
+        datasource: ConnectedDatasource | None = None,
         *,
         name: str,
         items: list[FieldInput] | None = None,
@@ -319,6 +320,7 @@ class TwbWorkbook:
 
         return draw_sheet(
             self,
+            datasource,
             name=name,
             items=items,
             item_shelf=item_shelf,
@@ -328,6 +330,7 @@ class TwbWorkbook:
 
     def draw_colored_yoy_sheet(
         self,
+        datasource: ConnectedDatasource | None = None,
         *,
         name: str,
         items: list[FieldInput],
@@ -348,6 +351,7 @@ class TwbWorkbook:
 
         return draw_colored_yoy_sheet(
             self,
+            datasource,
             name=name,
             items=items,
             metrics=metrics,
@@ -366,6 +370,7 @@ class TwbWorkbook:
 
     def draw_yoy(
         self,
+        datasource: ConnectedDatasource | None = None,
         *,
         name: str,
         item: FieldInput,
@@ -381,6 +386,7 @@ class TwbWorkbook:
 
         return draw_yoy(
             self,
+            datasource,
             name=name,
             item=item,
             metric=metric,
@@ -394,6 +400,7 @@ class TwbWorkbook:
 
     def draw_bar(
         self,
+        datasource: ConnectedDatasource | None = None,
         *,
         name: str,
         item: FieldInput,
@@ -407,6 +414,7 @@ class TwbWorkbook:
 
         return draw_bar(
             self,
+            datasource,
             name=name,
             item=item,
             metric=metric,
@@ -418,6 +426,7 @@ class TwbWorkbook:
 
     def draw_card(
         self,
+        datasource: ConnectedDatasource | None = None,
         *,
         name: str,
         main_metric: FieldInput,
@@ -435,6 +444,7 @@ class TwbWorkbook:
 
         return draw_card(
             self,
+            datasource,
             name=name,
             main_metric=main_metric,
             sub_metric=sub_metric,
@@ -450,6 +460,7 @@ class TwbWorkbook:
 
     def draw_quadrant(
         self,
+        datasource: ConnectedDatasource | None = None,
         *,
         name: str,
         item: FieldInput,
@@ -473,6 +484,7 @@ class TwbWorkbook:
 
         return draw_quadrant(
             self,
+            datasource,
             name=name,
             item=item,
             x_metric=x_metric,
@@ -489,6 +501,7 @@ class TwbWorkbook:
 
     def draw_crosstab(
         self,
+        datasource: ConnectedDatasource | None = None,
         *,
         name: str,
         x_item: FieldInput,
@@ -507,6 +520,7 @@ class TwbWorkbook:
 
         return draw_crosstab(
             self,
+            datasource,
             name=name,
             x_item=x_item,
             y_item=y_item,

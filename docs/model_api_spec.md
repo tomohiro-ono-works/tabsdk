@@ -876,6 +876,19 @@ from twbpatch.models import TwbWorksheet   # 旧 dataclass
 - 接続型モデルがまだ無いクラスは、引き続き `models.py` のものをトップレベルへ公開する。
 - `TwbWorkbook.list_*()` の戻り値は移行期のあいだ旧 dataclass のままとする。型注釈のために接続型モデルが必要な利用者は `get_*()` を使う。
 
+### 11.2 グラフ生成の公開形
+
+グラフ生成は **`TwbWorkbook.draw_*()` メソッドを正とする**。
+
+```python
+workbook.draw_sheet(name="帳票", items=[("売上データ", "カテゴリ")])
+workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
+```
+
+- 第 1 引数の `datasource` は省略できる。省略した場合、項目は `(データソース名, フィールド名)` のタプルで指定する。
+- `twbpatch.draw` のモジュール関数は実装の置き場であって公開 API ではない。トップレベルの `twbpatch` からは公開しない。
+- 実装をメソッド側へ移さないのは、`workbook.py` をこれ以上大きくしないため。メソッドは委譲だけを行う。
+
 ## 12. 利用例
 
 ```python

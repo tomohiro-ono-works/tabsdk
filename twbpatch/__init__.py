@@ -8,6 +8,9 @@
     from twbpatch.models import TwbWorksheet   # dataclass（旧）
 
 `TwbWorkbook.list_*()` は移行期のあいだ旧 dataclass を返し続ける（仕様 §11）。
+
+グラフ生成は `TwbWorkbook.draw_*()` メソッドが正（A-4・2026-09-05 決定）。
+`twbpatch.draw` のモジュール関数は実装の置き場であって、公開 API ではない。
 """
 
 from .workbook import TwbWorkbook
@@ -36,15 +39,6 @@ from .connected_dashboard import (
     TwbDashboardZone,
     TwbFilterControl,
 )
-from .draw import (
-    draw_bar,
-    draw_card,
-    draw_colored_yoy_sheet,
-    draw_crosstab,
-    draw_quadrant,
-    draw_sheet,
-    draw_yoy,
-)
 # 接続型モデルがまだ無いもの（A-2 の対象）と、値オブジェクト
 from .models import (
     BigQuerySource,
@@ -71,13 +65,6 @@ from .errors import (
 __all__ = [
     "TwbWorkbook",
     "write_dicts_csv",
-    "draw_bar",
-    "draw_card",
-    "draw_colored_yoy_sheet",
-    "draw_crosstab",
-    "draw_quadrant",
-    "draw_sheet",
-    "draw_yoy",
     "BigQuerySource",
     "ExcelSource",
     "CsvSource",

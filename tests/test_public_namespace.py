@@ -66,3 +66,30 @@ def test_list_methods_still_return_old_dataclasses(tmp_path) -> None:
 
 def test_all_entries_are_defined() -> None:
     assert [name for name in twbpatch.__all__ if not hasattr(twbpatch, name)] == []
+
+
+DRAW_METHODS = [
+    "draw_sheet",
+    "draw_colored_yoy_sheet",
+    "draw_yoy",
+    "draw_bar",
+    "draw_card",
+    "draw_quadrant",
+    "draw_crosstab",
+]
+
+
+def test_draw_is_published_as_workbook_methods() -> None:
+    """A-4: グラフ生成は TwbWorkbook のメソッドが正（仕様 §6.1）。"""
+    for name in DRAW_METHODS:
+        assert callable(getattr(twbpatch.TwbWorkbook, name))
+        assert not hasattr(twbpatch, name), f"{name} がトップレベルに残っている"
+        assert name not in twbpatch.__all__
+
+
+def test_draw_module_remains_the_implementation() -> None:
+    """モジュール関数は実装の置き場。公開 API ではないが消してはいない。"""
+    from twbpatch import draw
+
+    for name in DRAW_METHODS:
+        assert callable(getattr(draw, name))

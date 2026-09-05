@@ -69,10 +69,19 @@ Worksheet のみ `id == name == XML @name`。
 
 ### 2.4 ワークシート生成（`draw_*`）
 
-定型グラフを1メソッドで組み立てる高水準 API。フィールドは `TwbField` か表示名で指定できる。
-戻り値はいずれも生成された `TwbWorksheet`。
+定型グラフを1メソッドで組み立てる高水準 API。戻り値はいずれも生成された `TwbWorksheet`。
+**これが正の公開形**（仕様 §11.2）。`twbpatch.draw` のモジュール関数は実装の置き場で、
+トップレベルの `twbpatch` からは公開しない。
 
-| メソッド | 主な引数 | 説明 |
+第1引数の `datasource` は省略できる。省略時は項目を `(データソース名, フィールド名)` の
+タプルで指定する。`TwbField` を直接渡すこともできる。
+
+```python
+workbook.draw_sheet(name="帳票", items=[("売上データ", "カテゴリ")])
+workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
+```
+
+| メソッド | 主な引数（先頭に省略可能な `datasource`） | 説明 |
 |---|---|---|
 | `draw_sheet` | `*, name, items=None, item_shelf="rows", title=None, visible=True` | 汎用シート。`items` を指定シェルフへ配置するだけの土台 |
 | `draw_bar` | `*, name, item, metric, item_shelf="rows", aggregation="sum", descending=True` | 棒グラフ。`item` 別に `metric` を集計して並べる |
@@ -384,14 +393,6 @@ Worksheet のみ `id == name == XML @name`。
 ---
 
 ## 4. モジュール関数
-
-`TwbWorkbook` のメソッド版と同じ描画処理を、関数形式でも提供する。
-第1引数に `workbook`、第2引数に `datasource`（`None` 可）を取り、以降は §2.4 と同じ。
-
-```
-draw_sheet, draw_bar, draw_yoy, draw_card,
-draw_quadrant, draw_crosstab, draw_colored_yoy_sheet
-```
 
 | 関数 | 引数 | 説明 |
 |---|---|---|
