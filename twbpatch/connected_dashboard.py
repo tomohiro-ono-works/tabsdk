@@ -1500,20 +1500,6 @@ class TwbDashboardContainer(ConnectedModel):
             friendly_name=friendly_name, style=style,
         )
 
-    def add_dashboard_object(
-        self,
-        *,
-        order: int | None = None,
-        weight: float = 1,
-        fixed_size: int | None = None,
-        friendly_name: str | None = None,
-        style: dict[str, str | int] | None = None,
-    ) -> TwbDashboardZone:
-        return self._add_object(
-            type_v2="dashboard-object", order=order, weight=weight,
-            fixed_size=fixed_size, friendly_name=friendly_name, style=style,
-        )
-
     def update(
         self,
         *,

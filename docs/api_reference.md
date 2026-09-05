@@ -349,7 +349,6 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `add_text` | `text: str, *, order=None, weight=1, fixed_size=None, friendly_name=None, font_size=12, font_color="#333333", bold=False, style=None` | `TwbDashboardZone` | テキストを配置 |
 | `add_image` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | 画像枠を配置 |
 | `add_spacer` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | 余白を配置 |
-| `add_dashboard_object` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | その他のダッシュボードオブジェクトを配置 |
 | `update` | `*, direction=UNSET, order=UNSET, weight=UNSET, fixed_size=UNSET, friendly_name=UNSET, hidden=UNSET, distribute_evenly=UNSET, style=UNSET` | `TwbDashboardContainer` | 自身を更新。**旧 `update_style()` を `style=` へ統合** |
 | `delete` | — | `None` | 削除。子要素を持つ場合は `ResourceInUseError` |
 
