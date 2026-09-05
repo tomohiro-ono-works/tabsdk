@@ -862,6 +862,20 @@ workbook.is_dirty: bool
 
 旧 API の `by="auto"` に直接対応する新引数は設けない。移行時に、指定値が表示名なら `name=`、内部 ID なら `id=` を明示する。
 
+### 11.1 公開名前空間
+
+同名のクラスが `models.py`（旧 dataclass）と `connected*.py`（接続型モデル）の両方にある場合、パッケージのトップレベルは**接続型モデルを公開する**。
+
+```python
+from twbpatch import TwbWorksheet          # 接続型モデル
+from twbpatch.models import TwbWorksheet   # 旧 dataclass
+```
+
+- 対象は `TwbDatasource` / `TwbFolder` / `TwbParameter` / `TwbWorksheet` / `TwbWorksheetField` / `TwbDashboard` / `TwbDashboardZone` / `TwbDashboardAction` の 8 クラス。
+- 旧 dataclass は `twbpatch.models` から引き続き import できる。改名も削除もしない。
+- 接続型モデルがまだ無いクラスは、引き続き `models.py` のものをトップレベルへ公開する。
+- `TwbWorkbook.list_*()` の戻り値は移行期のあいだ旧 dataclass のままとする。型注釈のために接続型モデルが必要な利用者は `get_*()` を使う。
+
 ## 12. 利用例
 
 ```python

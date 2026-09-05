@@ -36,7 +36,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 
 | ID | 優先度 | 課題 | 分解 | 切り出し先 |
 |---|---|---|---|---|
-| A-1 | 高 | 新 API のモデルが `import` できない | **要** | 未 |
+| A-1 | **完了** | 新 API のモデルが `import` できない | 済 | 完了（2026-09-05） |
 | A-2 | 中 | 5 リソースが接続型モデル化されていない | **要** | 未 |
 | A-3 | 低 | 型注釈の漏れ | 不要 | — |
 | A-4 | 中 | `draw_*` が 2 箇所に定義されている | **要** | 未 |
@@ -96,7 +96,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 
 ## A. 公開 API の整合
 
-### A-1 【高】新 API のモデルが `import` できない
+### A-1 【完了】新 API のモデルが `import` できない
 
 `twbpatch/__init__.py` は 8 クラスについて **旧 dataclass のほうを公開**している。
 
@@ -114,11 +114,31 @@ from twbpatch import TwbWorksheet   # → models.py の dataclass（旧 API）
 **影響**: 新 API の利用者は接続型モデルを型注釈に書けない。
 `isinstance` 判定も旧クラスに対して行われる。ドキュメントの記述と実際の import が食い違う。
 
-**検討事項**: 旧 API を消せない移行期（§11）に、同じ名前で両方を公開することはできない。
-名前空間を分ける（`twbpatch.models` / `twbpatch.connected`）か、公開名を切り替えるか。
+**決定（2026-09-05・完了）**: **公開名を新 API へ切り替える。** 仕様 §11.1 に追記した。
 
-> **次のアクション**: **個別タスクに分解する。** 設計判断（名前空間の方針）を Phase 0 に置き、
-> 8 クラス分の切り替えと呼び出し側の追随を Phase 分けする。A-2 の方針と整合させること。
+```python
+from twbpatch import TwbWorksheet          # 接続型モデル（新）
+from twbpatch.models import TwbWorksheet   # dataclass（旧）
+```
+
+- 切り替えた 8 クラス: `TwbDatasource` / `TwbFolder` / `TwbParameter` / `TwbWorksheet` /
+  `TwbWorksheetField` / `TwbDashboard` / `TwbDashboardZone` / `TwbDashboardAction`
+- 旧 dataclass は `twbpatch.models` から引き続き import できる。改名も削除もしない（§11）
+- 接続型モデルがまだ無い 8 クラス（`TwbColumn` / `TwbRelation` / `TwbRelationship` /
+  `TwbReferenceLine` / `TwbWorksheetFilter` / `TwbFilterControl` /
+  `TwbValidationMessage` / `TwbUnsupportedFeature`）は `models.py` のまま。
+  うち 5 件は **A-2 で接続型モデル化すると自動的にこちらへ移る**
+- `list_*()` の戻り値は変えていないので既存テストは影響を受けない
+
+**「名前空間を分ける」を採らなかった理由**: トップレベルから 8 クラスが消えるため
+`from twbpatch import TwbWorksheet` が `ImportError` になる。
+利用者に毎回 `twbpatch.connected_worksheet` のような内部モジュール名を書かせることにもなる。
+
+**「新 API に別名を付ける」を採らなかった理由**: `ConnectedWorksheet` のような名前が恒久的に残る。
+移行が終われば不要になる区別を、公開名に焼き付けることになる。
+
+**破壊的変更の影響**: `from twbpatch import TwbWorksheet` を型注釈に使っている外部コードだけ。
+コード全体に `isinstance` 判定は 0 件で、ライブラリは未リリース。
 
 ### A-2 【中】5 リソースが接続型モデル化されていない
 
