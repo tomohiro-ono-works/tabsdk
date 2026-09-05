@@ -939,15 +939,16 @@ class TwbWorksheet(ConnectedModel):
         *,
         id: str | None = None,
         name: str | None = None,
-    ) -> list[Any]:
+    ) -> list[TwbWorksheetFilter]:
         _validate_get_args(id, name)
         filters = list_filters_from_tree(self._context.tree, self._id, by="name")
         return [
-            item
+            TwbWorksheetFilter(self._context, self._id, item.column or "")
             for item in filters
-            if _matches(
-                model_id=item.column or "",
-                model_name=item.field or item.column or "",
+            if item.column
+            and _matches(
+                model_id=item.column,
+                model_name=item.field or item.column,
                 id=id,
                 name=name,
             )
@@ -1754,6 +1755,194 @@ class TwbWorksheet(ConnectedModel):
                 parent.remove(window)
         self._context.tree._setroot(updated_root)
         self._context.mark_dirty()
+        self._detach()
+
+
+class TwbWorksheetFilter(ConnectedModel):
+    """ワークシートに置かれたフィルタ（`view/filter[@column]`）。
+
+    `id` は XML 内部参照（`[ds1].[none:Region:nk]`）、`name` は解決済みのフィールド名。
+    """
+
+    def __init__(self, context: WorkbookContext, worksheet_id: str, column: str):
+        super().__init__(context)
+        self._worksheet_id = worksheet_id
+        self._id = column
+
+    def _resolve_worksheet_element(self) -> ET._Element:
+        return TwbWorksheet(self._context, self._worksheet_id)._resolve_element()
+
+    def _resolve_element(self) -> ET._Element:
+        self._ensure_attached()
+        matches = self._resolve_worksheet_element().xpath(
+            ".//*[local-name()='filter'][@column=$column]",
+            column=self._id,
+        )
+        if not matches:
+            self._detach()
+            raise DetachedModelError(f"worksheet filter is detached: {self._id}")
+        return matches[0]
+
+    def _snapshot(self):
+        """読み取りは既存の materialize を使い回す（実装を二重に持たない）。"""
+        self._resolve_element()
+        for item in list_filters_from_tree(self._context.tree, self._worksheet_id, by="name"):
+            if item.column == self._id:
+                return item
+        raise DetachedModelError(f"worksheet filter is detached: {self._id}")
+
+    @property
+    def id(self) -> str:
+        return self._id
+
+    @property
+    def name(self) -> str:
+        snapshot = self._snapshot()
+        return snapshot.field or snapshot.column or self._id
+
+    @property
+    def worksheet_id(self) -> str:
+        return self._worksheet_id
+
+    @property
+    def field(self) -> str | None:
+        return self._snapshot().field
+
+    @property
+    def role(self) -> str | None:
+        return self._snapshot().role
+
+    @property
+    def filter_class(self) -> str | None:
+        return self._snapshot().filter_class
+
+    @property
+    def filter_group(self) -> str | None:
+        return self._snapshot().filter_group
+
+    @property
+    def domain(self) -> str | None:
+        return self._snapshot().domain
+
+    @property
+    def enumeration(self) -> str | None:
+        return self._snapshot().enumeration
+
+    @property
+    def value_scope(self) -> str | None:
+        return self._snapshot().value_scope
+
+    @property
+    def value_scope_label(self) -> str | None:
+        return self._snapshot().value_scope_label
+
+    @property
+    def apply_scope(self) -> str | None:
+        return self._snapshot().apply_scope
+
+    @property
+    def apply_scope_label(self) -> str | None:
+        return self._snapshot().apply_scope_label
+
+    @property
+    def selection_type(self) -> str | None:
+        return self._snapshot().selection_type
+
+    @property
+    def values(self) -> list[str]:
+        return self._snapshot().values
+
+    @property
+    def functions(self) -> list[str]:
+        return self._snapshot().functions
+
+    @property
+    def attrs(self) -> dict[str, str]:
+        return self._snapshot().attrs
+
+    def update(self, *, values: list[str] | _UnsetType = UNSET) -> TwbWorksheetFilter:
+        """選択値を入れ替える。空リストは「すべての値」を表す。"""
+        if values is UNSET:
+            return self
+        if not isinstance(values, list):
+            raise TypeError("values must be a list")
+        for value in values:
+            if not isinstance(value, str):
+                raise TypeError("values must be strings")
+            if not value.strip():
+                raise ValueError("values must not be empty strings")
+
+        token = _FIELD_REF.match(self._id)
+        if token is None:
+            raise UnsupportedFeatureError(f"unsupported filter field reference: {self._id}")
+        level = f"[{token.group(2)}]"
+
+        worksheet_el = self._resolve_worksheet_element()
+        updated = copy.deepcopy(worksheet_el)
+        filter_el = updated.xpath(
+            ".//*[local-name()='filter'][@column=$column]",
+            column=self._id,
+        )[0]
+
+        # 既存の member 用 groupfilter を雛形にすると、user:ui-* の設定と
+        # 名前空間の接頭辞をそのまま引き継げる。
+        template = next(
+            (
+                child
+                for child in filter_el
+                if _local_name(child) == "groupfilter" and child.get("function") == "member"
+            ),
+            None,
+        )
+        for child in list(filter_el):
+            if _local_name(child) == "groupfilter":
+                filter_el.remove(child)
+
+        if not values:
+            ET.SubElement(
+                filter_el,
+                "groupfilter",
+                attrib={"function": "level-members", "level": level},
+            )
+        else:
+            for value in values:
+                if template is not None:
+                    child = copy.deepcopy(template)
+                    for grandchild in list(child):
+                        child.remove(grandchild)
+                else:
+                    child = ET.SubElement(filter_el, "groupfilter")
+                    child.set("function", "member")
+                    child.set("level", level)
+                if template is not None:
+                    filter_el.append(child)
+                child.set("member", f'"{value}"')
+
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def delete(self) -> None:
+        worksheet_el = self._resolve_worksheet_element()
+        updated = copy.deepcopy(worksheet_el)
+        for filter_el in updated.xpath(
+            ".//*[local-name()='filter'][@column=$column]",
+            column=self._id,
+        ):
+            parent = filter_el.getparent()
+            assert parent is not None
+            parent.remove(filter_el)
+        # add_filter() が置く slices の参照も一緒に外す
+        for slices in updated.xpath(".//*[local-name()='slices']"):
+            for column_el in slices.xpath(
+                "./*[local-name()='column'][text()=$column]",
+                column=self._id,
+            ):
+                slices.remove(column_el)
+            if not len(slices):
+                slices_parent = slices.getparent()
+                assert slices_parent is not None
+                slices_parent.remove(slices)
+        _replace_if_changed(worksheet_el, updated, self._context)
         self._detach()
 
 

@@ -16,12 +16,18 @@ from .export import write_dicts_csv
 # 接続型モデル（新 API）
 from .connected import TwbDatasource, TwbField, TwbFolder
 from .connected_parameter import TwbParameter
-from .connected_worksheet import TwbPane, TwbWorksheet, TwbWorksheetField
+from .connected_worksheet import (
+    TwbPane,
+    TwbWorksheet,
+    TwbWorksheetField,
+    TwbWorksheetFilter,
+)
 from .connected_dashboard import (
     TwbDashboard,
     TwbDashboardAction,
     TwbDashboardContainer,
     TwbDashboardZone,
+    TwbFilterControl,
 )
 from .draw import (
     draw_bar,
@@ -42,8 +48,6 @@ from .models import (
     TwbRelation,
     TwbRelationship,
     TwbReferenceLine,
-    TwbWorksheetFilter,
-    TwbFilterControl,
     TwbValidationMessage,
     TwbUnsupportedFeature,
 )

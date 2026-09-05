@@ -8,7 +8,7 @@ from __future__ import annotations
 import twbpatch
 from twbpatch import models
 
-# models.py と connected*.py の両方に同名クラスがある 8 件
+# models.py と connected*.py の両方に同名クラスがあるもの
 DUPLICATED = [
     "TwbDatasource",
     "TwbFolder",
@@ -18,16 +18,17 @@ DUPLICATED = [
     "TwbDashboard",
     "TwbDashboardZone",
     "TwbDashboardAction",
+    # A-2 で接続型モデル化した分
+    "TwbWorksheetFilter",
+    "TwbFilterControl",
 ]
 
-# 接続型モデルがまだ無く、models.py から公開し続けるもの（A-2 の対象を含む）
+# 接続型モデルがまだ無く、models.py から公開し続けるもの（A-2 の残り）
 MODELS_ONLY = [
     "TwbColumn",
     "TwbRelation",
     "TwbRelationship",
     "TwbReferenceLine",
-    "TwbWorksheetFilter",
-    "TwbFilterControl",
     "TwbValidationMessage",
     "TwbUnsupportedFeature",
 ]

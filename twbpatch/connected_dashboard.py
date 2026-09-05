@@ -751,7 +751,7 @@ class TwbDashboard(ConnectedModel):
         *,
         id: str | None = None,
         name: str | None = None,
-    ) -> list[Any]:
+    ) -> list["TwbFilterControl"]:
         _validate_get_args(id, name)
         controls = list_dashboard_filter_controls_from_tree(
             self._context.tree,
@@ -759,11 +759,12 @@ class TwbDashboard(ConnectedModel):
             by="name",
         )
         return [
-            control
+            TwbFilterControl(self._context, self._id, control.id or "")
             for control in controls
-            if _matches(
-                model_id=control.id or "",
-                model_name=control.name or control.id or "",
+            if control.id
+            and _matches(
+                model_id=control.id,
+                model_name=control.name or control.id,
                 id=id,
                 name=name,
             )
@@ -1844,6 +1845,106 @@ class TwbDashboardZone(ConnectedModel):
         if was_worksheet:
             _sync_dashboard_window(self._context, self._dashboard_id)
         self._detach()
+
+
+class TwbFilterControl(TwbDashboardZone):
+    """ダッシュボードに置かれたフィルタ（`zone[@type-v2='filter']`）。
+
+    XML 上は Zone そのものなので、座標・スタイル・表示/非表示の `update()` と
+    `delete()` は `TwbDashboardZone` から引き継ぐ。ここで足すのは、
+    どのフィールドのフィルタかという読み取りだけ。
+    """
+
+    def _resolve_element(self) -> ET._Element:
+        zone_el = super()._resolve_element()
+        if (zone_el.get("type-v2") or zone_el.get("type")) != "filter":
+            self._detach()
+            raise DetachedModelError(f"dashboard zone is not a filter: {self._id}")
+        return zone_el
+
+    @property
+    def column(self) -> str | None:
+        """フィルタ対象の XML 内部参照。"""
+        return self._resolve_element().get("param")
+
+    @property
+    def field(self) -> str | None:
+        """フィルタ対象の解決済みフィールド名。"""
+        return self._filter_snapshot("field")
+
+    @property
+    def role(self) -> str | None:
+        return self._filter_snapshot("role")
+
+    @property
+    def mode(self) -> str | None:
+        """表示形式（`checkdropdown` など）。"""
+        return self._resolve_element().get("mode")
+
+    @property
+    def worksheet(self) -> str | None:
+        """フィルタの出どころになっているワークシートの表示名。"""
+        return self._filter_snapshot("worksheet")
+
+    @property
+    def show_apply(self) -> bool | None:
+        return self._filter_snapshot("show_apply")
+
+    @property
+    def show_caption(self) -> bool | None:
+        return self._filter_snapshot("show_caption")
+
+    # 以下は参照先のワークシートフィルタ由来の読み取り。
+    # 変更は TwbWorksheetFilter 側で行う。
+
+    @property
+    def filter_class(self) -> str | None:
+        return self._filter_snapshot("filter_class")
+
+    @property
+    def domain(self) -> str | None:
+        return self._filter_snapshot("domain")
+
+    @property
+    def enumeration(self) -> str | None:
+        return self._filter_snapshot("enumeration")
+
+    @property
+    def value_scope(self) -> str | None:
+        return self._filter_snapshot("value_scope")
+
+    @property
+    def value_scope_label(self) -> str | None:
+        return self._filter_snapshot("value_scope_label")
+
+    @property
+    def apply_scope(self) -> str | None:
+        return self._filter_snapshot("apply_scope")
+
+    @property
+    def apply_scope_label(self) -> str | None:
+        return self._filter_snapshot("apply_scope_label")
+
+    @property
+    def selection_type(self) -> str | None:
+        return self._filter_snapshot("selection_type")
+
+    @property
+    def values(self) -> list[str]:
+        return self._filter_snapshot("values") or []
+
+    def _filter_snapshot(self, attribute: str) -> Any:
+        column = self.column
+        if column is None:
+            return None
+        for control in list_dashboard_filter_controls_from_tree(
+            self._context.tree,
+            self._dashboard_id,
+            by="name",
+        ):
+            if control.id == self._id:
+                return getattr(control, attribute)
+        return None
 
 
 def get_dashboards(
