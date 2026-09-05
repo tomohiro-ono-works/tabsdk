@@ -37,7 +37,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | ID | 優先度 | 課題 | 分解 | 切り出し先 |
 |---|---|---|---|---|
 | A-1 | **完了** | 新 API のモデルが `import` できない | 済 | 完了（2026-09-05） |
-| A-2 | 中 | 5 リソースが接続型モデル化されていない | **要** | 未 |
+| A-2 | 中 | 5 リソースが接続型モデル化されていない | **要** | フィルタ系 2 件は完了 |
 | A-3 | 低 | 型注釈の漏れ | 不要 | — |
 | A-4 | 中 | `draw_*` が 2 箇所に定義されている | **要** | 未 |
 | A-5 | 低 | `TwbWorkbook` に重複メソッド | 不要 | — |
@@ -140,25 +140,51 @@ from twbpatch.models import TwbWorksheet   # dataclass（旧）
 **破壊的変更の影響**: `from twbpatch import TwbWorksheet` を型注釈に使っている外部コードだけ。
 コード全体に `isinstance` 判定は 0 件で、ライブラリは未リリース。
 
-### A-2 【中】5 リソースが接続型モデル化されていない
+### A-2 【進行中】5 リソースが接続型モデル化されていない（残り 3）
 
 以下は接続型モデルではなく **旧 dataclass をそのまま返している**。
 
 | メソッド | 場所 | 返しているもの |
 |---|---|---|
-| `TwbDatasource.get_relations()` | `connected.py:309` | `list_relations_from_datasource()` の結果 |
-| `TwbDatasource.get_relationships()` | `connected.py:328` | `list_relationships_from_datasource()` の結果 |
-| `TwbWorksheet.get_reference_lines()` | `connected_worksheet.py:848` | `list_reference_lines_from_tree()` の結果 |
-| `TwbWorksheet.get_filters()` | `connected_worksheet.py:912` | `list_filters_from_tree()` の結果 |
-| `TwbDashboard.get_filter_controls()` | `connected_dashboard.py:743` | `list_dashboard_filter_controls_from_tree()` の結果 |
+| `TwbDatasource.get_relations()` | `connected.py` | `list_relations_from_datasource()` の結果 |
+| `TwbDatasource.get_relationships()` | `connected.py` | `list_relationships_from_datasource()` の結果 |
+| `TwbWorksheet.get_reference_lines()` | `connected_worksheet.py` | `list_reference_lines_from_tree()` の結果 |
+| ~~`TwbWorksheet.get_filters()`~~ | — | **完了。`TwbWorksheetFilter`（接続型）を返す** |
+| ~~`TwbDashboard.get_filter_controls()`~~ | — | **完了。`TwbFilterControl`（接続型）を返す** |
 
 対応する接続型モデル（`TwbRelation` / `TwbRelationship` / `TwbReferenceLine` /
 `TwbWorksheetFilter` / `TwbFilterControl`）が存在しないため、取得はできても
 `update()` / `delete()` ができない。**仕様 §11 の残 Phase そのもの。**
 
-> **次のアクション**: **個別タスクに分解する。** リソース 5 種それぞれが独立した実装単位になる。
+**着手順の決定（2026-09-05）**: 依存の少ない `TwbRelation` からではなく、
+**フィルタ系から**。I-1（リセットボタン）と K-1（フィルタコンテナ）で使うため、
+後続の作業が一番進む。
+
+#### フィルタ系 2 リソース【完了 2026-09-05】
+
+**`TwbWorksheetFilter`**（`connected_worksheet.py`）
+
+- 対象要素は `worksheet/table/view/filter[@column]`。`id` は XML 内部参照
+  （`[ds1].[none:Region:nk]`）、`name` は解決済みのフィールド名
+- 読み取りは既存の `_materialize_filter()` を使い回す。**実装を二重に持たない**
+- `update(values=[...])` — 選択値の入れ替え。空リストは「すべての値」（`level-members`）へ戻す。
+  既存の `groupfilter` を雛形に複製するので、`user:ui-*` の設定と名前空間の接頭辞が保たれる
+- `delete()` — `filter` 要素と、`add_filter()` が置いた `slices` の参照を一緒に外す
+
+**`TwbFilterControl`**（`connected_dashboard.py`）
+
+- **`TwbDashboardZone` を継承する。** XML 上は `zone[@type-v2='filter']` そのもので、
+  座標・スタイル・表示/非表示の `update()` と `delete()` は Zone の実装をそのまま使える
+- 足したのは `column` / `field` / `role` / `mode` / `worksheet` と、
+  参照先フィルタ由来の読み取り（`apply_scope` など）だけ
+- フィルタ自体の変更は `TwbWorksheetFilter` 側で行う。同じ操作を 2 箇所に置かない
+
+**書き込みの範囲**: `delete()` と `update(values=...)` まで。表示形式（単一/複数選択）や
+適用範囲の変更は、要求している課題がまだ無いので入れていない。
+
+> **次のアクション**: 残り 3 リソース（`TwbReferenceLine` / `TwbRelation` / `TwbRelationship`）。
 > 1 リソースあたり「接続型モデルの定義 → `get_*()` の戻り値差し替え → `update()` / `delete()` →
-> テスト」で 1 Phase。着手順は依存の少ない `TwbRelation` / `TwbRelationship` から。
+> テスト」で 1 単位。
 
 ### A-3 【低】型注釈の漏れ
 
