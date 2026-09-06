@@ -66,6 +66,8 @@ button.mini:hover { background: #eef1f6; }
 button.mini.danger { color: #b00020; border-color: #e6b8bf; }
 .spacer { flex: 1; }
 .row-card { border: 1px solid #c9d2e0; border-radius: 6px; margin-bottom: 12px; background: #fbfcfe; }
+.row-card.collapsed > .areas { display: none; }
+.row-card.collapsed > .row-head { border-radius: 6px; }
 .row-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
             padding: 8px 12px; background: #eef1f6; border-radius: 6px 6px 0 0; }
 .row-no { font-weight: 600; font-size: 12px; color: #46536e; white-space: nowrap; }
@@ -644,7 +646,7 @@ function newArea() {
   };
 }
 function newRow() {
-  return { id: ++rowSeq, name: "", height: "", areas: [newArea()] };
+  return { id: ++rowSeq, name: "", height: "", collapsed: false, areas: [newArea()] };
 }
 
 function dsOptions(selected) {
@@ -818,14 +820,24 @@ function renderRow(row, index) {
   });
   addArea.addEventListener("click", () => { row.areas.push(newArea()); renderRows(); });
 
-  return el("div", { class: "row-card" }, [
-    el("div", { class: "row-head" }, [
-      el("span", { class: "row-no", text: (index + 1) + "段目" }),
-      labeled("名前", name), labeled("高さ (px)", height),
-      el("span", { class: "spacer" }), addArea, up, down, remove,
-    ]),
-    el("div", { class: "areas" }, row.areas.map(area => renderArea(row, area))),
-  ]);
+  const card = el("div", { class: row.collapsed ? "row-card collapsed" : "row-card" });
+  const toggle = el("button", { class: "mini", title: "この段を畳む / 開く",
+                                text: row.collapsed ? "▶" : "▼" });
+  const summary = el("span", { class: "tag", text: "エリア " + row.areas.length + " 件" });
+  toggle.addEventListener("click", () => {
+    row.collapsed = !row.collapsed;
+    card.classList.toggle("collapsed", row.collapsed);
+    toggle.textContent = row.collapsed ? "▶" : "▼";
+  });
+
+  card.appendChild(el("div", { class: "row-head" }, [
+    toggle,
+    el("span", { class: "row-no", text: (index + 1) + "段目" }),
+    labeled("名前", name), labeled("高さ (px)", height), summary,
+    el("span", { class: "spacer" }), addArea, up, down, remove,
+  ]));
+  card.appendChild(el("div", { class: "areas" }, row.areas.map(area => renderArea(row, area))));
+  return card;
 }
 
 function renderRows() {
@@ -1000,8 +1012,9 @@ _BODY = """
 </section>
 
 <section id="tab-dashboard">
-  <div class="panel">
-    <h2>ダッシュボード <span class="todo">受け手は未実装</span></h2>
+  <div class="panel acc open" id="acc-dashboard">
+    <h2 class="acc-head">ダッシュボード <span class="todo">受け手は未実装</span></h2>
+    <div class="acc-body">
     <p class="note">新しく組むダッシュボードの構成を作る。既存ダッシュボードの読み込み編集はしない。</p>
     <div class="grid">
       <label for="db-name">ダッシュボード名</label>
@@ -1010,6 +1023,7 @@ _BODY = """
       <input type="text" id="db-width" value="1600">
       <label for="db-height">高さ (px)</label>
       <input type="text" id="db-height" value="900">
+    </div>
     </div>
   </div>
 

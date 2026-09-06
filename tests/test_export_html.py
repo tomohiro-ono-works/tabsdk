@@ -110,8 +110,12 @@ def test_export_html_dashboard_tab_is_an_editor(tmp_path) -> None:
     html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
 
     # ヘッダー編集とボディ（縦段組 → 横配置 → エリア）
+    assert 'id="acc-dashboard"' in html
     assert 'id="acc-header"' in html
     assert 'id="acc-body"' in html
+    # 段ごとにも畳める
+    assert ".row-card.collapsed > .areas { display: none; }" in html
+    assert 'row.collapsed = !row.collapsed' in html
     assert 'id="rows-root"' in html
     assert 'id="row-add"' in html
     assert "エリアを追加" in html
