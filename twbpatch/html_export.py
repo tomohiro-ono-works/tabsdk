@@ -35,7 +35,7 @@ h2 { font-size: 14px; margin: 0 0 4px; }
 .acc-head { margin: 0; padding: 10px 16px 10px 34px; cursor: pointer; position: relative;
             border-radius: 6px; user-select: none; }
 .acc-head:hover { background: #eef1f6; }
-.acc-head::before { content: "\25B6"; position: absolute; left: 14px; color: #7a869c;
+.acc-head::before { content: "\\25B6"; position: absolute; left: 14px; color: #7a869c;
                     font-size: 10px; transition: transform .12s; }
 .acc.open > .acc-head::before { transform: rotate(90deg); }
 .acc-body { display: none; padding: 0 16px 16px; }

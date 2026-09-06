@@ -100,6 +100,9 @@ def test_export_html_datasource_panels_are_exclusive_accordions(tmp_path) -> Non
     assert 'class="panel acc open" id="acc-rename"' in html
     assert 'class="panel acc" id="acc-calc"' in html
     assert 'ACCORDIONS = ["acc-rename", "acc-calc"]' in html
+    # 三角アイコンの \25B6 が Python の 8 進エスケープに食われないこと
+    assert r'content: "\25B6"' in html
+    assert not [c for c in html if ord(c) < 32 and c not in "\n\t\r"]
 
 
 def test_export_html_has_range_selection_and_row_delete(tmp_path) -> None:
