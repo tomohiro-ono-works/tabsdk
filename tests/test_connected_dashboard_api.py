@@ -230,7 +230,7 @@ def test_build_report_places_filters_registered_by_workbook_set_filter(tmp_path)
     dashboard.build_report(
         dashboard_name="ダッシュボード",
         struct={
-            "フィルタコンテナ": [("売上データ", "地域")],
+            "フィルタコンテナ": {"kind": "filter", "items": [("売上データ", "地域")]},
             "グラフコンテナ": ["SheetA", "SheetB"],
         },
     )

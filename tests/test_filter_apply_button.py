@@ -122,7 +122,10 @@ def test_build_report_applies_the_button_to_every_filter(tmp_path) -> None:
 
     dashboard.build_report(
         dashboard_name="レポート",
-        struct={"フィルタ": [("売上データ", "地域")], "本体": ["SheetA"]},
+        struct={
+            "フィルタ": {"kind": "filter", "items": [("売上データ", "地域")]},
+            "本体": ["SheetA"],
+        },
         filter_apply_button=True,
     )
 
@@ -137,7 +140,10 @@ def test_build_report_omits_the_button_by_default(tmp_path) -> None:
 
     dashboard.build_report(
         dashboard_name="レポート",
-        struct={"フィルタ": [("売上データ", "地域")], "本体": ["SheetA"]},
+        struct={
+            "フィルタ": {"kind": "filter", "items": [("売上データ", "地域")]},
+            "本体": ["SheetA"],
+        },
     )
 
     controls = dashboard.get_filter_controls()

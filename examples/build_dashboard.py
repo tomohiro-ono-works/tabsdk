@@ -173,7 +173,7 @@ def main() -> None:
     dashboard.build_report(
         dashboard_name=DASHBOARD,
         struct={
-            "フィルタコンテナ": [(DATASOURCE, "カテゴリ")],
+            "フィルタコンテナ": {"kind": "filter", "items": [(DATASOURCE, "カテゴリ")]},
             "スコア・時系列コンテナ": [["スコアカード_売上", "時系列_売上"]],
             "分析グラフコンテナ": [
                 "サブカテゴリ_ポジショニング",

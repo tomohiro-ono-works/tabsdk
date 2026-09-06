@@ -62,33 +62,50 @@ def _is_container(zone_el: ET._Element) -> bool:
     return (zone_el.get("type-v2") or zone_el.get("type")) in _CONTAINER_TYPES
 
 
-def _is_filter_item(item: Any) -> bool:
-    """`("データソース名", "フィールド名")` の形かどうか。"""
-    return (
-        isinstance(item, tuple)
-        and len(item) == 2
-        and all(isinstance(value, str) and value.strip() for value in item)
-    )
+_CONTAINER_KINDS = ("worksheet", "filter")
 
 
-def _is_filter_container(container_name: str, items: list[Any]) -> bool:
-    """コンテナがフィルタ置き場かどうかを**中身**で判別する。
+def _container_spec(container_name: str, value: Any) -> tuple[str, list[Any]]:
+    """`struct` の値からコンテナの区分と項目を取り出す。
 
-    以前はコンテナ名に「フィルタ」が含まれるかで分岐していた（K-1）。名前は
-    ダッシュボードに表示される枠の名前でもあるため、名前を変えると挙動が変わり、
-    グラフの枠に「売上フィルタ状況」と付けると意図せずフィルタ置き場になっていた。
+    区分は `kind` で明示する（K-1、2026-09-07）。以前はコンテナ名に「フィルタ」が
+    含まれるかで決めていたが、コンテナ名はダッシュボードに表示される枠の名前でも
+    あるため、名前を変えると挙動が変わっていた。
 
-    フィルタは `("データソース名", "フィールド名")`、グラフはシート名の文字列なので、
-    中身だけで判別できる。混在は誤りとして拒否する。
+    ```python
+    struct={
+        "地域を選ぶ": {"kind": "filter", "items": [("売上データ", "地域")]},
+        "本体": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
+        "明細": ["SheetC"],  # リストだけの書き方はワークシート置き場
+    }
+    ```
     """
-    if not items:
-        return False
-    kinds = {_is_filter_item(item) for item in items}
-    if len(kinds) > 1:
+    if isinstance(value, dict):
+        unknown = set(value) - {"kind", "items"}
+        if unknown:
+            raise ValueError(
+                "container supports only kind and items: " + container_name
+            )
+        kind = value.get("kind", "worksheet")
+        if kind not in _CONTAINER_KINDS:
+            raise ValueError(
+                f"container kind must be one of {_CONTAINER_KINDS}: {container_name}"
+            )
+        items = value.get("items", [])
+        if not isinstance(items, list):
+            raise TypeError("container items must be a list: " + container_name)
+        return kind, items
+    if not isinstance(value, list):
         raise TypeError(
-            "container mixes filters and worksheets: " + container_name
+            "container must be a list of items or {kind, items}: " + container_name
         )
-    return kinds.pop()
+    for item in value:
+        if isinstance(item, tuple):
+            raise TypeError(
+                "filters need an explicit kind: "
+                f'{container_name} -> {{"kind": "filter", "items": [...]}}'
+            )
+    return "worksheet", value
 
 
 def _set_show_apply(zone_el: ET._Element, show_apply: bool) -> None:
@@ -849,13 +866,22 @@ class TwbDashboard(ConnectedModel):
         sheet_names: list[str] = []
         filter_specs: list[tuple[str, str]] = []
         worksheet_groups: dict[str, list[tuple[list[str], int | None]] | None] = {}
-        is_filter: dict[str, bool] = {
-            container_name: _is_filter_container(container_name, items)
-            for container_name, items in struct.items()
+        specs: dict[str, tuple[str, list[Any]]] = {
+            container_name: _container_spec(container_name, value)
+            for container_name, value in struct.items()
         }
-        for container_name, items in struct.items():
-            if is_filter[container_name]:
-                filter_specs.extend(items)
+        for container_name, (kind, items) in specs.items():
+            if kind == "filter":
+                for item in items:
+                    if (
+                        not isinstance(item, tuple)
+                        or len(item) != 2
+                        or not all(isinstance(value, str) and value.strip() for value in item)
+                    ):
+                        raise TypeError(
+                            "filter item must be (datasource name, field name)"
+                        )
+                    filter_specs.append(item)
             else:
                 if all(isinstance(item, str) and item.strip() for item in items):
                     names = [item for item in items if isinstance(item, str)]
@@ -966,8 +992,8 @@ class TwbDashboard(ConnectedModel):
         effective_content_style.update(content_style or {})
         root.update(style=effective_content_style)
         filter_containers: dict[str, TwbDashboardContainer] = {}
-        for container_name, items in struct.items():
-            filter_container = is_filter[container_name]
+        for container_name, (kind, items) in specs.items():
+            filter_container = kind == "filter"
             fixed_size = container_sizes.get(
                 container_name,
                 _FILTER_CONTAINER_HEIGHT if filter_container else _CONTAINER_HEIGHT,
@@ -1010,7 +1036,7 @@ class TwbDashboard(ConnectedModel):
                             zone_style["padding_top"] = 0
                             zone_style["margin_top"] = 0
                     zone.update(style=zone_style)
-        for container_name, items in struct.items():
+        for container_name, (_, items) in specs.items():
             if container_name not in filter_containers:
                 continue
             container = filter_containers[container_name]
