@@ -127,7 +127,8 @@ def test_build_report_creates_named_rows_and_resolves_worksheet_names(tmp_path) 
         "表",
     ]
     assert outer.get_zones()[0].fixed_size == 43
-    assert [item.fixed_size for item in root.get_containers()] == [50, 250, 300]
+    # 名前に「フィルタ」「スコア」が入っていても高さは変わらない（K-1、2026-09-07）
+    assert [item.fixed_size for item in root.get_containers()] == [300, 300, 300]
     assert outer.get_zones()[0].text == "経営ダッシュボード"
     assert root.get_containers()[0].get_zones() == []
     assert root.get_containers()[1].get_zones()[0].style == {

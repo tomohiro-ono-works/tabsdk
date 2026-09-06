@@ -43,6 +43,12 @@ _DEFAULT_REPORT_WORKSHEET_STYLE = {
     "padding": 16,
 }
 
+# build_report() のコンテナ高さの既定。変えたいときは container_sizes= で指定する。
+# 以前はコンテナ名に「スコア」が含まれると 250 にしていたが、名前で挙動を変えるのを
+# やめたため 1 つに統一した（K-1、2026-09-07）。
+_CONTAINER_HEIGHT = 300
+_FILTER_CONTAINER_HEIGHT = 50
+
 
 def _local_name(element: ET._Element) -> str:
     return ET.QName(element).localname
@@ -54,6 +60,35 @@ def _direct_child(parent: ET._Element, local_name: str) -> ET._Element | None:
 
 def _is_container(zone_el: ET._Element) -> bool:
     return (zone_el.get("type-v2") or zone_el.get("type")) in _CONTAINER_TYPES
+
+
+def _is_filter_item(item: Any) -> bool:
+    """`("データソース名", "フィールド名")` の形かどうか。"""
+    return (
+        isinstance(item, tuple)
+        and len(item) == 2
+        and all(isinstance(value, str) and value.strip() for value in item)
+    )
+
+
+def _is_filter_container(container_name: str, items: list[Any]) -> bool:
+    """コンテナがフィルタ置き場かどうかを**中身**で判別する。
+
+    以前はコンテナ名に「フィルタ」が含まれるかで分岐していた（K-1）。名前は
+    ダッシュボードに表示される枠の名前でもあるため、名前を変えると挙動が変わり、
+    グラフの枠に「売上フィルタ状況」と付けると意図せずフィルタ置き場になっていた。
+
+    フィルタは `("データソース名", "フィールド名")`、グラフはシート名の文字列なので、
+    中身だけで判別できる。混在は誤りとして拒否する。
+    """
+    if not items:
+        return False
+    kinds = {_is_filter_item(item) for item in items}
+    if len(kinds) > 1:
+        raise TypeError(
+            "container mixes filters and worksheets: " + container_name
+        )
+    return kinds.pop()
 
 
 def _set_show_apply(zone_el: ET._Element, show_apply: bool) -> None:
@@ -814,18 +849,13 @@ class TwbDashboard(ConnectedModel):
         sheet_names: list[str] = []
         filter_specs: list[tuple[str, str]] = []
         worksheet_groups: dict[str, list[tuple[list[str], int | None]] | None] = {}
+        is_filter: dict[str, bool] = {
+            container_name: _is_filter_container(container_name, items)
+            for container_name, items in struct.items()
+        }
         for container_name, items in struct.items():
-            if "フィルタ" in container_name:
-                for item in items:
-                    if (
-                        not isinstance(item, tuple)
-                        or len(item) != 2
-                        or not all(isinstance(value, str) and value.strip() for value in item)
-                    ):
-                        raise TypeError(
-                            "filter item must be (datasource name, field name)"
-                        )
-                    filter_specs.append(item)
+            if is_filter[container_name]:
+                filter_specs.extend(items)
             else:
                 if all(isinstance(item, str) and item.strip() for item in items):
                     names = [item for item in items if isinstance(item, str)]
@@ -937,25 +967,20 @@ class TwbDashboard(ConnectedModel):
         root.update(style=effective_content_style)
         filter_containers: dict[str, TwbDashboardContainer] = {}
         for container_name, items in struct.items():
+            filter_container = is_filter[container_name]
             fixed_size = container_sizes.get(
                 container_name,
-                50
-                if "フィルタ" in container_name
-                else 250
-                if "スコア" in container_name
-                else 300,
+                _FILTER_CONTAINER_HEIGHT if filter_container else _CONTAINER_HEIGHT,
             )
-            groups = None if "フィルタ" in container_name else worksheet_groups[container_name]
+            groups = None if filter_container else worksheet_groups[container_name]
             item_count = len(groups) if groups is not None else len(items)
             container = root.create_container(
                 direction="horizontal",
                 fixed_size=fixed_size,
                 friendly_name=container_name,
-                distribute_evenly=(
-                    "フィルタ" not in container_name and item_count > 1
-                ),
+                distribute_evenly=(not filter_container and item_count > 1),
             )
-            if "フィルタ" in container_name:
+            if filter_container:
                 filter_containers[container_name] = container
                 continue
             if groups is None:
