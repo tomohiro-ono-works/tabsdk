@@ -319,27 +319,42 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `create_action` | `*, kind, name, source, targets=None, field=None, url=None, activation="on-select", clear_selection="show_all"` | `TwbDashboardAction` | アクションを1件作成。`kind` は `filter` / `url` |
 | `create_container` | `*, direction="horizontal", friendly_name=None, distribute_evenly=False` | `TwbDashboardContainer` | 最上位コンテナを作成 |
 | `add_floating_worksheet` | `worksheet: TwbWorksheet, *, x=0, y=0, width=600, height=400, show_title=True` | `TwbDashboardZone` | 浮動配置。タイル配置とは明示的に別 API |
-| `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333", filter_apply_button=False` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築。`filter_apply_button=True` で置いたフィルタすべてに「適用」ボタンを付ける |
+| `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_title=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333", filter_apply_button=False` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築。`header_title` を省略するとヘッダーにダッシュボード名を書く。`filter_apply_button=True` で置いたフィルタすべてに「適用」ボタンを付ける |
 | `update` | `*, name=UNSET, visible=UNSET` | `TwbDashboard` | 自身を更新 |
 | `delete` | — | `None` | 削除 |
 
-`struct` は `{コンテナ名: {"kind": ..., "items": [...]}}`。**コンテナ名は表示名であって、
-挙動は変えない**（K-1、2026-09-07）。何を置く枠かは区分値 `kind` で指定する。
-**`kind` は省略できない。**
+`struct` は `{段の名前: {"items": [...], "height": ...}}`。段は上から順に並び、
+中の項目は左から順に並ぶ。**段の名前は表示名であって、挙動は変えない**（K-1、2026-09-07）。
+何を置くかは**項目ごとの区分値 `kind`** で指定する。省略できない。
 
 ```python
 struct={
-    "地域を選ぶ": {"kind": "filter",    "items": [("売上データ", "地域")]},
-    "本体":     {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
+    "上段": {
+        "height": 50,
+        "items": [
+            {"kind": "filter", "field": ("売上データ", "地域")},
+            {"kind": "worksheet", "sheet": "SheetA"},
+        ],
+    },
+    "下段": {
+        "items": [
+            {"kind": "worksheet", "sheets": ["SheetB", "SheetC"], "fixed_size": 200},
+            {"kind": "worksheet", "sheet": "SheetD"},
+        ],
+    },
 }
 ```
 
-| `kind` | 項目の書き方 |
-|---|---|
-| `"worksheet"` | `"シート名"`、または `["シート名", ...]` / `{"items": [...], "fixed_size": 200}`（縦に積むまとまり） |
-| `"filter"` | `("データソース名", "フィールド名")` |
+**1 つの段にグラフとフィルタを混ぜられる。** 設定画面もエリアごとに種別を選ばせている。
 
-高さの既定はフィルタ置き場が 50、それ以外が 300。`container_sizes=` で個別に変えられる。
+| 項目 | キー | 意味 |
+|---|---|---|
+| `kind="worksheet"` | `sheet` | ワークシート 1 枚をそのまま段へ置く |
+| | `sheets` + `fixed_size` | ワークシートを縦に積んだ列にする（1 枚でも列になる）。`fixed_size` は列の幅 |
+| `kind="filter"` | `field` | `("データソース名", "フィールド名")`。事前に `workbook.set_filter()` が要る |
+
+段の高さは `height` → `container_sizes[段の名前]` → 既定 300 の順。均等配分は
+「並べたワークシートが 2 つ以上あり、フィルタが無い」ときだけ行う。
 
 `create_action()` の `source` と `targets` は、**このダッシュボードに置かれている
 ワークシート名**。XML では「除外するシート」で書かれるが、呼び出し側は含める側を渡す。

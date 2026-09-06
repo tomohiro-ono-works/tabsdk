@@ -109,9 +109,14 @@ def test_build_report_creates_named_rows_and_resolves_worksheet_names(tmp_path) 
     result = dashboard.build_report(
         dashboard_name="経営ダッシュボード",
         struct={
-            "フィルタコンテナ": {"kind": "filter", "items": []},
-            "スコアカード": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
-            "表": {"kind": "worksheet", "items": ["SheetC"]},
+            "フィルタコンテナ": {"height": 50, "items": []},
+            "スコアカード": {
+                "items": [
+                    {"kind": "worksheet", "sheet": "SheetA"},
+                    {"kind": "worksheet", "sheet": "SheetB"},
+                ]
+            },
+            "表": {"items": [{"kind": "worksheet", "sheet": "SheetC"}]},
         },
     )
 
@@ -156,10 +161,9 @@ def test_build_report_places_vertical_worksheet_groups_in_columns(tmp_path) -> N
         dashboard_name="経営ダッシュボード",
         struct={
             "スコア・時系列コンテナ": {
-                "kind": "worksheet",
                 "items": [
-                    {"items": ["SheetA", "SheetB"], "fixed_size": 200},
-                    ["SheetC"],
+                    {"kind": "worksheet", "sheets": ["SheetA", "SheetB"], "fixed_size": 200},
+                    {"kind": "worksheet", "sheets": ["SheetC"]},
                 ],
             },
         },
@@ -233,8 +237,15 @@ def test_build_report_places_filters_registered_by_workbook_set_filter(tmp_path)
     dashboard.build_report(
         dashboard_name="ダッシュボード",
         struct={
-            "フィルタコンテナ": {"kind": "filter", "items": [("売上データ", "地域")]},
-            "グラフコンテナ": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
+            "フィルタコンテナ": {
+                "items": [{"kind": "filter", "field": ("売上データ", "地域")}]
+            },
+            "グラフコンテナ": {
+                "items": [
+                    {"kind": "worksheet", "sheet": "SheetA"},
+                    {"kind": "worksheet", "sheet": "SheetB"},
+                ]
+            },
         },
     )
 
@@ -271,7 +282,14 @@ def test_build_report_resolves_all_worksheets_before_editing(tmp_path) -> None:
     with pytest.raises(ValueError, match="worksheet not found: 不明"):
         dashboard.build_report(
             dashboard_name="経営ダッシュボード",
-            struct={"スコアカード": {"kind": "worksheet", "items": ["SheetA", "不明"]}},
+            struct={
+                "スコアカード": {
+                    "items": [
+                        {"kind": "worksheet", "sheet": "SheetA"},
+                        {"kind": "worksheet", "sheet": "不明"},
+                    ]
+                }
+            },
         )
 
     assert dashboard.name == "Dashboard"

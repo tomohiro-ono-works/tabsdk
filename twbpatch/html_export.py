@@ -660,7 +660,7 @@ let rowSeq = 0;
 function newArea() {
   return {
     id: ++rowSeq,
-    kind: "chart",
+    kind: "worksheet",
     width: "600",
     sheet: "",
     chart: CHART_TYPES[0] || "",
@@ -812,8 +812,9 @@ function renderArea(row, area) {
   const card = el("div", { class: "area" });
 
   const kind = el("select", {}, [
-    el("option", Object.assign({ value: "chart", text: "グラフ" },
-                               area.kind === "chart" ? { selected: "selected" } : {})),
+    /* 値は build_report() の区分値に合わせる。表示は「グラフ」のまま */
+    el("option", Object.assign({ value: "worksheet", text: "グラフ" },
+                               area.kind === "worksheet" ? { selected: "selected" } : {})),
     el("option", Object.assign({ value: "filter", text: "フィルター" },
                                area.kind === "filter" ? { selected: "selected" } : {})),
   ]);

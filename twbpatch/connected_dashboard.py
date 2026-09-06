@@ -54,11 +54,10 @@ _DEFAULT_REPORT_WORKSHEET_STYLE = {
     "padding": 16,
 }
 
-# build_report() のコンテナ高さの既定。変えたいときは container_sizes= で指定する。
-# 以前はコンテナ名に「スコア」が含まれると 250 にしていたが、名前で挙動を変えるのを
-# やめたため 1 つに統一した（K-1、2026-09-07）。
+# build_report() の段の高さの既定。段ごとの height= か container_sizes= で変える。
+# 以前はコンテナ名に「フィルタ」「スコア」が含まれるかで 50 / 250 / 300 を切り替えて
+# いたが、名前でも中身でも挙動を変えないと決めたため 1 つに統一した（K-1、2026-09-07）。
 _CONTAINER_HEIGHT = 300
-_FILTER_CONTAINER_HEIGHT = 50
 
 
 def _local_name(element: ET._Element) -> str:
@@ -73,51 +72,118 @@ def _is_container(zone_el: ET._Element) -> bool:
     return (zone_el.get("type-v2") or zone_el.get("type")) in _CONTAINER_TYPES
 
 
-_CONTAINER_KINDS = ("worksheet", "filter")
+ITEM_KINDS = ("worksheet", "filter")
 
 
-def _container_spec(container_name: str, value: Any) -> tuple[str, list[Any]]:
-    """`struct` の値からコンテナの区分と項目を取り出す。
+def _worksheet_item(container_name: str, item: dict[str, Any]) -> tuple[str, Any]:
+    """`kind="worksheet"` の項目を正規化する。
 
-    区分は `kind` で明示する。**省略できない**（K-1、2026-09-07）。
+    `sheet` は 1 枚をそのまま段へ置く。`sheets` は縦に積んだ列にまとめる
+    （1 枚でも列になる）。`fixed_size` は列の幅。
+    """
+    unknown = set(item) - {"kind", "sheet", "sheets", "fixed_size"}
+    if unknown:
+        raise ValueError(
+            "worksheet item supports only sheet, sheets and fixed_size: " + container_name
+        )
+    if ("sheet" in item) == ("sheets" in item):
+        raise ValueError(
+            "worksheet item needs exactly one of sheet or sheets: " + container_name
+        )
+    fixed_size = item.get("fixed_size")
+    if fixed_size is not None:
+        _validate_fixed_size(fixed_size)
+    if "sheet" in item:
+        name = item["sheet"]
+        if not isinstance(name, str) or not name.strip():
+            raise TypeError("sheet must be a worksheet name: " + container_name)
+        if fixed_size is not None:
+            raise ValueError(
+                "fixed_size applies to sheets, not sheet: " + container_name
+            )
+        return "worksheet", ([name], None, False)
+    names = item["sheets"]
+    if (
+        not isinstance(names, list)
+        or not names
+        or not all(isinstance(name, str) and name.strip() for name in names)
+    ):
+        raise TypeError("sheets must be worksheet names: " + container_name)
+    return "worksheet", (list(names), fixed_size, True)
+
+
+def _filter_item(container_name: str, item: dict[str, Any]) -> tuple[str, Any]:
+    unknown = set(item) - {"kind", "field"}
+    if unknown:
+        raise ValueError("filter item supports only field: " + container_name)
+    field = item.get("field")
+    if (
+        not isinstance(field, tuple)
+        or len(field) != 2
+        or not all(isinstance(value, str) and value.strip() for value in field)
+    ):
+        raise TypeError(
+            'filter field must be ("datasource name", "field name"): ' + container_name
+        )
+    return "filter", field
+
+
+def _container_spec(container_name: str, value: Any) -> tuple[list[tuple[str, Any]], int | None]:
+    """`struct` の値から段の項目と高さを取り出す。
+
+    **区分値 `kind` は項目ごとに持つ**（2026-09-07）。1 つの段にグラフとフィルタを
+    混ぜられるようにするため。設定画面もエリアごとに種別を選ばせている。
 
     ```python
     struct={
-        "地域を選ぶ": {"kind": "filter", "items": [("売上データ", "地域")]},
-        "本体": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
+        "上段": {
+            "height": 50,
+            "items": [
+                {"kind": "filter", "field": ("売上データ", "地域")},
+                {"kind": "worksheet", "sheet": "売上推移"},
+                {"kind": "worksheet", "sheets": ["A", "B"], "fixed_size": 200},
+            ],
+        },
     }
     ```
 
-    以前はコンテナ名に「フィルタ」が含まれるかで決めていた。コンテナ名は
+    以前はコンテナ名に「フィルタ」が含まれるかで決めていた（K-1）。名前は
     ダッシュボードに表示される枠の名前でもあるため、名前を変えると挙動が変わり、
     グラフの枠に「売上フィルタ状況」と付けると意図せずフィルタ置き場になっていた。
-
-    中身（タプルか文字列か）から推測する案も、`kind` 省略時の既定を置く案も採らない。
-    **どちらも「なぜこの枠がフィルタ置き場になったか」が呼び出し側から読めない。**
-    区分の判定は `kind` の値 1 箇所だけにする。
+    中身から推測する案も採らない。**なぜそう置かれたかが呼び出し側から読めない。**
     """
     if not isinstance(value, dict):
         raise TypeError(
-            "container must be {\"kind\": ..., \"items\": [...]}: " + container_name
+            'container must be {"items": [...]}: ' + container_name
         )
-    unknown = set(value) - {"kind", "items"}
+    unknown = set(value) - {"items", "height"}
     if unknown:
         raise ValueError(
-            "container supports only kind and items: " + container_name
+            "container supports only items and height: " + container_name
         )
-    if "kind" not in value:
-        raise ValueError(
-            f"container kind is required, one of {_CONTAINER_KINDS}: {container_name}"
-        )
-    kind = value["kind"]
-    if kind not in _CONTAINER_KINDS:
-        raise ValueError(
-            f"container kind must be one of {_CONTAINER_KINDS}: {container_name}"
-        )
+    height = value.get("height")
+    if height is not None:
+        _validate_fixed_size(height)
     items = value.get("items", [])
     if not isinstance(items, list):
         raise TypeError("container items must be a list: " + container_name)
-    return kind, items
+
+    normalized: list[tuple[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise TypeError(
+                'item must be {"kind": ..., ...}: ' + container_name
+            )
+        kind = item.get("kind")
+        if kind not in ITEM_KINDS:
+            raise ValueError(
+                f"item kind must be one of {ITEM_KINDS}: {container_name}"
+            )
+        if kind == "worksheet":
+            normalized.append(_worksheet_item(container_name, item))
+        else:
+            normalized.append(_filter_item(container_name, item))
+    return normalized, height
 
 
 def _set_show_apply(zone_el: ET._Element, show_apply: bool) -> None:
@@ -1052,6 +1118,7 @@ class TwbDashboard(ConnectedModel):
         ],
         container_sizes: dict[str, int] | None = None,
         content_style: dict[str, str | int | None] | None = None,
+        header_title: str | None = None,
         header_height: int = 43,
         header_background_color: str = "#c0c0c0",
         header_font_color: str = "#333333",
@@ -1059,6 +1126,8 @@ class TwbDashboard(ConnectedModel):
     ) -> TwbDashboard:
         if not isinstance(filter_apply_button, bool):
             raise TypeError("filter_apply_button must be bool")
+        if header_title is not None and not isinstance(header_title, str):
+            raise TypeError("header_title must be a string or None")
         container_sizes = dict(container_sizes or {})
         for container_name, size in container_sizes.items():
             if not isinstance(container_name, str) or not container_name.strip():
@@ -1068,61 +1137,16 @@ class TwbDashboard(ConnectedModel):
 
         sheet_names: list[str] = []
         filter_specs: list[tuple[str, str]] = []
-        worksheet_groups: dict[str, list[tuple[list[str], int | None]] | None] = {}
-        specs: dict[str, tuple[str, list[Any]]] = {
+        specs: dict[str, tuple[list[tuple[str, Any]], int | None]] = {
             container_name: _container_spec(container_name, value)
             for container_name, value in struct.items()
         }
-        for container_name, (kind, items) in specs.items():
-            if kind == "filter":
-                for item in items:
-                    if (
-                        not isinstance(item, tuple)
-                        or len(item) != 2
-                        or not all(isinstance(value, str) and value.strip() for value in item)
-                    ):
-                        raise TypeError(
-                            "filter item must be (datasource name, field name)"
-                        )
-                    filter_specs.append(item)
-            else:
-                if all(isinstance(item, str) and item.strip() for item in items):
-                    names = [item for item in items if isinstance(item, str)]
-                    worksheet_groups[container_name] = None
-                    sheet_names.extend(names)
-                    continue
-                groups: list[tuple[list[str], int | None]] = []
-                for item in items:
-                    fixed_size = None
-                    if isinstance(item, list):
-                        names = item
-                    elif isinstance(item, dict):
-                        if set(item) - {"items", "fixed_size"}:
-                            raise ValueError(
-                                "worksheet group supports only items and fixed_size"
-                            )
-                        names = item.get("items")
-                        fixed_size = item.get("fixed_size")
-                        if fixed_size is not None:
-                            _validate_fixed_size(fixed_size)
-                    else:
-                        raise TypeError(
-                            "worksheet container must contain names or worksheet groups"
-                        )
-                    if (
-                        not isinstance(names, list)
-                        or not names
-                        or not all(
-                            isinstance(name, str) and name.strip()
-                            for name in names
-                        )
-                    ):
-                        raise TypeError(
-                            "worksheet group items must be worksheet names"
-                        )
-                    groups.append((names, fixed_size))
-                    sheet_names.extend(names)
-                worksheet_groups[container_name] = groups
+        for items, _ in specs.values():
+            for kind, payload in items:
+                if kind == "filter":
+                    filter_specs.append(payload)
+                else:
+                    sheet_names.extend(payload[0])
         if len(sheet_names) != len(set(sheet_names)):
             raise ValueError("a worksheet can be placed only once on a dashboard")
         if len(filter_specs) != len(set(filter_specs)):
@@ -1174,7 +1198,7 @@ class TwbDashboard(ConnectedModel):
             friendly_name=f"{dashboard_name}_外枠",
         )
         outer.add_text(
-            dashboard_name,
+            dashboard_name if header_title is None else header_title,
             fixed_size=header_height,
             friendly_name="ヘッダー",
             font_size=16,
@@ -1194,69 +1218,70 @@ class TwbDashboard(ConnectedModel):
         effective_content_style = dict(_DEFAULT_REPORT_CONTENT_STYLE)
         effective_content_style.update(content_style or {})
         root.update(style=effective_content_style)
-        filter_containers: dict[str, TwbDashboardContainer] = {}
-        for container_name, (kind, items) in specs.items():
-            filter_container = kind == "filter"
-            fixed_size = container_sizes.get(
-                container_name,
-                _FILTER_CONTAINER_HEIGHT if filter_container else _CONTAINER_HEIGHT,
-            )
-            groups = None if filter_container else worksheet_groups[container_name]
-            item_count = len(groups) if groups is not None else len(items)
+        pending_filters: list[tuple[TwbDashboardContainer, int, tuple[str, str]]] = []
+        for container_name, (items, height) in specs.items():
+            fixed_size = height
+            if fixed_size is None:
+                fixed_size = container_sizes.get(container_name, _CONTAINER_HEIGHT)
+            worksheet_items = [item for kind, item in items if kind == "worksheet"]
+            # 均等配分は「並べたワークシートが 2 つ以上あり、フィルタが無い」とき。
+            # フィルタは幅を食わせない（Tableau で作った既存レイアウトに合わせる）。
             container = root.create_container(
                 direction="horizontal",
                 fixed_size=fixed_size,
                 friendly_name=container_name,
-                distribute_evenly=(not filter_container and item_count > 1),
+                distribute_evenly=(
+                    len(worksheet_items) > 1 and len(worksheet_items) == len(items)
+                ),
             )
-            if filter_container:
-                filter_containers[container_name] = container
-                continue
-            if groups is None:
-                groups = [([item for item in items if isinstance(item, str)], None)]
-            for index, (group, group_fixed_size) in enumerate(groups):
+            column_index = 0
+            for index, (kind, payload) in enumerate(items):
+                if kind == "filter":
+                    # フィルタは全ワークシートを置き終えてから差し込む。参照先の
+                    # シートがダッシュボードに載っていないと配置できないため。
+                    pending_filters.append((container, index, payload))
+                    continue
+
+                names, group_fixed_size, grouped = payload
                 target = container
-                if worksheet_groups[container_name] is not None:
+                if grouped:
+                    column_index += 1
                     target = container.create_container(
                         direction="vertical",
                         weight=1,
                         fixed_size=group_fixed_size,
-                        friendly_name=f"{container_name}_{index + 1}",
-                        distribute_evenly=len(group) > 1,
+                        friendly_name=f"{container_name}_{column_index}",
+                        distribute_evenly=len(names) > 1,
                     )
-                for sheet_index, sheet_name in enumerate(group):
+                for sheet_index, sheet_name in enumerate(names):
                     zone = target.add_worksheet(
                         worksheets[sheet_name],
                         show_title=worksheets[sheet_name].title is not None,
                         weight=1,
                     )
                     zone_style = dict(_DEFAULT_REPORT_WORKSHEET_STYLE)
-                    if worksheet_groups[container_name] is not None and len(group) > 1:
-                        if sheet_index < len(group) - 1:
+                    if grouped and len(names) > 1:
+                        if sheet_index < len(names) - 1:
                             zone_style["padding_bottom"] = 0
                             zone_style["margin_bottom"] = 0
                         if sheet_index > 0:
                             zone_style["padding_top"] = 0
                             zone_style["margin_top"] = 0
                     zone.update(style=zone_style)
-        for container_name, (_, items) in specs.items():
-            if container_name not in filter_containers:
-                continue
-            container = filter_containers[container_name]
-            for item in items:
-                assert isinstance(item, tuple)
-                worksheet, reference = filter_fields[item]
-                zone = container._add_filter_reference(
-                    worksheet, reference, show_apply=filter_apply_button
-                )
-                zone.update(
-                    style={
-                        "background_color": "#ffffff",
-                        "border_style": "none",
-                        "margin": 4,
-                        "padding": 4,
-                    }
-                )
+
+        for container, index, payload in pending_filters:
+            worksheet, reference = filter_fields[payload]
+            zone = container._add_filter_reference(
+                worksheet, reference, order=index, show_apply=filter_apply_button
+            )
+            zone.update(
+                style={
+                    "background_color": "#ffffff",
+                    "border_style": "none",
+                    "margin": 4,
+                    "padding": 4,
+                }
+            )
         root.add_spacer(
             style={"background_color": "#f5f5f5", "border_style": "none", "margin": 0}
         )

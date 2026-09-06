@@ -4,8 +4,8 @@
 表示される枠の名前でもあるため、名前を変えると挙動が変わり、グラフの枠に
 「売上フィルタ状況」と付けると意図せずフィルタ置き場になっていた。
 
-`kind` は省略できない。中身から推測する案も既定値を置く案も採らなかった。
-どちらも「なぜこの枠がフィルタ置き場になったか」が呼び出し側から読めないため。
+`kind` は**項目ごと**に持つ。1 つの段にグラフとフィルタを混ぜられるようにするため
+（設定画面もエリアごとに種別を選ばせている）。省略はできない。
 """
 
 from __future__ import annotations
@@ -48,50 +48,96 @@ def _root(dashboard):
 
 
 def _build(dashboard, struct, **kwargs):
-    return dashboard.build_report(
-        dashboard_name="レポート", struct=struct, **kwargs
-    )
+    return dashboard.build_report(dashboard_name="レポート", struct=struct, **kwargs)
 
 
-def test_kind_decides_the_container_not_the_name(tmp_path) -> None:
+def test_one_row_can_hold_both_a_filter_and_a_chart(tmp_path) -> None:
+    """画面はエリアごとに種別を選べる。受け手も同じ段に混ぜられること。"""
     workbook = _workbook(tmp_path)
     dashboard = workbook.create_dashboard(name="レポート")
 
     _build(
         dashboard,
         {
-            # 名前に「フィルタ」が無くてもフィルタ置き場
-            "地域を選ぶ": {"kind": "filter", "items": [("売上データ", "地域")]},
-            # 名前に「フィルタ」が入っていてもワークシート置き場
-            "売上フィルタ状況": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
+            "上段": {
+                "items": [
+                    {"kind": "filter", "field": ("売上データ", "地域")},
+                    {"kind": "worksheet", "sheet": "SheetA"},
+                ]
+            },
+            "下段": {"items": [{"kind": "worksheet", "sheet": "SheetB"}]},
         },
     )
 
-    root = _root(dashboard)
-    selector = root.get_containers(name="地域を選ぶ")[0]
-    assert [zone.kind for zone in selector.get_zones()] == ["filter"]
-    assert selector.fixed_size == 50
-    assert selector.distribute_evenly is False
-
-    sheets = root.get_containers(name="売上フィルタ状況")[0]
-    assert [zone.kind for zone in sheets.get_zones()] == ["worksheet", "worksheet"]
-    assert sheets.fixed_size == 300
+    row = _root(dashboard).get_containers(name="上段")[0]
+    # 並びは items の順どおり
+    assert [zone.kind for zone in row.get_zones()] == ["filter", "worksheet"]
+    # フィルタが居る段は均等配分しない
+    assert row.distribute_evenly is False
 
 
-def test_container_sizes_still_overrides_the_default(tmp_path) -> None:
+def test_a_filter_keeps_its_place_when_it_comes_in_the_middle(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     dashboard = workbook.create_dashboard(name="レポート")
 
     _build(
         dashboard,
         {
-            "地域を選ぶ": {"kind": "filter", "items": [("売上データ", "地域")]},
-            "本体": {"kind": "worksheet", "items": ["SheetA"]},
+            "上段": {
+                "items": [
+                    {"kind": "worksheet", "sheet": "SheetA"},
+                    {"kind": "filter", "field": ("売上データ", "地域")},
+                    {"kind": "worksheet", "sheet": "SheetB"},
+                ]
+            }
         },
-        container_sizes={"地域を選ぶ": 80, "本体": 420},
     )
 
-    assert [item.fixed_size for item in _root(dashboard).get_containers()] == [80, 420]
+    row = _root(dashboard).get_containers(name="上段")[0]
+    assert [zone.kind for zone in row.get_zones()] == [
+        "worksheet",
+        "filter",
+        "worksheet",
+    ]
+
+
+def test_the_name_does_not_decide_anything(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    dashboard = workbook.create_dashboard(name="レポート")
+
+    _build(
+        dashboard,
+        {
+            "売上フィルタ状況": {
+                "items": [
+                    {"kind": "worksheet", "sheet": "SheetA"},
+                    {"kind": "worksheet", "sheet": "SheetB"},
+                ]
+            }
+        },
+    )
+
+    container = _root(dashboard).get_containers(name="売上フィルタ状況")[0]
+    assert [zone.kind for zone in container.get_zones()] == ["worksheet", "worksheet"]
+    assert container.fixed_size == 300
+    assert container.distribute_evenly is True
+
+
+def test_height_is_taken_from_the_container_then_container_sizes(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    dashboard = workbook.create_dashboard(name="レポート")
+
+    _build(
+        dashboard,
+        {
+            "上段": {"height": 50, "items": [{"kind": "worksheet", "sheet": "SheetA"}]},
+            "下段": {"items": [{"kind": "worksheet", "sheet": "SheetB"}]},
+        },
+        container_sizes={"上段": 999, "下段": 420},
+    )
+
+    # height を書いた段は container_sizes より優先される
+    assert [item.fixed_size for item in _root(dashboard).get_containers()] == [50, 420]
 
 
 def test_a_bare_list_is_rejected(tmp_path) -> None:
@@ -99,50 +145,91 @@ def test_a_bare_list_is_rejected(tmp_path) -> None:
     dashboard = workbook.create_dashboard(name="レポート")
 
     with pytest.raises(TypeError, match="container must be"):
-        _build(dashboard, {"本体": ["SheetA"]})
+        _build(dashboard, {"上段": ["SheetA"]})
 
 
-def test_a_missing_kind_is_rejected(tmp_path) -> None:
+def test_an_item_without_a_kind_is_rejected(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     dashboard = workbook.create_dashboard(name="レポート")
 
-    with pytest.raises(ValueError, match="container kind is required"):
-        _build(dashboard, {"本体": {"items": ["SheetA"]}})
+    with pytest.raises(ValueError, match="item kind must be one of"):
+        _build(dashboard, {"上段": {"items": [{"sheet": "SheetA"}]}})
 
 
-def test_an_unknown_kind_is_rejected(tmp_path) -> None:
+def test_an_unknown_item_kind_is_rejected(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     dashboard = workbook.create_dashboard(name="レポート")
 
-    with pytest.raises(ValueError, match="container kind must be one of"):
-        _build(dashboard, {"本体": {"kind": "chart", "items": ["SheetA"]}})
+    with pytest.raises(ValueError, match="item kind must be one of"):
+        _build(dashboard, {"上段": {"items": [{"kind": "chart", "sheet": "SheetA"}]}})
 
 
 def test_an_unknown_container_key_is_rejected(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     dashboard = workbook.create_dashboard(name="レポート")
 
-    with pytest.raises(ValueError, match="only kind and items"):
+    with pytest.raises(ValueError, match="only items and height"):
         _build(
             dashboard,
-            {"本体": {"kind": "worksheet", "items": ["SheetA"], "height": 200}},
+            {"上段": {"items": [{"kind": "worksheet", "sheet": "SheetA"}], "kind": "x"}},
         )
 
 
-def test_a_filter_container_rejects_worksheet_names(tmp_path) -> None:
+def test_sheet_and_sheets_are_mutually_exclusive(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     dashboard = workbook.create_dashboard(name="レポート")
 
-    with pytest.raises(TypeError, match="filter item must be"):
-        _build(dashboard, {"地域を選ぶ": {"kind": "filter", "items": ["SheetA"]}})
-
-
-def test_a_worksheet_container_rejects_filter_tuples(tmp_path) -> None:
-    workbook = _workbook(tmp_path)
-    dashboard = workbook.create_dashboard(name="レポート")
-
-    with pytest.raises(TypeError, match="worksheet container must contain"):
+    with pytest.raises(ValueError, match="exactly one of sheet or sheets"):
         _build(
             dashboard,
-            {"本体": {"kind": "worksheet", "items": [("売上データ", "地域")]}},
+            {"上段": {"items": [{"kind": "worksheet", "sheet": "A", "sheets": ["B"]}]}},
         )
+
+
+def test_fixed_size_needs_sheets(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    dashboard = workbook.create_dashboard(name="レポート")
+
+    with pytest.raises(ValueError, match="fixed_size applies to sheets"):
+        _build(
+            dashboard,
+            {
+                "上段": {
+                    "items": [
+                        {"kind": "worksheet", "sheet": "SheetA", "fixed_size": 200}
+                    ]
+                }
+            },
+        )
+
+
+def test_a_filter_item_needs_a_field(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    dashboard = workbook.create_dashboard(name="レポート")
+
+    with pytest.raises(TypeError, match="filter field must be"):
+        _build(dashboard, {"上段": {"items": [{"kind": "filter"}]}})
+
+
+def test_sheets_makes_a_column_even_for_one_sheet(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    dashboard = workbook.create_dashboard(name="レポート")
+
+    _build(
+        dashboard,
+        {
+            "上段": {
+                "items": [
+                    {"kind": "worksheet", "sheets": ["SheetA"], "fixed_size": 200},
+                    {"kind": "worksheet", "sheet": "SheetB"},
+                ]
+            }
+        },
+    )
+
+    row = _root(dashboard).get_containers(name="上段")[0]
+    columns = row.get_containers()
+    assert [column.fixed_size for column in columns] == [200]
+    assert [zone.name for zone in columns[0].get_zones()] == ["SheetA"]
+    # sheet= はそのまま段へ置かれる（列にしない）
+    assert [zone.name for zone in row.get_zones()] == ["SheetB"]

@@ -160,6 +160,9 @@ Tableau の関数を一通り実装することになるため、**画面で入�
 | グラフ | シート名 / グラフ種類 / データソース / グラフパラメータ |
 | フィルター | データソース / フィールド |
 
+区分値は `worksheet` / `filter`。**`build_report()` の項目の区分値と同じ言葉**を使う
+（画面の表示は「グラフ」「フィルター」のまま）。1 つの段に混ぜてよい。
+
 ### アクション設定
 
 どちらのエリアもアクションを 1 つ持てる。種類は**フィルターと URL を開くの 2 つ**。
@@ -242,7 +245,7 @@ design:
   sub_color_2: "#c0c0c0"
   text_color: "#333333"
   filter_apply_button: false
-  spacing: "wide"
+  spacing: "wide"          # wide / narrow
 
 datasources:
   "データソース名":
@@ -269,7 +272,7 @@ dashboard:
     - name: "上段"
       height: "300"
       areas:
-        - kind: "chart"
+        - kind: "worksheet"
           datasource: "データソース名"
           width: "600"
           sheet: "売上推移"
@@ -291,6 +294,31 @@ dashboard:
 出力前に全データソースを検証し、エラーがあればダウンロードを止めて内容を出す。
 
 ---
+
+## 画面の出力と受け手の対応
+
+**画面が出す値がすべて受け手の引数に届くかを確認した（2026-09-07）。**
+
+| 画面 | 受け手 |
+|---|---|
+| `dashboard.name` / `width` / `height` | `create_dashboard()` |
+| `dashboard.header.title` | `build_report(header_title=)` |
+| `header.height` / `background_color` / `font_color` | `build_report(header_*=)` |
+| `rows[].name` | `struct` のキー |
+| `rows[].height` | `struct` の `height` |
+| `areas[].kind` | 項目の `kind`。**同じ言葉を使う**（`worksheet` / `filter`） |
+| `areas[].width` | 項目の `sheets` + `fixed_size`（1 枚の列にする） |
+| `areas[].sheet` / `chart` / `params` | `draw_*()` の `name` と引数 |
+| `areas[].field`（フィルター） | 項目の `field` |
+| `areas[].action` | `dashboard.create_action()` |
+| `design.font` | `set_default_font()`（`apply_config()` から適用済み） |
+| `design` の色 | `draw_*()` の色引数。`@main_color` を実際の色コードへ解決して渡す |
+| `design.spacing` | `build_report(content_style=)`。`wide` は `margin 8 / padding 16`、`narrow` は `margin 4 / padding 8` |
+| `design.filter_apply_button` | `build_report(filter_apply_button=)` |
+
+**1 段にグラフとフィルターを混ぜられる点が受け手に無かったため、`build_report()` の
+区分値を項目ごとへ移した（2026-09-07）。** それ以外の食い違いは、ヘッダー文言の引数追加と
+用語の統一で解消した。
 
 ## 実装済みと未実装の境界
 

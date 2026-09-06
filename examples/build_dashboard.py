@@ -173,20 +173,28 @@ def main() -> None:
     dashboard.build_report(
         dashboard_name=DASHBOARD,
         struct={
-            "フィルタコンテナ": {"kind": "filter", "items": [(DATASOURCE, "カテゴリ")]},
-            "スコア・時系列コンテナ": {
-                "kind": "worksheet",
-                "items": [["スコアカード_売上", "時系列_売上"]],
+            "フィルタコンテナ": {
+                "height": 50,
+                "items": [{"kind": "filter", "field": (DATASOURCE, "カテゴリ")}],
             },
-            "分析グラフコンテナ": {
-                "kind": "worksheet",
+            "スコア・時系列コンテナ": {
                 "items": [
-                    "サブカテゴリ_ポジショニング",
-                    "カテゴリ_顧客セグメント_売上",
-                    "カテゴリ別売上_円",
+                    {"kind": "worksheet", "sheets": ["スコアカード_売上", "時系列_売上"]},
                 ],
             },
-            "帳票コンテナ": {"kind": "worksheet", "items": ["帳票", "前年差帳票"]},
+            "分析グラフコンテナ": {
+                "items": [
+                    {"kind": "worksheet", "sheet": "サブカテゴリ_ポジショニング"},
+                    {"kind": "worksheet", "sheet": "カテゴリ_顧客セグメント_売上"},
+                    {"kind": "worksheet", "sheet": "カテゴリ別売上_円"},
+                ],
+            },
+            "帳票コンテナ": {
+                "items": [
+                    {"kind": "worksheet", "sheet": "帳票"},
+                    {"kind": "worksheet", "sheet": "前年差帳票"},
+                ],
+            },
         },
         container_sizes={"スコア・時系列コンテナ": 206},
         content_style={
