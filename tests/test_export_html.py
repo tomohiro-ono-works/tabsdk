@@ -148,6 +148,24 @@ def test_export_html_draw_specs_come_from_real_signatures(tmp_path) -> None:
     assert names["item"]["label"] == "項目"
     assert names["descending"]["label"] == "降順にする"
 
+    # 項目はディメンション、メジャーはメジャーだけを候補にする
+    assert names["item"]["role"] == "dimension"
+    assert names["metric"]["role"] == "measure"
+    assert names["descending"]["role"] is None
+    crosstab = {p["name"]: p for p in specs["draw_crosstab"]["params"]}
+    assert crosstab["x_item"]["role"] == "dimension"
+    assert crosstab["color_metric"]["role"] == "measure"
+    assert 'if (role && field.role !== role) return;' in html
+    assert "if (field.hidden) return;" in html
+
+    # フィールドを取る引数はすべて役割が決まっていること
+    assert [
+        (chart, param["name"])
+        for chart, spec in specs.items()
+        for param in spec["params"]
+        if param["kind"] in ("field", "fields") and not param["role"]
+    ] == []
+
     # 訳し漏れがあれば英語名がそのまま画面に出るので、漏れが無いことを固定する
     untranslated = [
         (chart, param["name"])

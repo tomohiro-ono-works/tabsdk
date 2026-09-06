@@ -655,10 +655,12 @@ function dsOptions(selected) {
                                Number(selected) === i ? { selected: "selected" } : {}))
   );
 }
-function fieldOptions(dsIndex, selected) {
+function fieldOptions(dsIndex, selected, role) {
   const ds = DATA.datasources[Number(dsIndex) || 0];
   const options = [el("option", { value: "", text: "（選ぶ）" })];
   ((ds && ds.fields) || []).forEach(field => {
+    if (field.hidden) return;
+    if (role && field.role !== role) return;
     const name = field.name || "";
     options.push(el("option", Object.assign({ value: name, text: name },
                                             name === selected ? { selected: "selected" } : {})));
@@ -677,7 +679,7 @@ function paramControl(area, spec) {
     control = el("input", Object.assign({ type: "checkbox" }, value ? { checked: "checked" } : {}));
     control.addEventListener("change", () => { area.params[spec.name] = control.checked; });
   } else if (spec.kind === "field" || spec.kind === "fields") {
-    control = el("select", {}, fieldOptions(area.datasource, value));
+    control = el("select", {}, fieldOptions(area.datasource, value, spec.role));
     if (spec.kind === "fields") control.setAttribute("multiple", "multiple");
     control.addEventListener("change", () => {
       area.params[spec.name] = spec.kind === "fields"
@@ -1114,6 +1116,25 @@ _CHART_LABELS = {
     "draw_colored_yoy_sheet": "前年差を色分けした帳票",
 }
 
+#: フィールドを取る引数が、ディメンションとメジャーのどちらを求めるか。
+#: 載っていない引数は絞り込まず全フィールドを出す。
+_PARAM_ROLES = {
+    "item": "dimension",
+    "items": "dimension",
+    "x_item": "dimension",
+    "y_item": "dimension",
+    "index_partition_by": "dimension",
+    "metric": "measure",
+    "metrics": "measure",
+    "main_metric": "measure",
+    "sub_metric": "measure",
+    "x_metric": "measure",
+    "y_metric": "measure",
+    "size_metric": "measure",
+    "color_metric": "measure",
+    "label_metric": "measure",
+}
+
 #: グラフの引数の表示名。載っていない引数は英語名のまま出す。
 _PARAM_LABELS = {
     "item": "項目",
@@ -1200,6 +1221,7 @@ def _draw_specs() -> dict[str, dict[str, Any]]:
                     "name": parameter.name,
                     "label": _PARAM_LABELS.get(parameter.name, parameter.name),
                     "kind": _param_kind(parameter.name, annotation),
+                    "role": _PARAM_ROLES.get(parameter.name),
                     "required": parameter.default is inspect.Parameter.empty,
                 }
             )
