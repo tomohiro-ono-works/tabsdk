@@ -474,9 +474,9 @@ const ACCORDIONS = ["acc-rename", "acc-calc"];
 ACCORDIONS.forEach(id => {
   const panel = document.getElementById(id);
   panel.querySelector(".acc-head").addEventListener("click", () => {
-    if (panel.classList.contains("open")) return;
+    const close = panel.classList.contains("open");
     ACCORDIONS.forEach(other => {
-      document.getElementById(other).classList.toggle("open", other === id);
+      document.getElementById(other).classList.toggle("open", !close && other === id);
     });
   });
 });
