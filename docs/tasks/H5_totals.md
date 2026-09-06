@@ -52,6 +52,28 @@
 **合計の集計方法**は `column-instance/@visual-totals`（`xs:string`）。
 XSD が型を `AggType-ST` に絞っていないため取りうる値を確定できず、今回は範囲外とした。
 
+## XSD で実際に検証した結果
+
+生成した `<table>` を公式 XSD へかけて確認した（2026-09-06 実測）。
+
+```
+rows      {'total': 'true', 'onTop': 'false'}   [ds1].[none:Region:nk]
+cols      {'total': 'true', 'onLeft': 'false'}  [ds1].[sum:Sales:qk]
+subtotals <column>[ds1].[none:Region:nk]</column>
+```
+
+**総計・小計に関するスキーマエラーは 0 件。** 残った 5 件は検証用に手で書いた最小
+ワークブックの不足（`workbook/@version`、`@source-build`、`table/style`、
+`worksheet/simple-id`、`workbook/windows`）で、H-5 とは無関係。
+
+配布されている XSD はそのままでは lxml でコンパイルできない。
+`user:UserAttributes-AG`（3 箇所）と `xml:base` など（4 箇所）が同ファイル内で
+解決できず、別スキーマの import も宣言されていない。検証時はこの 7 箇所を
+外して使う。いずれも `<table>` の内容モデルには影響しない。
+
+**実 Tableau Desktop で開いての確認は未実施。** 構造は XSD で裏を取ったが、
+Tableau が実際にこの書き方を読むかは別途確認が要る。
+
 ## 公開 API
 
 §3.3 の区分に従って総計と小計で置き場所を分けた。どちらも `TwbWorksheet`。
