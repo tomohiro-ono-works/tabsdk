@@ -85,6 +85,20 @@ details.more > .params { border-top: 0; }
 label.f { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #555; }
 label.f input[type=text], label.f select { font-size: 12px; padding: 3px 6px; max-width: 190px; }
 label.f select[multiple] { min-height: 56px; }
+.color2 { display: flex; gap: 4px; align-items: center; }
+.color2 select { max-width: 118px; font-size: 12px; padding: 3px 6px; }
+.color2 input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid #c3cad6;
+                            border-radius: 4px; background: none; cursor: pointer; }
+.color2 input[type=color]:disabled { cursor: default; opacity: .65; }
+.grip { cursor: grab; color: #8b96a8; font-size: 14px; line-height: 1; padding: 0 2px;
+        user-select: none; }
+.grip:active { cursor: grabbing; }
+.dragging-src { opacity: .4; }
+.area.drop-left { box-shadow: inset 3px 0 0 #4a7dff; }
+.area.drop-right { box-shadow: inset -3px 0 0 #4a7dff; }
+.areas.drop-into { outline: 2px dashed #4a7dff; outline-offset: -4px; }
+.row-card.drop-top { box-shadow: inset 0 3px 0 #4a7dff; }
+.row-card.drop-bottom { box-shadow: inset 0 -3px 0 #4a7dff; }
 """
 
 _SCRIPT = r"""
@@ -547,6 +561,10 @@ function bindColor(id) {
   picker.addEventListener("input", () => { text.value = picker.value; });
   text.addEventListener("input", () => {
     if (/^#[0-9a-fA-F]{6}$/.test(text.value.trim())) picker.value = text.value.trim();
+    if (typeof renderRows === "function") renderRows();
+  });
+  picker.addEventListener("input", () => {
+    if (typeof renderRows === "function") renderRows();
   });
 }
 ["d-main", "d-sub1", "d-sub2", "d-text"].forEach(bindColor);
@@ -677,6 +695,44 @@ function labeled(text, control) {
   return el("label", { class: "f" }, [el("span", { text: text }), control]);
 }
 
+const DESIGN_TOKENS = [
+  { key: "main_color", label: "メインカラー", input: "d-main" },
+  { key: "sub_color_1", label: "サブカラー①", input: "d-sub1" },
+  { key: "sub_color_2", label: "サブカラー②", input: "d-sub2" },
+  { key: "text_color", label: "通常時の文字色", input: "d-text" },
+];
+function designValue(key) {
+  const token = DESIGN_TOKENS.find(item => item.key === key);
+  return token ? document.getElementById(token.input).value.trim() : "";
+}
+
+/* 色は「デザインルールを参照」と「個別に指定」を選べる。参照は @キー で保存する */
+function colorControl(area, spec, value) {
+  const token = (typeof value === "string" && value.charAt(0) === "@") ? value.slice(1) : "";
+  const picker = el("input", { type: "color",
+    value: token ? (designValue(token) || "#4a7dff") : (value || "#4a7dff") });
+  const source = el("select", {}, [el("option", { value: "", text: "個別に指定" })].concat(
+    DESIGN_TOKENS.map(item => el("option",
+      Object.assign({ value: item.key, text: item.label },
+                    item.key === token ? { selected: "selected" } : {})))));
+  function apply() {
+    if (source.value) {
+      picker.disabled = true;
+      picker.value = designValue(source.value) || picker.value;
+      area.params[spec.name] = "@" + source.value;
+    } else {
+      picker.disabled = false;
+      area.params[spec.name] = picker.value;
+    }
+  }
+  source.addEventListener("change", apply);
+  picker.addEventListener("input", () => {
+    if (!source.value) area.params[spec.name] = picker.value;
+  });
+  picker.disabled = !!token;
+  return el("span", { class: "color2" }, [source, picker]);
+}
+
 function paramControl(area, spec) {
   const value = area.params[spec.name] === undefined ? "" : area.params[spec.name];
   let control;
@@ -692,8 +748,7 @@ function paramControl(area, spec) {
         : control.value;
     });
   } else if (spec.kind === "color") {
-    control = el("input", { type: "color", value: value || "#4a7dff" });
-    control.addEventListener("input", () => { area.params[spec.name] = control.value; });
+    control = colorControl(area, spec, value);
   } else {
     control = el("input", { type: "text", value: value });
     control.addEventListener("input", () => { area.params[spec.name] = control.value.trim(); });
@@ -702,6 +757,53 @@ function paramControl(area, spec) {
   const field = labeled(label, control);
   field.setAttribute("title", spec.name);
   return field;
+}
+
+let DRAG = null;
+const DROP_MARKS = ["drop-left", "drop-right", "drop-top", "drop-bottom", "drop-into"];
+
+function clearDropMarks() {
+  document.querySelectorAll("." + DROP_MARKS.join(",."))
+    .forEach(node => node.classList.remove.apply(node.classList, DROP_MARKS));
+}
+
+/* 掴む所を押したときだけ draggable にする。入力欄の文字選択を壊さないため */
+function attachGrip(grip, card, payload) {
+  grip.addEventListener("mousedown", () => card.setAttribute("draggable", "true"));
+  grip.addEventListener("mouseup", () => card.removeAttribute("draggable"));
+  card.addEventListener("dragstart", event => {
+    DRAG = payload();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", DRAG.kind);
+    card.classList.add("dragging-src");
+    event.stopPropagation();
+  });
+  card.addEventListener("dragend", () => {
+    DRAG = null;
+    card.removeAttribute("draggable");
+    card.classList.remove("dragging-src");
+    clearDropMarks();
+  });
+}
+
+function moveAreaTo(targetRow, targetIndex) {
+  if (!DRAG || DRAG.kind !== "area") return;
+  const from = DRAG.row.areas.indexOf(DRAG.area);
+  if (from < 0) return;
+  DRAG.row.areas.splice(from, 1);
+  if (DRAG.row === targetRow && from < targetIndex) targetIndex -= 1;
+  targetRow.areas.splice(targetIndex, 0, DRAG.area);
+  renderRows();
+}
+
+function moveRowTo(targetIndex) {
+  if (!DRAG || DRAG.kind !== "row") return;
+  const from = DASH.rows.indexOf(DRAG.row);
+  if (from < 0) return;
+  DASH.rows.splice(from, 1);
+  if (from < targetIndex) targetIndex -= 1;
+  DASH.rows.splice(targetIndex, 0, DRAG.row);
+  renderRows();
 }
 
 function renderArea(row, area) {
@@ -718,19 +820,37 @@ function renderArea(row, area) {
   const width = el("input", { type: "text", value: area.width, placeholder: "自動" });
   width.addEventListener("input", () => { area.width = width.value.trim(); });
 
-  const left = el("button", { class: "mini", text: "←", title: "左へ" });
-  const right = el("button", { class: "mini", text: "→", title: "右へ" });
   const remove = el("button", { class: "mini danger", text: "×", title: "エリアを削除" });
-  left.addEventListener("click", () => moveArea(row, area, -1));
-  right.addEventListener("click", () => moveArea(row, area, 1));
   remove.addEventListener("click", () => {
     row.areas = row.areas.filter(a => a !== area);
     renderRows();
   });
 
+  const grip = el("span", { class: "grip", text: "⠿", title: "ドラッグして移動" });
+  attachGrip(grip, card, () => ({ kind: "area", row: row, area: area }));
+
+  card.addEventListener("dragover", event => {
+    if (!DRAG || DRAG.kind !== "area" || DRAG.area === area) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const box = card.getBoundingClientRect();
+    const after = event.clientX > box.left + box.width / 2;
+    clearDropMarks();
+    card.classList.add(after ? "drop-right" : "drop-left");
+  });
+  card.addEventListener("drop", event => {
+    if (!DRAG || DRAG.kind !== "area") return;
+    event.preventDefault();
+    event.stopPropagation();
+    const box = card.getBoundingClientRect();
+    const after = event.clientX > box.left + box.width / 2;
+    clearDropMarks();
+    moveAreaTo(row, row.areas.indexOf(area) + (after ? 1 : 0));
+  });
+
   card.appendChild(el("div", { class: "area-head" }, [
-    kind, labeled("幅 (px)", width),
-    el("span", { class: "spacer" }), left, right, remove,
+    grip, kind, labeled("幅 (px)", width),
+    el("span", { class: "spacer" }), remove,
   ]));
 
   const dsSelectEl = el("select", {}, dsOptions(area.datasource));
@@ -805,14 +925,6 @@ function renderArea(row, area) {
   return card;
 }
 
-function moveArea(row, area, delta) {
-  const index = row.areas.indexOf(area);
-  const next = index + delta;
-  if (next < 0 || next >= row.areas.length) return;
-  row.areas.splice(index, 1);
-  row.areas.splice(next, 0, area);
-  renderRows();
-}
 function moveRow(row, delta) {
   const index = DASH.rows.indexOf(row);
   const next = index + delta;
@@ -843,6 +955,24 @@ function renderRow(row, index) {
   addArea.addEventListener("click", () => { row.areas.push(newArea()); renderRows(); });
 
   const card = el("div", { class: row.collapsed ? "row-card collapsed" : "row-card" });
+  const grip = el("span", { class: "grip", text: "⠿", title: "ドラッグして段を移動" });
+  attachGrip(grip, card, () => ({ kind: "row", row: row }));
+  card.addEventListener("dragover", event => {
+    if (!DRAG || DRAG.kind !== "row" || DRAG.row === row) return;
+    event.preventDefault();
+    const box = card.getBoundingClientRect();
+    const below = event.clientY > box.top + box.height / 2;
+    clearDropMarks();
+    card.classList.add(below ? "drop-bottom" : "drop-top");
+  });
+  card.addEventListener("drop", event => {
+    if (!DRAG || DRAG.kind !== "row") return;
+    event.preventDefault();
+    const box = card.getBoundingClientRect();
+    const below = event.clientY > box.top + box.height / 2;
+    clearDropMarks();
+    moveRowTo(DASH.rows.indexOf(row) + (below ? 1 : 0));
+  });
   const toggle = el("button", { class: "mini", title: "この段を畳む / 開く",
                                 text: row.collapsed ? "▶" : "▼" });
   const summary = el("span", { class: "tag", text: "エリア " + row.areas.length + " 件" });
@@ -853,12 +983,27 @@ function renderRow(row, index) {
   });
 
   card.appendChild(el("div", { class: "row-head" }, [
-    toggle,
+    grip, toggle,
     el("span", { class: "row-no", text: (index + 1) + "段目" }),
+    addArea,
     labeled("名前", name), labeled("高さ (px)", height), summary,
-    el("span", { class: "spacer" }), addArea, up, down, remove,
+    el("span", { class: "spacer" }), up, down, remove,
   ]));
-  card.appendChild(el("div", { class: "areas" }, row.areas.map(area => renderArea(row, area))));
+
+  const areas = el("div", { class: "areas" }, row.areas.map(area => renderArea(row, area)));
+  areas.addEventListener("dragover", event => {
+    if (!DRAG || DRAG.kind !== "area") return;
+    event.preventDefault();
+    clearDropMarks();
+    areas.classList.add("drop-into");
+  });
+  areas.addEventListener("drop", event => {
+    if (!DRAG || DRAG.kind !== "area") return;
+    event.preventDefault();
+    clearDropMarks();
+    moveAreaTo(row, row.areas.length);
+  });
+  card.appendChild(areas);
   return card;
 }
 

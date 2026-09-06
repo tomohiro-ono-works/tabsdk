@@ -113,6 +113,13 @@ def test_export_html_dashboard_tab_is_an_editor(tmp_path) -> None:
     assert 'id="acc-dashboard"' in html
     assert 'id="acc-header"' in html
     assert 'id="acc-body"' in html
+    # 段とエリアはドラッグで動かす。左右ボタンは持たない
+    assert "function attachGrip(" in html
+    assert 'kind: "area"' in html and 'kind: "row"' in html
+    assert 'text: "←"' not in html and 'text: "→"' not in html
+    # 色はデザインルールを参照できる
+    assert "function colorControl(" in html
+    assert '{ key: "main_color", label: "メインカラー", input: "d-main" }' in html
     # 段ごとにも畳める
     assert ".row-card.collapsed > .areas { display: none; }" in html
     assert 'row.collapsed = !row.collapsed' in html
