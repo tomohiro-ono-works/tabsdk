@@ -137,11 +137,26 @@ def test_export_html_draw_specs_come_from_real_signatures(tmp_path) -> None:
     assert set(specs) == {
         name for name in dir(TwbWorkbook) if name.startswith("draw_")
     }
-    names = {param["name"]: param for param in specs["draw_bar"]}
+    names = {param["name"]: param for param in specs["draw_bar"]["params"]}
     assert names["item"]["kind"] == "field" and names["item"]["required"]
     assert names["descending"]["kind"] == "bool"
     assert "datasource" not in names and "name" not in names
-    assert specs["draw_sheet"][0]["kind"] == "fields"  # list[FieldInput]
+    assert specs["draw_sheet"]["params"][0]["kind"] == "fields"  # list[FieldInput]
+
+    # 画面には日本語を出し、英語名は title 属性で辿れるようにする
+    assert specs["draw_bar"]["label"] == "棒グラフ"
+    assert names["item"]["label"] == "項目"
+    assert names["descending"]["label"] == "降順にする"
+
+    # 訳し漏れがあれば英語名がそのまま画面に出るので、漏れが無いことを固定する
+    untranslated = [
+        (chart, param["name"])
+        for chart, spec in specs.items()
+        for param in spec["params"]
+        if param["label"] == param["name"]
+    ]
+    assert untranslated == []
+    assert [chart for chart, spec in specs.items() if spec["label"] == chart] == []
 
 
 def test_export_html_has_range_selection_and_row_delete(tmp_path) -> None:

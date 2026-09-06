@@ -691,7 +691,10 @@ function paramControl(area, spec) {
     control = el("input", { type: "text", value: value });
     control.addEventListener("input", () => { area.params[spec.name] = control.value.trim(); });
   }
-  return labeled(spec.name + (spec.required ? " *" : ""), control);
+  const label = (spec.label || spec.name) + (spec.required ? " *" : "");
+  const field = labeled(label, control);
+  field.setAttribute("title", spec.name);
+  return field;
 }
 
 function renderArea(row, area) {
@@ -743,7 +746,7 @@ function renderArea(row, area) {
     sheet.addEventListener("input", () => { area.sheet = sheet.value.trim(); });
 
     const chart = el("select", {}, CHART_TYPES.map(type =>
-      el("option", Object.assign({ value: type, text: type },
+      el("option", Object.assign({ value: type, text: DRAW_SPECS[type].label, title: type },
                                  type === area.chart ? { selected: "selected" } : {}))));
     chart.addEventListener("change", () => { area.chart = chart.value; area.params = {}; renderRows(); });
 
@@ -754,7 +757,7 @@ function renderArea(row, area) {
     ]);
     card.appendChild(head);
 
-    const specs = DRAW_SPECS[area.chart] || [];
+    const specs = (DRAW_SPECS[area.chart] || {}).params || [];
     if (specs.length) {
       card.appendChild(el("div", { class: "params" },
         specs.map(spec => paramControl(area, spec))));
@@ -769,8 +772,9 @@ function renderArea(row, area) {
     labeled("アクション", enabled),
   ]);
   if (area.action.enabled) {
-    const type = el("select", {}, ["filter", "highlight", "url"].map(value =>
-      el("option", Object.assign({ value: value, text: value },
+    const ACTION_LABELS = { filter: "フィルター", highlight: "ハイライト", url: "URL を開く" };
+    const type = el("select", {}, Object.keys(ACTION_LABELS).map(value =>
+      el("option", Object.assign({ value: value, text: ACTION_LABELS[value] },
                                  value === area.action.type ? { selected: "selected" } : {}))));
     type.addEventListener("change", () => { area.action.type = type.value; });
     const target = el("input", { type: "text", value: area.action.target,
@@ -1099,6 +1103,67 @@ FONT_CHOICES = (
 #: グラフの引数のうち、画面に出さないもの。
 _DRAW_SKIP = {"self", "datasource", "name"}
 
+#: グラフ種類の表示名。仕様 §6.14 の説明に合わせる。
+_CHART_LABELS = {
+    "draw_sheet": "土台シート",
+    "draw_bar": "棒グラフ",
+    "draw_yoy": "前年比の時系列",
+    "draw_card": "KPI カード",
+    "draw_quadrant": "散布図の四象限",
+    "draw_crosstab": "ヒートマップ付きクロス集計",
+    "draw_colored_yoy_sheet": "前年差を色分けした帳票",
+}
+
+#: グラフの引数の表示名。載っていない引数は英語名のまま出す。
+_PARAM_LABELS = {
+    "item": "項目",
+    "items": "項目",
+    "metric": "メジャー",
+    "metrics": "メジャー",
+    "item_shelf": "項目を置くシェルフ",
+    "aggregation": "集計方法",
+    "descending": "降順にする",
+    "visible": "シートを表示する",
+    "title": "タイトル",
+    "main_metric": "主メジャー",
+    "sub_metric": "副メジャー",
+    "main_aggregation": "主メジャーの集計",
+    "sub_aggregation": "副メジャーの集計",
+    "main_color": "主な色",
+    "value_color": "数値の色",
+    "title_background_color": "タイトルの背景色",
+    "vertical_alignment": "縦の揃え",
+    "negative_color": "減少の色",
+    "positive_color": "増加の色",
+    "ratio_color": "比率の色",
+    "mark_type": "マークの種類",
+    "bar_color": "棒の色",
+    "bar_opacity": "棒の不透明度",
+    "axis_min": "軸の最小値",
+    "axis_max": "軸の最大値",
+    "show_axes": "軸を表示する",
+    "index_partition_by": "順位の区切り",
+    "date_level": "日付の単位",
+    "color": "色",
+    "x_item": "横の項目",
+    "y_item": "縦の項目",
+    "x_metric": "横軸のメジャー",
+    "y_metric": "縦軸のメジャー",
+    "size_metric": "サイズのメジャー",
+    "x_aggregation": "横軸の集計",
+    "y_aggregation": "縦軸の集計",
+    "size_aggregation": "サイズの集計",
+    "color_metric": "色のメジャー",
+    "label_metric": "ラベルのメジャー",
+    "color_aggregation": "色の集計",
+    "label_aggregation": "ラベルの集計",
+    "min_color": "最小値の色",
+    "mid_color": "中間の色",
+    "max_color": "最大値の色",
+    "colors": "四象限の色",
+    "opacity": "不透明度",
+}
+
 
 def _param_kind(name: str, annotation: str) -> str:
     if "list[FieldInput]" in annotation:
@@ -1114,13 +1179,13 @@ def _param_kind(name: str, annotation: str) -> str:
     return "text"
 
 
-def _draw_specs() -> dict[str, list[dict[str, Any]]]:
+def _draw_specs() -> dict[str, dict[str, Any]]:
     """`TwbWorkbook.draw_*()` の引数を実物から読み、画面の入力欄の定義にする。"""
     import inspect
 
     from .workbook import TwbWorkbook
 
-    specs: dict[str, list[dict[str, Any]]] = {}
+    specs: dict[str, dict[str, Any]] = {}
     for method_name in sorted(dir(TwbWorkbook)):
         if not method_name.startswith("draw_"):
             continue
@@ -1133,11 +1198,15 @@ def _draw_specs() -> dict[str, list[dict[str, Any]]]:
             params.append(
                 {
                     "name": parameter.name,
+                    "label": _PARAM_LABELS.get(parameter.name, parameter.name),
                     "kind": _param_kind(parameter.name, annotation),
                     "required": parameter.default is inspect.Parameter.empty,
                 }
             )
-        specs[method_name] = params
+        specs[method_name] = {
+            "label": _CHART_LABELS.get(method_name, method_name),
+            "params": params,
+        }
     return specs
 
 
