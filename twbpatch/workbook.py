@@ -67,6 +67,7 @@ from .connected_parameter import (
 )
 from .context import WorkbookContext
 from .serialization import serialize_workbook
+from .html_export import render_workbook_html
 
 if TYPE_CHECKING:
     from .draw import FieldInput
@@ -159,6 +160,21 @@ class TwbWorkbook:
 
     def export_json(self) -> dict:
         return serialize_workbook(self)
+
+    def export_html(
+        self,
+        path: str | Path,
+        *,
+        title: str = "twbpatch 設定",
+        overwrite: bool = False,
+    ) -> Path:
+        target = Path(path)
+        if target.exists() and not overwrite:
+            raise FileExistsError(f"file already exists: {target}")
+        html = render_workbook_html(serialize_workbook(self), title=title)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(html, encoding="utf-8")
+        return target
 
     def validate(self) -> list[TwbValidationMessage]:
         return validate_tree(self.tree)
