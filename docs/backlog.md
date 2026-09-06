@@ -96,6 +96,35 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 
 ## A. 公開 API の整合
 
+### A-7 【完了】`folder=` の書き味が揃っていない
+
+`create_calculated_field(folder="Measure")` が `AttributeError` で落ちていた。
+複数形の `create_calculated_fields()` と `create_yoy_calculated_fields()` は
+文字列を受け付けるのに、単数形だけ `TwbFolder` しか受け付けなかった。
+
+**仕様 §6.2 の例も `examples/build_dashboard.py` も文字列で書いている**ため、
+書いてあるとおりに書くと動かない状態だった。
+
+**原因**: フォルダ名を解決する処理が各メソッドへコピーされていて、単数形だけ
+書き漏れていた。継承の失敗ではなく重複の問題。
+
+**決定（2026-09-06・完了）**: **文字列で書けるほうへ揃える。**
+仕様書とサンプルが既に文字列なので、そちらに実装を合わせた。
+
+`TwbDatasource._resolve_folder()` に解決処理を一本化し、`folder=` を受け取る
+3 メソッドすべてがそれを通る形にした。個々のメソッドで解決を書かないので、
+同じ抜けが構造的に起きなくなる。異常系も揃った。
+
+| 渡した値 | 例外 |
+|---|---|
+| 存在しないフォルダ名 | `NotFoundError` |
+| 空文字 | `ValueError` |
+| 文字列でも `TwbFolder` でもない | `TypeError` |
+| 別データソースの `TwbFolder` | `ValueError` |
+
+`tests/test_folder_argument.py` で 3 メソッド × 異常系を固定した。
+
+
 ### A-1 【完了】新 API のモデルが `import` できない
 
 `twbpatch/__init__.py` は 8 クラスについて **旧 dataclass のほうを公開**している。

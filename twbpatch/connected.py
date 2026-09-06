@@ -541,6 +541,30 @@ class TwbDatasource(ConnectedModel):
         self.update(field_grouping=field_grouping)
         return self
 
+    def _resolve_folder(self, folder: "str | TwbFolder | None") -> "TwbFolder | None":
+        """`folder=` 引数を `TwbFolder` へ解決する。
+
+        `folder=` を受け取るメソッドはすべてこれを通す。個々のメソッドで
+        解決処理を書くと、今回のように片方だけ文字列を受け付けない不揃いが起きる。
+        """
+        if folder is None:
+            return None
+        if isinstance(folder, str):
+            name = folder.strip()
+            if not name:
+                raise ValueError("folder must not be empty")
+            matches = self.get_folders(name=name)
+            if not matches:
+                raise NotFoundError(f"folder not found: {name}")
+            return matches[0]
+        if not isinstance(folder, TwbFolder):
+            raise TypeError("folder must be a name, TwbFolder, or None")
+        folder._ensure_attached()
+        folder._resolve_element()
+        if folder.datasource_id != self._id or folder._context is not self._context:
+            raise ValueError("folder must belong to the same datasource")
+        return folder
+
     def create_folder(self, *, name: str) -> TwbFolder:
         name = name.strip()
         if not name:
@@ -561,7 +585,7 @@ class TwbDatasource(ConnectedModel):
         datatype: str = "real",
         role: str = "measure",
         discrete: bool | None = False,
-        folder: TwbFolder | None = None,
+        folder: str | TwbFolder | None = None,
         hidden: bool | None = False,
         number_format: str | None = None,
         table_calculation: str | None = None,
@@ -573,11 +597,7 @@ class TwbDatasource(ConnectedModel):
         if not name:
             raise ValueError("name must not be empty")
         datasource_el = self._resolve_element()
-        if folder is not None:
-            folder._ensure_attached()
-            folder._resolve_element()
-            if folder.datasource_id != self._id or folder._context is not self._context:
-                raise ValueError("folder must belong to the same datasource")
+        folder = self._resolve_folder(folder)
         if table_calculation is not None:
             if not isinstance(table_calculation, str) or not table_calculation.strip():
                 raise ValueError("table_calculation must be a non-empty string or None")
@@ -662,14 +682,7 @@ class TwbDatasource(ConnectedModel):
                     "or (formula, datatype, number_format)"
                 )
 
-        target_folder = folder
-        if isinstance(folder, str):
-            matches = self.get_folders(name=folder)
-            if not matches:
-                raise NotFoundError(f"folder not found: {folder}")
-            target_folder = matches[0]
-        elif folder is not None and not isinstance(folder, TwbFolder):
-            raise TypeError("folder must be a name, TwbFolder, or None")
+        target_folder = self._resolve_folder(folder)
 
         created: list[TwbField] = []
         for name, definition in calculations.items():
