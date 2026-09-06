@@ -1987,11 +1987,13 @@ class TwbReferenceLine(ConnectedModel):
         return self._worksheet_id
 
     @property
-    def axis_column(self) -> str | None:
+    def axis_field_id(self) -> str | None:
+        """軸のフィールドの XML 内部参照（`[ds1].[none:Sales:qk]` の形）。"""
         return self._snapshot().axis_column
 
     @property
-    def axis_caption(self) -> str | None:
+    def axis_name(self) -> str | None:
+        """軸のフィールドの表示名。"""
         return self._snapshot().axis_caption
 
     @property
@@ -1999,11 +2001,13 @@ class TwbReferenceLine(ConnectedModel):
         return self._snapshot().axis_role
 
     @property
-    def value_column(self) -> str | None:
+    def value_field_id(self) -> str | None:
+        """値のフィールドの XML 内部参照。"""
         return self._snapshot().value_column
 
     @property
-    def value_caption(self) -> str | None:
+    def value_name(self) -> str | None:
+        """値のフィールドの表示名。"""
         return self._snapshot().value_caption
 
     @property

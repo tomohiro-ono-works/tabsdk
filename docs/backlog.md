@@ -45,7 +45,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | A-7 | **完了** | `folder=` の書き味が揃っていない | 不要 | 完了（2026-09-06） |
 | A-8 | **完了** | フィールド指定の書き味が揃っていない | 済 | 完了（2026-09-06） |
 | A-9 | **完了** | 自分の値を変える `set_*` が `update()` の外にある | 済 | 完了（2026-09-06） |
-| A-10 | 中 | 仕様書の中で書き方が食い違っている | 不要 | — |
+| A-10 | 低 | 仕様書の中で書き方が食い違っている | 不要 | 残りは §6.6 / §12 のサンプルのみ |
 | B-1 | **完了** | 4 メソッドが完全に未検証 | 済 | 完了（2026-09-05） |
 | B-2 | 中 | 直接テストが無いメソッド 4 件 | 不要 | 未（2026-09-06 再計測） |
 | B-3 | 中 | 仕様 §13 の 3 項目が静的検査で判定できない | **要** | 未 |
@@ -341,14 +341,14 @@ from twbpatch.models import TwbWorksheet   # dataclass（旧）
   メソッド版にできないことが残ってしまう。今は機能が同じで、書き方だけが 1 つになった
 - 呼び出し側（テスト 2 ファイル）を追随済み
 
-### A-10 【中】仕様書の中で書き方が食い違っている
+### A-10 【低】仕様書の中で書き方が食い違っている
 
 `/spec-conformance` が見つけた、**仕様書どうしの矛盾**。実装の問題ではない。
 
 | 箇所 | 内容 | どちらが正か |
 |---|---|---|
 | §6.6 / §12 のサンプル | `worksheet.add_field(region, shelf="columns")` と第 1 引数を位置で渡している | §5.4a の「キーワード専用」が正。実装もそちら。**サンプルが古い** |
-| §3.2 と `TwbReferenceLine` | §3.2 は公開モデルに `caption` を設けないと定めるが、`TwbReferenceLine.axis_caption` / `value_caption`（`connected_worksheet.py:1971/1983`）が残っている。`serialization.py:22` は出力時に `axis_name` / `value_name` へ改名するので、モデル名と JSON 名が食い違う | **未決。** モデル側を `axis_name` / `value_name` へ揃えるか、§3.2 に「`*_caption` は XML 由来の投影値として例外」と書き足すか |
+| ~~§3.2 と `TwbReferenceLine`~~ | ~~`axis_caption` / `value_caption` がモデル側に残り、JSON 出力名と食い違う~~ | **解消（2026-09-07）。** `axis_field_id` / `axis_name` / `value_field_id` / `value_name` へ改名した。`models.py` の旧 dataclass は §11 により改名しない |
 
 `folder=` の食い違い（§6.3 と実装）は **2026-09-07 に解消済み**。
 文字列と `TwbFolder` の両方を受ける形で、仕様書・実装・テストを揃えた。
@@ -693,7 +693,7 @@ A-6 の改名対象は README に 1 件も出てこないため、A-6 起因の�
 |---|---|
 | `TwbRelation` | `attrs` / `clauses` / `connection` / `join` / `logical_table` / `logical_table_id` / `get_children()` |
 | `TwbRelationship` | `attrs` / `expression` / `left_object` / `left_object_id` / `right_object` / `right_object_id` |
-| `TwbReferenceLine` | `attrs` / `axis_caption` / `axis_column` / `axis_role` / `tooltip_type` / `value_caption` / `value_column` / `value_role` |
+| `TwbReferenceLine` | `attrs` / `axis_field_id` / `axis_name` / `axis_role` / `tooltip_type` / `value_field_id` / `value_name` / `value_role` |
 | `TwbWorksheetFilter` | `attrs` / `apply_scope` / `apply_scope_label` / `enumeration` / `filter_class` / `filter_group` / `functions` / `selection_type` / `value_scope` / `value_scope_label` |
 | `TwbFilterControl` | `apply_scope` / `apply_scope_label` / `enumeration` / `filter_class` / `selection_type` / `show_caption` / `value_scope` / `value_scope_label` |
 

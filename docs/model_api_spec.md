@@ -172,7 +172,11 @@ Datasource や Field では通常、要素自身の `@caption` を使用する�
     name = "Profit"
 ```
 
-- 公開モデルに `caption` プロパティは設けない。
+- 公開モデルに `caption` プロパティは設けない。表示名は `name`、内部参照は `id` とする。
+  ただし、**XML 属性が真偽値であって表示名を指さない場合はこの規則の対象外**とする。
+  `TwbFilterControl.show_caption`（XML の `show-caption`。フィルタカードの見出しを
+  出すかどうか）が該当する。同じゾーンの `show-title`（`show_title`）とは別の属性なので、
+  改名すると衝突する。
 - caption がない場合のフォールバックは読取時の変換であり、XML に caption を自動追加しない。
 - caption を表示名に使うリソースでは、caption を変更しても `id` は変更しない。
 - caption を持たない要素では `id` と `name` が同じ値になる場合がある。

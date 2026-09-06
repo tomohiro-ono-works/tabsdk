@@ -94,7 +94,8 @@ def test_get_reference_lines_returns_connected_models(tmp_path) -> None:
     assert line.worksheet_id == "Sheet1"
     assert line.formula == "median"
     assert line.scope == "per-table"
-    assert line.axis_caption == "売上"
+    assert line.axis_name == "売上"
+    assert line.axis_field_id == "[ds1].[none:Sales:qk]"
 
     assert [item.id for item in worksheet.get_reference_lines(id="refline0")] == ["refline0"]
     assert worksheet.get_reference_lines(name="missing") == []
