@@ -15,6 +15,7 @@ from .context import (
     WorkbookContext,
     _UnsetType,
     validate_style_group as _validate_style_group,
+    xml_equal,
 )
 from .dashboard import dashboard_elements
 from .dashboard_action import list_actions_from_tree
@@ -115,7 +116,7 @@ def _replace_if_changed(
     updated: ET._Element,
     context: WorkbookContext,
 ) -> bool:
-    if ET.tostring(current) == ET.tostring(updated):
+    if xml_equal(current, updated):
         return False
     parent = current.getparent()
     if parent is None:
@@ -495,7 +496,7 @@ def _sync_dashboard_window(context: WorkbookContext, dashboard_id: str) -> None:
     if current is None:
         windows_el.append(window)
         context.mark_dirty()
-    elif ET.tostring(current) != ET.tostring(window):
+    elif not xml_equal(current, window):
         windows_el.replace(current, window)
         context.mark_dirty()
 
@@ -1115,7 +1116,7 @@ class TwbDashboard(ConnectedModel):
                     "window",
                     attrib={"class": "dashboard", "name": self._id, "hidden": "true"},
                 )
-        if ET.tostring(root) != ET.tostring(updated_root):
+        if not xml_equal(root, updated_root):
             self._context.tree._setroot(updated_root)
             self._context.mark_dirty()
         return self

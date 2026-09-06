@@ -1,8 +1,27 @@
 from __future__ import annotations
 
+import copy
+
 from lxml import etree as ET
 
 from .errors import DetachedModelError
+
+
+def xml_equal(left: ET._Element, right: ET._Element) -> bool:
+    """2 つの要素が同じ XML かを比べる。
+
+    `ET.tostring()` の結果は要素がツリーに繋がっているかで変わる。繋がっている
+    要素は非 ASCII を 16 進の文字参照（`&#x58F2;`）で、`copy.deepcopy()` で
+    切り離した要素は 10 進（`&#22770;`）で出力するため、中身が同じでもバイト列が
+    一致しない。`encoding="unicode"` でも解消しない（実測 2026-09-07）。
+
+    更新処理は「元の要素」と「deepcopy して書き換えた要素」を比べるので、
+    日本語を含むワークブックではほぼ全ての比較が「変更あり」になり、
+    `is_dirty` が保存要否の指標として使えなくなっていた。
+
+    両辺を deepcopy して出力形式を揃えることで比較を成立させる。
+    """
+    return ET.tostring(copy.deepcopy(left)) == ET.tostring(copy.deepcopy(right))
 
 
 class _UnsetType:

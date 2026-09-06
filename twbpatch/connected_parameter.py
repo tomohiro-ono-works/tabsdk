@@ -9,7 +9,7 @@ from typing import Any
 from lxml import etree as ET
 
 from .connected import get_display_name, _matches, _validate_get_args
-from .context import UNSET, ConnectedModel, WorkbookContext, _UnsetType
+from .context import UNSET, ConnectedModel, WorkbookContext, _UnsetType, xml_equal
 from .errors import DetachedModelError, ResourceInUseError, UnsupportedFeatureError
 from .references import field_references
 
@@ -236,7 +236,7 @@ class TwbParameter(ConnectedModel):
         calculations = updated.xpath("./*[local-name()='calculation']")
         if calculations:
             calculations[0].set("formula", serialized)
-        if ET.tostring(parameter_el) != ET.tostring(updated):
+        if not xml_equal(parameter_el, updated):
             parent = parameter_el.getparent()
             if parent is None:
                 raise DetachedModelError(f"parameter is detached: {self._id}")

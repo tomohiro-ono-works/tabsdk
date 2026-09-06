@@ -15,6 +15,7 @@ from .context import (
     WorkbookContext,
     _UnsetType,
     validate_style_group as _validate_style_group,
+    xml_equal,
 )
 from .errors import DetachedModelError, ResourceInUseError, UnsupportedFeatureError
 from .field_input import (
@@ -204,7 +205,7 @@ def _replace_if_changed(
     updated: ET._Element,
     context: WorkbookContext,
 ) -> bool:
-    if ET.tostring(current) == ET.tostring(updated):
+    if xml_equal(current, updated):
         return False
     parent = current.getparent()
     if parent is None:
@@ -1879,7 +1880,7 @@ class TwbWorksheet(ConnectedModel):
                     attrib={"class": "worksheet", "name": target_id, "hidden": "true"},
                 )
 
-        if ET.tostring(root) != ET.tostring(updated_root):
+        if not xml_equal(root, updated_root):
             self._context.tree._setroot(updated_root)
             self._context.mark_dirty()
             self._id = target_id
@@ -2651,7 +2652,7 @@ class TwbPane(ConnectedModel):
             reference,
             colors,
         )
-        if ET.tostring(root) != ET.tostring(updated_root):
+        if not xml_equal(root, updated_root):
             self._context.tree._setroot(updated_root)
             self._context.mark_dirty()
         return self
@@ -2739,7 +2740,7 @@ class TwbPane(ConnectedModel):
                 "type": "interpolated",
             },
         )
-        if ET.tostring(root) != ET.tostring(updated_root):
+        if not xml_equal(root, updated_root):
             self._context.tree._setroot(updated_root)
             self._context.mark_dirty()
         return self

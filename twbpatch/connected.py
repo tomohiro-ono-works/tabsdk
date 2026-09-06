@@ -11,7 +11,7 @@ from lxml import etree as ET
 
 from .calculation import create_calculated_field_el, normalize_formula_for_datasource
 from .column import list_columns_from_datasource
-from .context import UNSET, ConnectedModel, WorkbookContext, _UnsetType
+from .context import UNSET, ConnectedModel, WorkbookContext, _UnsetType, xml_equal
 from .datasource import datasource_elements, update_source_el
 from .errors import (
     AmbiguousCaptionError,
@@ -214,7 +214,7 @@ def _replace_if_changed(
     updated: ET._Element,
     context: WorkbookContext,
 ) -> bool:
-    if ET.tostring(current) == ET.tostring(updated):
+    if xml_equal(current, updated):
         return False
     parent = current.getparent()
     if parent is None:
@@ -1301,7 +1301,7 @@ class TwbField(ConnectedModel):
             calculation.set("formula", normalized_formula)
 
         if definition.column is None:
-            if ET.tostring(field_el) != ET.tostring(updated):
+            if not xml_equal(field_el, updated):
                 _insert_field_column(datasource_el, updated)
                 self._context.mark_dirty()
         else:
