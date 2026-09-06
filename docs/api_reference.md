@@ -54,6 +54,7 @@ Worksheet のみ `id == name == XML @name`。
 | `validate` | — | `list[TwbValidationMessage]` | 現在の XML ツリーを検証し、問題を列挙する |
 | `get_unsupported_features` | — | `list[TwbUnsupportedFeature]` | SDK が未対応の Tableau 機能を列挙する |
 | `export_json` | — | `dict` | 公開値のみを組み立てて辞書化する。非公開コンテキストと `caption` は含めない |
+| `export_html` | `path: str \| Path, *, title: str = "twbpatch 設定", overwrite: bool = False` | `Path` | 設定画面の HTML を 1 ファイル出力する。外部参照なしで単体で開ける。仕様は `docs/html_screen_spec.md` |
 
 ### 2.3 リソース取得・作成
 

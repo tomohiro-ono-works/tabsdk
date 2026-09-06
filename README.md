@@ -25,6 +25,24 @@ for datasource in wb.list_datasources():
 
 `.twb` と `.twbx` のどちらも同じ API で開けます。
 
+### 設定画面を HTML で出す
+
+フィールドの一覧を調べて Python へ書き写す代わりに、画面で設定して YAML を落とせます。
+
+```python
+from twbpatch import TwbWorkbook
+
+wb = TwbWorkbook.open("template.twb")
+wb.export_html("config.html", title="売上分析 設定", overwrite=True)
+```
+
+出力した HTML は外部参照を持たず、そのままブラウザで開けます（オフライン可）。
+画面はデータソース（表示名・フォルダ・計算フィールド）、全体の書式、ダッシュボードの構成の
+3 タブで、「設定 YAML をダウンロード」で 1 ファイルに落ちます。
+
+**落とした YAML を読み込む Python 側は、表示名とフォルダを除いてまだ実装していません。**
+詳細は [docs/html_screen_spec.md](docs/html_screen_spec.md)。
+
 ## `TwbWorkbook` API
 
 ### 公開変数
