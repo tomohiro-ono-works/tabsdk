@@ -17,6 +17,17 @@ from .context import (
     validate_style_group as _validate_style_group,
     xml_equal,
 )
+from .action_writer import (
+    ACTION_KINDS,
+    ACTIVATIONS,
+    CLEAR_SELECTIONS,
+    build_filter_action,
+    build_url_action,
+    declare_field,
+    ensure_actions_element,
+    generate_action_name,
+    resolve_action_element,
+)
 from .dashboard import dashboard_elements
 from .dashboard_action import list_actions_from_tree
 from .errors import (
@@ -680,6 +691,73 @@ class TwbDashboardAction(ConnectedModel):
     def params(self) -> dict[str, str]:
         return dict(self._snapshot().params)
 
+    def _resolve_element(self) -> ET._Element:
+        self._snapshot()
+        return resolve_action_element(self._context.tree.getroot(), self._id)
+
+    def update(
+        self,
+        *,
+        name: str | _UnsetType = UNSET,
+        activation: str | _UnsetType = UNSET,
+        clear_selection: str | _UnsetType = UNSET,
+        url: str | _UnsetType = UNSET,
+    ) -> TwbDashboardAction:
+        """自身のスカラー値を更新する。
+
+        差し替えたいのが対象シートやフィールドの場合は、消して作り直す。
+        組み立て直しになるため `update()` には含めない。
+        """
+        kind = self.type
+        if activation is not UNSET and activation not in ACTIVATIONS:
+            raise ValueError(f"activation must be one of {ACTIVATIONS}")
+        if clear_selection is not UNSET:
+            if clear_selection not in CLEAR_SELECTIONS:
+                raise ValueError(
+                    f"clear_selection must be one of {tuple(CLEAR_SELECTIONS)}"
+                )
+            if kind != "filter":
+                raise ValueError("clear_selection is only available on filter actions")
+        if url is not UNSET:
+            if not isinstance(url, str) or not url.strip():
+                raise ValueError("url must be a non-empty string")
+            if kind != "url":
+                raise ValueError("url is only available on url actions")
+        if name is not UNSET and (not isinstance(name, str) or not name.strip()):
+            raise ValueError("name must be a non-empty string")
+
+        action_el = self._resolve_element()
+        updated = copy.deepcopy(action_el)
+        if name is not UNSET:
+            updated.set("caption", name.strip())
+        activation_el = _first_child(updated, "activation")
+        if activation is not UNSET and activation_el is not None:
+            activation_el.set("type", activation)
+        if clear_selection is not UNSET and activation_el is not None:
+            activation_el.set("auto-clear", CLEAR_SELECTIONS[clear_selection])
+        for link in updated.xpath("./*[local-name()='link']"):
+            if name is not UNSET and kind == "filter":
+                link.set("caption", name.strip())
+            if url is not UNSET:
+                link.set("expression", url.strip())
+        _replace_if_changed(action_el, updated, self._context)
+        return self
+
+    def delete(self) -> None:
+        action_el = self._resolve_element()
+        parent = action_el.getparent()
+        if parent is None:
+            raise DetachedModelError(f"dashboard action is detached: {self._id}")
+        parent.remove(action_el)
+        self._context.mark_dirty()
+        self._detach()
+
+
+def _first_child(parent: ET._Element, local_name: str) -> ET._Element | None:
+    return next(
+        (child for child in parent if ET.QName(child).localname == local_name), None
+    )
+
 
 class TwbDashboard(ConnectedModel):
     def __init__(self, context: WorkbookContext, dashboard_id: str):
@@ -798,6 +876,130 @@ class TwbDashboard(ConnectedModel):
             if _matches(model_id=zone_id, model_name=zone_name, id=id, name=name):
                 result.append(TwbDashboardZone(self._context, self._id, zone_id))
         return result
+
+    def create_action(
+        self,
+        *,
+        kind: str,
+        name: str,
+        source: str | list[str],
+        targets: list[str] | None = None,
+        field: tuple[str, str] | None = None,
+        url: str | None = None,
+        activation: str = "on-select",
+        clear_selection: str = "show_all",
+    ) -> TwbDashboardAction:
+        """ダッシュボードアクションを 1 件作る。
+
+        `source` と `targets` は**このダッシュボードに置かれているワークシート名**。
+        XML では「除外するシート」で書かれるが、呼び出し側は含める側を渡す。
+
+        - `kind="filter"`: `source` は 1 枚、`targets` と `field` が要る
+        - `kind="url"`: `source` は 1 枚以上、`url` が要る
+
+        `activation` は `on-select` / `on-hover` / `on-menu`。**実測できているのは
+        `on-select` だけ**で、残り 2 つは Tableau で一般に使われる値。
+        """
+        if kind not in ACTION_KINDS:
+            raise ValueError(f"kind must be one of {ACTION_KINDS}")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name must be a non-empty string")
+        name = name.strip()
+        if activation not in ACTIVATIONS:
+            raise ValueError(f"activation must be one of {ACTIVATIONS}")
+        if clear_selection not in CLEAR_SELECTIONS:
+            raise ValueError(
+                f"clear_selection must be one of {tuple(CLEAR_SELECTIONS)}"
+            )
+
+        placed = [worksheet.id for worksheet in self.get_worksheets()]
+        sources = [source] if isinstance(source, str) else list(source)
+        for worksheet in sources:
+            if worksheet not in placed:
+                raise ValueError(f"worksheet is not on this dashboard: {worksheet}")
+        if not sources:
+            raise ValueError("source must contain at least one worksheet")
+
+        root = self._context.tree.getroot()
+        actions_el = ensure_actions_element(root)
+        if self.get_actions(name=name):
+            raise ValueError(f"action name already exists: {name}")
+        action_name = generate_action_name(actions_el)
+
+        if kind == "filter":
+            if len(sources) != 1:
+                raise ValueError("a filter action takes exactly one source worksheet")
+            if url is not None:
+                raise ValueError("url is only available on url actions")
+            if not targets:
+                raise ValueError("a filter action needs at least one target worksheet")
+            for worksheet in targets:
+                if worksheet not in placed:
+                    raise ValueError(f"worksheet is not on this dashboard: {worksheet}")
+            datasource_el, column_el, reference = self._resolve_action_field(field)
+            kept = set(sources) | set(targets)
+            action_el = build_filter_action(
+                name=action_name,
+                caption=name,
+                dashboard_name=self._id,
+                source_worksheet=sources[0],
+                excluded_targets=[
+                    worksheet for worksheet in placed if worksheet not in kept
+                ],
+                field_reference=reference,
+                activation=activation,
+                clear_selection=clear_selection,
+            )
+            actions_el.append(action_el)
+            declare_field(actions_el, datasource_el, column_el)
+        else:
+            if not isinstance(url, str) or not url.strip():
+                raise ValueError("a url action needs a url")
+            if targets or field is not None:
+                raise ValueError("targets and field are only available on filter actions")
+            action_el = build_url_action(
+                name=action_name,
+                caption=name,
+                dashboard_name=self._id,
+                url=url.strip(),
+                excluded_sources=[
+                    worksheet for worksheet in placed if worksheet not in set(sources)
+                ],
+                activation=activation,
+            )
+            actions_el.append(action_el)
+
+        self._context.mark_dirty()
+        return TwbDashboardAction(self._context, self._id, action_name)
+
+    def _resolve_action_field(
+        self, field: tuple[str, str] | None
+    ) -> tuple[ET._Element, ET._Element, str]:
+        """`("データソース名", "フィールド名")` を XML 要素と参照文字列へ解決する。
+
+        「すべてのフィールド」は扱わない（利用者の想定から外れるため、2026-09-07 決定）。
+        """
+        if (
+            not isinstance(field, tuple)
+            or len(field) != 2
+            or not all(isinstance(value, str) and value.strip() for value in field)
+        ):
+            raise TypeError('field must be ("datasource name", "field name")')
+        datasource_name, field_name = field
+        datasources = get_datasources(self._context, name=datasource_name)
+        if len(datasources) != 1:
+            raise ValueError(f"datasource not found or ambiguous: {datasource_name}")
+        datasource = datasources[0]
+        fields = datasource.get_fields(name=field_name)
+        if len(fields) != 1:
+            raise ValueError(f"field not found or ambiguous: {field_name}")
+        datasource_el = datasource._resolve_element()
+        columns = datasource_el.xpath(
+            "./*[local-name()='column'][@name=$id]", id=fields[0].id
+        )
+        if not columns:
+            raise ValueError(f"field has no column element: {field_name}")
+        return datasource_el, columns[0], f"[{datasource.id}].{fields[0].id}"
 
     def get_actions(
         self,

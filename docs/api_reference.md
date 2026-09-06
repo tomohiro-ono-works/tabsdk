@@ -316,6 +316,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `get_zones` | `*, id=None, name=None` | `list[TwbDashboardZone]` | ゾーン一覧 |
 | `get_actions` | `*, id=None, name=None` | `list[TwbDashboardAction]` | ダッシュボードアクション |
 | `get_filter_controls` | `*, id=None, name=None` | `list[TwbFilterControl]` | 表示中のフィルタコントロール |
+| `create_action` | `*, kind, name, source, targets=None, field=None, url=None, activation="on-select", clear_selection="show_all"` | `TwbDashboardAction` | アクションを1件作成。`kind` は `filter` / `url` |
 | `create_container` | `*, direction="horizontal", friendly_name=None, distribute_evenly=False` | `TwbDashboardContainer` | 最上位コンテナを作成 |
 | `add_floating_worksheet` | `worksheet: TwbWorksheet, *, x=0, y=0, width=600, height=400, show_title=True` | `TwbDashboardZone` | 浮動配置。タイル配置とは明示的に別 API |
 | `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333", filter_apply_button=False` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築。`filter_apply_button=True` で置いたフィルタすべてに「適用」ボタンを付ける |
@@ -339,6 +340,21 @@ struct={
 | `"filter"` | `("データソース名", "フィールド名")` |
 
 高さの既定はフィルタ置き場が 50、それ以外が 300。`container_sizes=` で個別に変えられる。
+
+`create_action()` の `source` と `targets` は、**このダッシュボードに置かれている
+ワークシート名**。XML では「除外するシート」で書かれるが、呼び出し側は含める側を渡す。
+
+| `kind` | 必要な引数 | 使えない引数 |
+|---|---|---|
+| `"filter"` | `source`（1 枚）、`targets`、`field=("データソース名", "フィールド名")` | `url` |
+| `"url"` | `source`（1 枚以上）、`url` | `targets` / `field` |
+
+`activation` は `on-select` / `on-hover` / `on-menu`、`clear_selection` は
+`show_all` / `exclude`（フィルタのみ）。**実測できているのは `on-select` と
+`show_all` だけ**で、残りは Tableau で一般に使われる値。
+
+対象シートやフィールドを変えるときは、消して作り直す。組み立て直しになるため
+`TwbDashboardAction.update()` には含めない。
 
 ### 3.9 `TwbDashboardContainer`
 
@@ -405,10 +421,17 @@ struct={
 
 ### 3.11 `TwbDashboardAction`
 
-読み取り専用。
+作成は `TwbDashboard.create_action()`。
 
 **変数**: `id` / `name` / `type: str \| None` / `activation: str \| None` / `command: str \| None` /
 `source_worksheet_ids: list[str]` / `target_worksheet_ids: list[str]` / `links: list[dict]` / `params: dict[str, str]`
+
+**メソッド**
+
+| メソッド | 引数 | 戻り値 | 説明 |
+|---|---|---|---|
+| `update` | `*, name=UNSET, activation=UNSET, clear_selection=UNSET, url=UNSET` | `TwbDashboardAction` | 自身のスカラー値を更新。`clear_selection` は `filter`、`url` は `url` の種別でのみ有効 |
+| `delete` | — | `None` | 削除。他のアクションには触れない |
 
 ---
 

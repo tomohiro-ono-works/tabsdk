@@ -26,6 +26,22 @@ def _first(node: ET._Element, xpath: str) -> ET._Element | None:
     return matches[0] if matches else None
 
 
+def _action_type(command: str | None, links: list[ET._Element]) -> str | None:
+    """アクションの種別を決める。
+
+    URL アクションには `<command>` が無く、`<link expression>` に URL が直接入る
+    （Tableau が保存した .twb で実測 2026-09-07）。`command` だけを見ていると
+    種別が `None` になっていた。
+    """
+    if not command:
+        expressions = [link.get("expression") or "" for link in links]
+        if expressions and not any(
+            value.startswith("tsl:") for value in expressions
+        ):
+            return "url"
+    return _normalized_action_type(command)
+
+
 def _normalized_action_type(command: str | None) -> str | None:
     value = (command or "").lower()
     if "filter" in value:
@@ -123,27 +139,42 @@ def _materialize_action(
     command_el = _first(action, "./*[local-name()='command']")
     target = _first(command_el, "./*[local-name()='target']") if command_el is not None else None
     command = command_el.get("command") if command_el is not None else None
+    link_els = action.xpath(".//*[local-name()='link']")
 
     source_dashboard_id = _identifier(source.get("dashboard") if source is not None else None, dashboard_labels)
-    target_dashboard_id = _identifier(target.get("dashboard") if target is not None else None, dashboard_labels)
     excluded_source_ids = _excluded_sheet_ids(source)
-    excluded_target_ids = _excluded_sheet_ids(target)
     source_ids = _sheet_ids(source, source_dashboard_id, worksheet_labels, dashboard_worksheets, excluded_source_ids)
-    target_ids = _sheet_ids(target, target_dashboard_id, worksheet_labels, dashboard_worksheets, excluded_target_ids)
 
-    links = [attrs(link) for link in action.xpath(".//*[local-name()='link']")]
+    links = [attrs(link) for link in link_els]
     params: dict[str, str] = {}
     for param in action.xpath(".//*[local-name()='param']"):
         name = param.get("name")
         if name:
             params[name] = param.get("value") or (param.text or "").strip()
 
+    # ターゲットは `<target>` 要素ではなく `<command>` の param に入る。
+    # 対象シートは「除外するシート名」のカンマ区切りで書かれる（実測 2026-09-07）。
+    target_dashboard_id = _identifier(
+        target.get("dashboard")
+        if target is not None
+        else params.get("target"),
+        dashboard_labels,
+    )
+    excluded_target_ids = _excluded_sheet_ids(target)
+    if not excluded_target_ids and params.get("exclude"):
+        excluded_target_ids = [
+            value.strip() for value in params["exclude"].split(",") if value.strip()
+        ]
+    target_ids = _sheet_ids(
+        target, target_dashboard_id, worksheet_labels, dashboard_worksheets, excluded_target_ids
+    )
+
     return TwbDashboardAction(
         dashboard=dashboard_labels.get(source_dashboard_id, source_dashboard_id),
         dashboard_id=source_dashboard_id,
         id=action.get("name") or action.get("id"),
         caption=action.get("caption") or action.get("name"),
-        type=_normalized_action_type(command),
+        type=_action_type(command, link_els),
         activation=activation.get("type") if activation is not None else None,
         command=command,
         source_type=source.get("type") if source is not None else None,
