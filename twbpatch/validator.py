@@ -91,9 +91,19 @@ def validate_tree(tree: ET._ElementTree) -> list[TwbValidationMessage]:
             calc = col.find("./calculation")
             if calc is not None and not (calc.get("formula") or "").strip():
                 messages.append(TwbValidationMessage("error", "formula_empty", f"formula is empty: {name}", ds_id, name))
+        # 階層はフォルダへ type="drillpath" で入り、name は drill-path の表示名
+        # （角括弧なし）。列名と照合すると必ず外れるため、階層名も参照集合へ入れる。
+        drill_names = {
+            str(path.get("name"))
+            for path in ds.xpath("./*[local-name()='drill-paths']/*[local-name()='drill-path'][@name]")
+        }
         for folder in _folder_elements(ds):
             for item in folder.findall("./folder-item"):
                 item_name = item.get("name")
+                if item.get("type") == "drillpath":
+                    if item_name and item_name not in drill_names:
+                        messages.append(TwbValidationMessage("warning", "folder_item_missing", f"folder-item references missing drill path: {item_name}", ds_id, item_name))
+                    continue
                 if item_name and item_name not in names:
                     messages.append(TwbValidationMessage("warning", "folder_item_missing", f"folder-item references missing column: {item_name}", ds_id, item_name))
         for folder in ds.findall("./folder"):

@@ -104,8 +104,9 @@ def field_references(
     if datasource_hits and datasource_hits[0].get("caption"):
         datasource_labels.add(str(datasource_hits[0].get("caption")))
 
+    # type="drillpath" の folder-item は階層名を指す。フィールド参照ではない。
     for item in tree.getroot().xpath(
-        "//*[local-name()='folder-item'][@name=$field_id]",
+        "//*[local-name()='folder-item'][@name=$field_id][not(@type='drillpath')]",
         field_id=field_id,
     ):
         datasource = next(

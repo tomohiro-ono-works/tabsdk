@@ -69,7 +69,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | H-2 | — | `create_datasource()` がない | **不採用** | — |
 | H-3 | 低 | フォルダ名を変更できない | **採用** | **L-1 と同一**。L-1 で実施する |
 | H-4 | 中 | 階層を作れない | **採用** | 未（**前提: L-2**） |
-| H-4b | — | グループ・セット・ビン・ドリルパス | **未判定** | L-5 と同一 |
+| H-4b | 中 | グループ（セット・ビンは対象外） | **採用** | L-5 と同一。2026-09-07 に範囲を絞って採用 |
 | H-5 | **完了** | 合計・小計を付けられない | 済 | `docs/tasks/H5_totals.md`（2026-09-06） |
 | H-6 | 低 | 凡例・注釈・ツールチップ文章 | **保留** | 前提あり |
 | H-7 | — | デバイスレイアウト（スマホ・タブレット） | **不採用** | — |
@@ -98,16 +98,16 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | L-2 | 中 | 階層（ドリルパス）を扱えない | **要** | 未（H-4 の前提） |
 | L-3 | 中 | ナビゲーションアクションを作れない | 不要 | 未（I-3 の前提） |
 | L-4 | 低 | ペインを削除できない | 不要 | 未（H-13 の採否待ち） |
-| L-5 | 低 | グループ・セット・ビンを作れない | **要** | 未（H-4b の採否待ち） |
+| L-5 | 中 | グループを作れない | 不要 | 未（XML は実測済み。セット・ビンは対象外） |
 
-**残り 27 件**（要分解 11 / そのまま着手可 16）。
-完了 27 件 / 保留 2 件 / 不採用 5 件 / 未判定 2 件。全 63 件（2026-09-07 実測）。
+**残り 28 件**（要分解 11 / そのまま着手可 17）。
+完了 27 件 / 保留 2 件 / 不採用 5 件 / 未判定 1 件。全 63 件（2026-09-07 実測）。
 
 | 優先度 | 残り |
 |---|---|
 | 高 | 1 件（I-2 KPI ツリーダッシュボードの生成） |
-| 中 | 19 件 |
-| 低 | 7 件 |
+| 中 | 21 件 |
+| 低 | 6 件 |
 
 **L 群 5 件はクラス方式の欠落**で、H-3 / H-4 / I-3 の前提になる。
 API 方式はクラス方式の上にしか建てられない（仕様 §2.0）ため、機能を作る前に埋める。
@@ -129,10 +129,10 @@ API 方式はクラス方式の上にしか建てられない（仕様 §2.0）�
 | ID | 欠けているもの | 今の状態 | これが要る機能 |
 |---|---|---|---|
 | L-1 | `TwbFolder.update()` | `delete()` と `get_fields()` しか無く、**フォルダ名を変えられない** | H-3 |
-| L-2 | 階層（`drill-paths`）のモデル | 要素順の定義に名前が出るだけ。読み書きどちらも無い | H-4 |
+| L-2 | 階層（`drill-paths`）のモデル | 要素順の定義に名前が出るだけ。読み書きどちらも無い（**XML は実測済み**） | H-4 |
 | L-3 | ナビゲーションアクション | 読み取りは種別を返す（`dashboard_action.py:54`）が、`create_action()` は `filter` / `url` の 2 種のみ | I-3 |
 | L-4 | `TwbPane.delete()` | ペインを消せない | H-13（未判定） |
-| L-5 | グループ・セット・ビンのモデル | いずれも無い | H-4b（未判定） |
+| L-5 | グループのモデル | `<column>` + `<calculation class="categorical-bin">` で書かれる。作る手段が無い | H-4b（セット・ビンは対象外） |
 
 **この 5 件はいずれも「読めるが書けない」か「読み書きどちらも無い」。**
 フィルタの「適用」ボタン（J-5）と同じ形の欠落で、あのときは `show-apply` が
@@ -159,12 +159,35 @@ XML は `<folder name="...">` で、フォルダ名がそのまま識別子を�
 `drill-paths` は要素順の定義（`connected_worksheet.py:151` / `folder.py:44` /
 `validator.py:38`）に名前が出るだけで、**読み取りモデルすら無い**。
 
-Tableau の階層は「日付 → 年 → 四半期 → 月」のように複数フィールドを順に並べたもの。
-データソース配下に置かれ、ワークシートで展開・折りたたみができる。
+**XML の形は実測済み（2026-09-07、`workbook/hierarchy_group_sample.twb`）。**
 
-> **次のアクション**: **個別タスクに分解する。** まず `twb-xml-probe` で
-> `drill-paths` の実構造を調べる。リポジトリ内に階層を持つ `.twb` があるかも確認が要る。
-> 無ければ Tableau で作ったサンプルをもらう（アクションのときと同じ手順）。
+```xml
+<drill-paths>
+  <drill-path name="カテゴリ">
+    <field>[Category]</field>
+    <field>[Sub-Category]</field>
+  </drill-path>
+</drill-paths>
+```
+
+| 分かったこと | 内容 |
+|---|---|
+| 置き場所 | `datasource` 直下。`column-instance` の後、`folders-common` の前 |
+| `name` | **表示名そのまま**（角括弧なし）。内部 ID ではない |
+| `<field>` | 属性なし。テキストに**内部 ID を角括弧付き**で、ドリルの階層順に並べる |
+| フォルダとの関係 | `<folder-item name="カテゴリ" type="drillpath">` で入る。**階層に入ったフィールドは個別の folder-item を持たなくなる** |
+| `<column>` 側 | **何も増えない。** 階層メンバーであることを示す属性は付かない |
+| ワークシート側 | **何も増えない。** 階層は datasource 直下に完結する |
+
+**読み込み側の不具合を先に直した（2026-09-07）。**
+`validator.py` が drillpath の folder-item を列名と照合して `folder_item_missing` の
+誤警告を出していた（`save(validate=True)` に影響）。`references.py` も
+folder-item を `type` で区別していなかった。
+
+> **次のアクション**: **個別タスクに分解する。** `TwbDrillPath` を新設し、
+> `datasource.get_drill_paths()` / `create_drill_path(name=, fields=)` /
+> `update()` / `delete()` を作る。**フィールドを階層へ入れると folder-item から
+> 消える**ので、フォルダとの整合が要る（`move_to_folder()` との相互作用）。
 
 ### L-3 【中】ナビゲーションアクションを作れない
 
@@ -187,13 +210,40 @@ Tableau の階層は「日付 → 年 → 四半期 → 月」のように複数
 > **次のアクション**: H-13 の採否を先に決める。採用するなら分解不要。
 > 参照中の配置がある場合の `ResourceInUseError` の扱いを決める。
 
-### L-5 【低】グループ・セット・ビンを作れない
+### L-5 【中】グループを作れない
 
-いずれもモデルが無い。`<group>` は読み取りもしていない（アクションが自動生成する
-`user:auto-column="sheet_link"` の `<group>` を素通ししているだけ）。
+**セットとビンは対象外にした（2026-09-07 決定）。** グループだけを扱う。
 
-> **次のアクション**: H-4b の採否を先に決める。3 つは XML 構造が別々なので、
-> 採用するなら 1 つ 1 タスクに分解する。
+**`<group>` 要素ではなかった。** Tableau のグループは `<column>` +
+`<calculation class="categorical-bin">` で書かれる（実測、
+`workbook/hierarchy_group_sample.twb`）。
+
+```xml
+<column datatype="string" name="[カテゴリ (グループ)]" role="dimension" type="nominal">
+  <calculation class="categorical-bin" column="[Category]" new-bin="true">
+    <bin default-name="true" value="&quot;Furniture と Office Supplies&quot;">
+      <value>"Furniture"</value>
+      <value>"Office Supplies"</value>
+    </bin>
+  </calculation>
+</column>
+```
+
+| 分かったこと | 内容 |
+|---|---|
+| 置き場所 | 普通の `<column>` と同列。データソース直下 |
+| `name` | `[元フィールドの表示名 (グループ)]`。**日本語の表示名がそのまま内部 ID になる**。`caption` 属性は無い |
+| `calculation/@column` | 元フィールドの内部 ID。`@new-bin="true"` |
+| `<bin>` | **まとめた 1 グループにつき 1 件。** まとめなかった値は書かれない（Tableau が暗黙に単独扱い） |
+| 値の書式 | メンバーもグループ名も**ダブルクォート込みの文字列**（`"Furniture"`） |
+| `default-name="true"` | グループ名を自動生成に任せた印 |
+
+`groupfilter` はグループ機能とは無関係（通常のフィルタの子要素）。
+
+> **次のアクション**: 分解不要。`datasource.create_group(field=, name=, members=)` を
+> 作る。`create_calculated_field()` と同じ `<column>` 直下なので作りは近い。
+> **`name` に caption を使わず内部 ID にする Tableau の書き方**に合わせるか、
+> SDK は `caption` を付けるかを先に決める（仕様 §3.2 と関わる）。
 
 ---
 
