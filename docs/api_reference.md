@@ -129,6 +129,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `get_folders` | `*, id=None, name=None` | `list[TwbFolder]` | フォルダ一覧 |
 | `get_drill_paths` | `*, id=None, name=None` | `list[TwbDrillPath]` | 階層（ドリルパス）一覧 |
 | `create_drill_path` | `*, name: str, fields: list[FieldInput], folder=None` | `TwbDrillPath` | 階層を1つ作成。`fields` の順がドリルの階層順。2つ以上が要る。`folder=` を渡すと `type="drillpath"` の項目として入れ、**階層に入れたフィールドの `folder-item` は取り除く** |
+| `create_group` | `*, field: FieldInput, groups: dict[str, list[str]], name=None, folder=None` | `TwbField` | 値をまとめたグループフィールドを1つ作成。`groups` は グループ名 → まとめる値。**まとめない値は書かなくてよい**（Tableau が単独扱いする）。`name` 既定は `<元フィールド名> (グループ)` で、**caption ではなく内部 ID になる**。元フィールドは文字列型のみ |
 | `get_relations` | `*, id=None, name=None` | `list[TwbRelation]` | 物理テーブルの結合構造 |
 | `get_relationships` | `*, id=None, name=None` | `list[TwbRelationship]` | 論理リレーションシップ |
 | `create_folder` | `*, name: str` | `TwbFolder` | フォルダを作成 |

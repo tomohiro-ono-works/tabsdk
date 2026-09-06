@@ -180,6 +180,10 @@ Datasource や Field では通常、要素自身の `@caption` を使用する�
 - caption がない場合のフォールバックは読取時の変換であり、XML に caption を自動追加しない。
 - caption を表示名に使うリソースでは、caption を変更しても `id` は変更しない。
 - caption を持たない要素では `id` と `name` が同じ値になる場合がある。
+- **グループフィールドは例外とし、`caption` を付けない。** Tableau は表示名をそのまま
+  `@name`（角括弧付き）に書き、階層など他の要素からもその名前で参照する（実測、
+  `docs/backlog.md` L-5）。SDK が caption を足すと Tableau の書き方から外れるため、
+  `create_group()` は `id == "[" + name + "]"` として作る。
 - Worksheetでは常に `id == name == XML @name` とする。`worksheet.update(name=...)` は内部IDの変更でもあるため、対応するWindow、Dashboard Zone、Actionなどの参照を同時に更新する。
 - 内部実装では、XML の `@name` を `xml_id`、公開表示名を `display_name` と呼び分ける。
 - 曖昧なローカル変数名 `name` を XML 参照処理で使用しない。

@@ -36,6 +36,7 @@ from .errors import (
     UnsupportedFeatureError,
 )
 from .folder import _ensure_folders_common, move_column_to_folder_el, remove_column_from_folder_el
+from .group import build_group_column, default_field_name, SUPPORTED_DATATYPE
 from .models import BigQuerySource, CsvSource, ExcelSource, UnknownSource
 from .relation import (
     list_relations_from_datasource,
@@ -223,6 +224,42 @@ def _insert_field_column(datasource_el: ET._Element, column: ET._Element) -> Non
     datasource_el.insert(insert_at, column)
 
 
+def _validate_group_members(groups: dict[str, list[str]]) -> dict[str, list[str]]:
+    """`groups` を検証して前後の空白を落とす。
+
+    グループ名もメンバーもダブルクォートで囲んで XML に書くので、値そのものに
+    `"` が入っていると Tableau 側の文字列リテラルが壊れる。ここで弾く。
+    """
+    if not isinstance(groups, dict) or not groups:
+        raise ValueError("groups must be a non-empty dict of name to members")
+    seen: dict[str, str] = {}
+    normalized: dict[str, list[str]] = {}
+    for group_name, members in groups.items():
+        if not isinstance(group_name, str) or not group_name.strip():
+            raise ValueError("group name must be a non-empty string")
+        group_name = group_name.strip()
+        if '"' in group_name:
+            raise ValueError(f'group name must not contain a quote: {group_name}')
+        if not isinstance(members, list) or not members:
+            raise ValueError(f"group must have at least one member: {group_name}")
+        values: list[str] = []
+        for member in members:
+            if not isinstance(member, str) or not member.strip():
+                raise ValueError("group member must be a non-empty string")
+            member = member.strip()
+            if '"' in member:
+                raise ValueError(f'group member must not contain a quote: {member}')
+            if member in seen:
+                raise ValueError(
+                    f"value is in more than one group: {member}"
+                    f" ({seen[member]}, {group_name})"
+                )
+            seen[member] = group_name
+            values.append(member)
+        normalized[group_name] = values
+    return normalized
+
+
 def _replace_if_changed(
     current: ET._Element,
     updated: ET._Element,
@@ -389,6 +426,72 @@ class TwbDatasource(ConnectedModel):
             field_ids,
         )
         return TwbDrillPath(self._context, self._id, name)
+
+    def create_group(
+        self,
+        *,
+        field: "FieldInput",
+        groups: dict[str, list[str]],
+        name: str | None = None,
+        folder: "str | TwbFolder | None" = None,
+    ) -> TwbField:
+        """元フィールドの値をまとめたグループフィールドを 1 つ作る。
+
+        `groups` は グループ名 → まとめる値。**まとめない値は書かなくてよい。**
+        Tableau が単独の値として扱う（実測、`docs/backlog.md` L-5）。
+
+        `name` を省くと `<元フィールドの表示名> (グループ)` になる。この名前は
+        **caption ではなく内部 ID** になる。Tableau がそう書くため。
+
+        元フィールドは文字列型に限る。他の型は実測が無いので受け付けない。
+        """
+        from .field_input import resolve_field_input
+
+        source = resolve_field_input(
+            self._context, field, datasources=[self], argument="field"
+        )
+        if source.datasource_id != self._id:
+            raise ValueError("field must belong to the same datasource")
+        if source.datatype != SUPPORTED_DATATYPE:
+            raise UnsupportedFeatureError(
+                "group source field must be a string field:"
+                f" {source.name} is {source.datatype}"
+            )
+        groups = _validate_group_members(groups)
+
+        if name is None:
+            name = default_field_name(source.name)
+        else:
+            name = name.strip() if isinstance(name, str) else name
+            if not isinstance(name, str) or not name:
+                raise ValueError("name must be a non-empty string")
+        field_id = f"[{name}]"
+        target_folder = self._resolve_folder(folder)
+
+        datasource_el = self._resolve_element()
+        if datasource_el.xpath("./column[@name=$id]", id=field_id):
+            raise ValueError(f"field name already exists: {name}")
+
+        _insert_field_column(
+            datasource_el,
+            build_group_column(
+                field_id=field_id, source_id=source.id, groups=groups
+            ),
+        )
+        if target_folder is not None:
+            move_column_to_folder_el(
+                datasource_el, field_id, target_folder.id, by="name",
+                create_if_missing=False,
+            )
+        self._context.mark_dirty()
+        _LOGGER.info(
+            "グループを作成しました: datasource=%s, name=%s, source=%s, groups=%s",
+            self.name,
+            name,
+            source.name,
+            list(groups),
+        )
+        return TwbField(self._context, self._id, field_id)
 
     def get_folders(
         self,

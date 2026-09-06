@@ -86,10 +86,13 @@ def validate_tree(tree: ET._ElementTree) -> list[TwbValidationMessage]:
             if name in names:
                 messages.append(TwbValidationMessage("error", "column_name_duplicate", f"column name duplicated: {name}", ds_id, name))
             names.add(name)
-            if caption is None:
-                messages.append(TwbValidationMessage("warning", "caption_empty", f"caption is empty: {name}", ds_id, name))
             calc = col.find("./calculation")
-            if calc is not None and not (calc.get("formula") or "").strip():
+            # グループ（categorical-bin）は formula を持たず、caption も付かない。
+            # Tableau は表示名をそのまま name に書く（実測、backlog L-5）。
+            is_group = calc is not None and calc.get("class") == "categorical-bin"
+            if caption is None and not is_group:
+                messages.append(TwbValidationMessage("warning", "caption_empty", f"caption is empty: {name}", ds_id, name))
+            if calc is not None and not is_group and not (calc.get("formula") or "").strip():
                 messages.append(TwbValidationMessage("error", "formula_empty", f"formula is empty: {name}", ds_id, name))
         # 階層はフォルダへ type="drillpath" で入り、name は drill-path の表示名
         # （角括弧なし）。列名と照合すると必ず外れるため、階層名も参照集合へ入れる。
