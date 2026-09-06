@@ -38,6 +38,13 @@ class TableStyle(TypedDict, total=False):
     column_widths: dict[str, int]
 
 
+class LabelStyle(TypedDict, total=False):
+    """`TwbPane.update(label_style=...)` が受け取るラベル表示の設定。"""
+
+    show: bool
+    cull: bool
+
+
 class TitleStyle(TypedDict, total=False):
     """`TwbWorksheet.update(title_style=...)` が受け取るタイトルスタイル。"""
 
@@ -46,6 +53,7 @@ class TitleStyle(TypedDict, total=False):
 
 _TABLE_STYLE_KEYS = frozenset(TableStyle.__annotations__)
 _TITLE_STYLE_KEYS = frozenset(TitleStyle.__annotations__)
+_LABEL_STYLE_KEYS = frozenset(LabelStyle.__annotations__)
 
 _FIELD_REF = re.compile(r"^\[([^\]]+)\]\.\[([^\]]+)\]$")
 _SHELVES = {"rows": "rows", "columns": "cols", "pages": "pages"}
@@ -1148,7 +1156,7 @@ class TwbWorksheet(ConnectedModel):
             return None
         return self.name if text == "<Sheet Name>" else text
 
-    def set_title(self, title: str | None) -> TwbWorksheet:
+    def _apply_title(self, title: str | None) -> TwbWorksheet:
         if title is not None:
             if not isinstance(title, str):
                 raise TypeError("title must be a string or None")
@@ -1695,6 +1703,7 @@ class TwbWorksheet(ConnectedModel):
         *,
         name: str | _UnsetType = UNSET,
         visible: bool | _UnsetType = UNSET,
+        title: str | None | _UnsetType = UNSET,
         table_style: TableStyle | _UnsetType = UNSET,
         title_style: TitleStyle | _UnsetType = UNSET,
     ) -> TwbWorksheet:
@@ -1717,6 +1726,8 @@ class TwbWorksheet(ConnectedModel):
         if visible is not UNSET and not isinstance(visible, bool):
             raise TypeError("visible must be bool")
 
+        if title is not UNSET:
+            self._apply_title(title)
         if table_style is not UNSET:
             self._apply_table_style(**table_style)
         if title_style is not UNSET:
@@ -2276,7 +2287,7 @@ class TwbPane(ConnectedModel):
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
-    def set_label_style(
+    def _apply_label_style(
         self,
         *,
         show: bool = True,
@@ -2306,7 +2317,7 @@ class TwbPane(ConnectedModel):
             return None
         return (float(transparency) / 255) ** 2.4
 
-    def set_mark_opacity(self, opacity: float) -> TwbPane:
+    def _apply_mark_opacity(self, opacity: float) -> TwbPane:
         if not isinstance(opacity, (int, float)) or isinstance(opacity, bool):
             raise TypeError("opacity must be a number")
         opacity = float(opacity)
@@ -2323,7 +2334,7 @@ class TwbPane(ConnectedModel):
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
-    def set_mark_sizing(self, *, scaling: bool) -> TwbPane:
+    def _apply_mark_sizing(self, *, scaling: bool) -> TwbPane:
         if not isinstance(scaling, bool):
             raise TypeError("scaling must be bool")
         pane_el = self._resolve_element()
@@ -2339,7 +2350,7 @@ class TwbPane(ConnectedModel):
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
-    def set_mark_size(self, size: float) -> TwbPane:
+    def _apply_mark_size(self, size: float) -> TwbPane:
         if not isinstance(size, (int, float)) or isinstance(size, bool):
             raise TypeError("size must be a number")
         size = float(size)
@@ -2356,7 +2367,7 @@ class TwbPane(ConnectedModel):
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
-    def set_mark_color(self, color: str) -> TwbPane:
+    def _apply_mark_color(self, color: str) -> TwbPane:
         if not isinstance(color, str) or re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None:
             raise ValueError("color must use #RRGGBB")
         pane_el = self._resolve_element()
@@ -2617,7 +2628,30 @@ class TwbPane(ConnectedModel):
             self._context.mark_dirty()
         return self
 
-    def update(self, *, mark_type: str | _UnsetType = UNSET) -> TwbPane:
+    def update(
+        self,
+        *,
+        mark_type: str | _UnsetType = UNSET,
+        mark_color: str | _UnsetType = UNSET,
+        mark_size: float | _UnsetType = UNSET,
+        mark_opacity: float | _UnsetType = UNSET,
+        mark_scaling: bool | _UnsetType = UNSET,
+        label_style: LabelStyle | _UnsetType = UNSET,
+    ) -> TwbPane:
+        label_style = _validate_style_group(
+            "label_style", label_style, _LABEL_STYLE_KEYS
+        )
+        if mark_color is not UNSET:
+            self._apply_mark_color(mark_color)
+        if mark_size is not UNSET:
+            self._apply_mark_size(mark_size)
+        if mark_opacity is not UNSET:
+            self._apply_mark_opacity(mark_opacity)
+        if mark_scaling is not UNSET:
+            self._apply_mark_sizing(scaling=mark_scaling)
+        if label_style is not UNSET:
+            self._apply_label_style(**label_style)
+
         if mark_type is UNSET:
             return self
         if not isinstance(mark_type, str):

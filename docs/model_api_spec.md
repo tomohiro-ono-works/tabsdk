@@ -804,14 +804,14 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 
 **`TwbPane` / `TwbWorksheet` の `set_*`**
 
-`set_title()` / `set_mark_color()` / `set_mark_size()` / `set_mark_sizing()` /
-`set_mark_opacity()` / `set_label_style()` / `set_customized_label()` /
-`set_axis_visibility()` / `set_categorical_colors()` / `set_continuous_colors()` /
-`add_sort()` は、複数の XML 箇所（`style-rule` と `format` の組など）をまとめて書く。
+`set_customized_label()` / `set_axis_visibility()` / `set_categorical_colors()` /
+`set_continuous_colors()` / `add_sort()` は、複数の XML 箇所（`style-rule` と
+`format` の組など）をまとめて書く。**いずれも他モデルを引数に取る**ため §3.3 で
+`update()` へ統合しない側に当たる。
 
-> **未決**: このうち自分のスカラー値だけを変える `set_title()` と `set_mark_opacity()` は、
-> §3.3 に従えば `update()` のキーワード引数へ寄せるべきものである。A-6 の対象外だったため
-> 現状は `set_*` のまま。扱いを別途決める。
+自分のスカラー値だけを変えるものは `update()` のキーワード引数へ統合済み（A-9）。
+`worksheet.update(title=...)`、`pane.update(mark_color=, mark_size=, mark_opacity=,
+mark_scaling=, label_style=)`。
 
 ## 7. コレクション属性の扱い
 

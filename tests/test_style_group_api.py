@@ -168,3 +168,88 @@ def test_pane_has_set_customized_label(tmp_path) -> None:
     assert hasattr(pane, "set_customized_label")
     with pytest.raises(TypeError, match="main_metric must be TwbWorksheetField"):
         pane.set_customized_label(main_metric="売上", sub_metric=None, main_color="#602fff")
+
+
+# --- A-9: 自分の値を変える set_* を update() へ統合 -------------------------
+
+
+def test_worksheet_update_accepts_title(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    worksheet = workbook.create_worksheet(name="一覧")
+
+    assert worksheet.update(title="売上の一覧") is worksheet
+    assert worksheet.title == "売上の一覧"
+
+    worksheet.update(title=None)
+    assert worksheet.title is None
+
+    with pytest.raises(TypeError, match="title must be a string or None"):
+        worksheet.update(title=1)
+
+
+def test_pane_update_accepts_every_mark_setting(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    datasource = workbook.get_datasources()[0]
+    worksheet = workbook.create_worksheet(name="一覧")
+    worksheet.add_field(field=datasource.get_fields(name="売上")[0], shelf="rows")
+    pane = worksheet.get_panes()[0]
+
+    assert pane.update(
+        mark_type="bar",
+        mark_color="#602fff",
+        mark_size=4,
+        mark_opacity=0.6,
+        mark_scaling=False,
+        label_style={"show": True, "cull": False},
+    ) is pane
+
+    assert pane.mark_type == "bar"
+    assert pane.mark_opacity == pytest.approx(0.6, abs=0.01)
+
+
+def test_pane_update_changes_only_given_arguments(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    worksheet = workbook.create_worksheet(name="一覧")
+    pane = worksheet.get_panes()[0]
+
+    pane.update(mark_type="bar", mark_opacity=0.5)
+    pane.update(mark_color="#602fff")
+
+    assert pane.mark_type == "bar"
+    assert pane.mark_opacity == pytest.approx(0.5, abs=0.01)
+
+
+@pytest.mark.parametrize(
+    "value, error, message",
+    [
+        ("show", TypeError, "label_style must be a dict"),
+        ({"unknown": True}, ValueError, "unknown label_style key"),
+    ],
+)
+def test_pane_update_rejects_bad_label_style(tmp_path, value, error, message) -> None:
+    workbook = _workbook(tmp_path)
+    pane = workbook.create_worksheet(name="一覧").get_panes()[0]
+    with pytest.raises(error, match=message):
+        pane.update(label_style=value)
+
+
+def test_scalar_setters_are_gone(tmp_path) -> None:
+    """自分の値を変える操作は update() に統一した（§3.3）。"""
+    workbook = _workbook(tmp_path)
+    worksheet = workbook.create_worksheet(name="一覧")
+    pane = worksheet.get_panes()[0]
+
+    for owner, removed in (
+        (worksheet, "set_title"),
+        (pane, "set_mark_color"),
+        (pane, "set_mark_size"),
+        (pane, "set_mark_opacity"),
+        (pane, "set_mark_sizing"),
+        (pane, "set_label_style"),
+    ):
+        assert not hasattr(owner, removed), f"{removed} still exists"
+
+    # 他モデルを引数に取るものは動詞名のまま（§3.3）
+    assert callable(pane.set_customized_label)
+    assert callable(pane.set_categorical_colors)
+    assert callable(worksheet.set_axis_visibility)

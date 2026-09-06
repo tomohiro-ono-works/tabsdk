@@ -87,7 +87,7 @@ def draw_sheet(
     item_shelf, _ = _shelves(item_shelf)
     worksheet = workbook.create_worksheet(name=name, visible=visible)
     if title is not None:
-        worksheet.set_title(title)
+        worksheet.update(title=title)
     for field in resolved_items:
         worksheet.add_field(field=field, shelf=item_shelf)
     return worksheet
@@ -249,7 +249,7 @@ def draw_yoy(
     pane = worksheet.get_panes()[0]
     pane.update(mark_type="line")
     if color is not None:
-        pane.set_mark_color(color)
+        pane.update(mark_color=color)
     if not show_axes:
         worksheet.set_axis_visibility(item_placement, visible=False)
         worksheet.set_axis_visibility(metric_placement, visible=False)
@@ -414,7 +414,7 @@ def draw_quadrant(
 
     worksheet = workbook.create_worksheet(name=name, visible=visible)
     if title is not None:
-        worksheet.set_title(title)
+        worksheet.update(title=title)
     x_placement = worksheet.add_field(
         field=x_metric,
         shelf="columns",
@@ -429,9 +429,9 @@ def draw_quadrant(
     )
     pane = worksheet.get_panes()[0]
     pane.update(mark_type="circle")
-    pane.set_mark_sizing(scaling=False)
-    pane.set_mark_opacity(opacity)
-    pane.set_mark_size(4)
+    pane.update(mark_scaling=False)
+    pane.update(mark_opacity=opacity)
+    pane.update(mark_size=4)
     pane.add_field(field=item, encoding="detail", discrete=True)
     pane.add_field(
         field=size_metric,
@@ -502,7 +502,7 @@ def draw_crosstab(
 
     worksheet = workbook.create_worksheet(name=name, visible=visible)
     if title is not None:
-        worksheet.set_title(title)
+        worksheet.update(title=title)
     worksheet.add_field(field=x_item, shelf="columns", discrete=True)
     worksheet.add_field(field=y_item, shelf="rows", discrete=True)
     pane = worksheet.get_panes()[0]
@@ -519,7 +519,7 @@ def draw_crosstab(
         aggregation=label_aggregation,
         discrete=False,
     )
-    pane.set_label_style(show=True, cull=False)
+    pane.update(label_style={"show": True, "cull": False})
     if all(color is not None for color in palette):
         pane.set_continuous_colors(
             color_placement,

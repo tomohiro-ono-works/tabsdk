@@ -44,6 +44,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | A-6 | **完了** | 公開 `update_*()` の廃止 | 済 | 完了（2026-09-05） |
 | A-7 | **完了** | `folder=` の書き味が揃っていない | 不要 | 完了（2026-09-06） |
 | A-8 | **完了** | フィールド指定の書き味が揃っていない | 済 | 完了（2026-09-06） |
+| A-9 | **完了** | 自分の値を変える `set_*` が `update()` の外にある | 済 | 完了（2026-09-06） |
 | B-1 | **完了** | 4 メソッドが完全に未検証 | 済 | 完了（2026-09-05） |
 | B-2 | 中 | 直接テストが無いメソッド 17 件 | **要** | 未 |
 | B-3 | 中 | 仕様 §13 の 3 項目が静的検査で判定できない | **要** | 未 |
@@ -97,6 +98,29 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 ---
 
 ## A. 公開 API の整合
+
+### A-9 【完了】自分の値を変える `set_*` が `update()` の外にある
+
+`worksheet.update(name=...)` と `worksheet.set_title(...)` のように、同じ
+「自分の値を変える」操作で書き方が 2 通りあった。A-6 は `update_*()` だけを
+対象にしたため、`set_*` 形式が残っていた。
+
+**決定（2026-09-06・完了）**: `update()` へ統合する。旧名は残さない（A-6 と同じ理由）。
+
+| 旧名 | 新名 |
+|---|---|
+| `TwbWorksheet.set_title(title)` | `update(title=...)` |
+| `TwbPane.set_mark_color(color)` | `update(mark_color=...)` |
+| `TwbPane.set_mark_size(size)` | `update(mark_size=...)` |
+| `TwbPane.set_mark_opacity(opacity)` | `update(mark_opacity=...)` |
+| `TwbPane.set_mark_sizing(scaling=)` | `update(mark_scaling=...)` |
+| `TwbPane.set_label_style(show=, cull=)` | `update(label_style={...})` |
+
+`label_style` はキー集合が固定なので `LabelStyle` を `TypedDict` で定義した（§3.3）。
+
+**統合しなかったもの**: `set_customized_label()` / `set_axis_visibility()` /
+`set_categorical_colors()` / `set_continuous_colors()` は**他モデルを引数に取る**ため、
+§3.3 で動詞名を維持する側に当たる。
 
 ### A-8 【完了】フィールド指定の書き味が揃っていない
 

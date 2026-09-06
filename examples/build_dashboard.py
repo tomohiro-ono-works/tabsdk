@@ -154,7 +154,7 @@ def main() -> None:
         bar_opacity=0.0,
         index_partition_by=(DATASOURCE, "カテゴリ"),
     )
-    yoy_report.set_title("カテゴリ・サブカテゴリ別 年前年差帳票")
+    yoy_report.update(title="カテゴリ・サブカテゴリ別 年前年差帳票")
 
     # 5. ペイン直接操作 -----------------------------------------------------
     # draw_* に円グラフは無いので、ペインの mark_type を直接変えて組む。

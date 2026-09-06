@@ -103,7 +103,7 @@ def test_nested_tiled_containers_compute_coordinates_from_order_and_weight(tmp_p
 
 def test_build_report_creates_named_rows_and_resolves_worksheet_names(tmp_path) -> None:
     workbook = TwbWorkbook.open(str(_write_workbook(tmp_path)))
-    workbook.get_worksheets(name="SheetC")[0].set_title("表タイトル")
+    workbook.get_worksheets(name="SheetC")[0].update(title="表タイトル")
     dashboard = workbook.create_dashboard(name="経営ダッシュボード")
 
     result = dashboard.build_report(
