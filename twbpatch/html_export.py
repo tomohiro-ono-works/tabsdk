@@ -667,7 +667,7 @@ function newArea() {
     datasource: 0,
     params: {},
     filterField: "",
-    action: { enabled: false, type: "filter", target: "" },
+    action: { enabled: false, type: "filter", target: "", field: "" },
   };
 }
 function newRow() {
@@ -912,16 +912,35 @@ function renderArea(row, area) {
     labeled("アクション", enabled),
   ]);
   if (area.action.enabled) {
-    const ACTION_LABELS = { filter: "フィルター", highlight: "ハイライト", url: "URL を開く" };
+    /* 種類はフィルターと URL の 2 つ。ハイライトは受け手が無いので出さない */
+    const ACTION_LABELS = { filter: "フィルター", url: "URL を開く" };
+    if (!ACTION_LABELS[area.action.type]) area.action.type = "filter";
     const type = el("select", {}, Object.keys(ACTION_LABELS).map(value =>
       el("option", Object.assign({ value: value, text: ACTION_LABELS[value] },
                                  value === area.action.type ? { selected: "selected" } : {}))));
-    type.addEventListener("change", () => { area.action.type = type.value; });
-    const target = el("input", { type: "text", value: area.action.target,
-                                 placeholder: "対象シート名 / URL" });
-    target.addEventListener("input", () => { area.action.target = target.value.trim(); });
+    type.addEventListener("change", () => {
+      area.action.type = type.value;
+      renderRows();
+    });
     actionBox.appendChild(labeled("種類", type));
-    actionBox.appendChild(labeled("対象", target));
+
+    if (area.action.type === "filter") {
+      const target = el("input", { type: "text", value: area.action.target,
+                                   placeholder: "対象シート名" });
+      target.addEventListener("input", () => { area.action.target = target.value.trim(); });
+      actionBox.appendChild(labeled("対象シート", target));
+
+      /* フィルターアクションは絞り込むフィールドが要る。「すべてのフィールド」は扱わない */
+      const field = el("select", {},
+                       fieldOptions(area.datasource, area.action.field, "dimension"));
+      field.addEventListener("change", () => { area.action.field = field.value; });
+      actionBox.appendChild(labeled("絞り込むフィールド", field));
+    } else {
+      const url = el("input", { type: "text", value: area.action.target,
+                                placeholder: "https://" });
+      url.addEventListener("input", () => { area.action.target = url.value.trim(); });
+      actionBox.appendChild(labeled("URL", url));
+    }
   }
   card.appendChild(actionBox);
   return card;
@@ -1074,7 +1093,12 @@ function dashboardYaml() {
       if (area.action.enabled) {
         out += "          action:\n";
         out += "            type: " + yamlKey(area.action.type) + "\n";
-        out += "            target: " + yamlKey(area.action.target) + "\n";
+        if (area.action.type === "url") {
+          out += "            url: " + yamlKey(area.action.target) + "\n";
+        } else {
+          out += "            target: " + yamlKey(area.action.target) + "\n";
+          out += "            field: " + yamlKey(area.action.field) + "\n";
+        }
       }
     });
   });

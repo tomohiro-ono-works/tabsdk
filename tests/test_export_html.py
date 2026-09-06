@@ -141,6 +141,25 @@ def test_export_html_dashboard_tab_is_an_editor(tmp_path) -> None:
     assert "function dashboardYaml()" in html
 
 
+def test_export_html_action_settings_match_the_receiver(tmp_path) -> None:
+    """アクション設定が `dashboard.create_action()` に渡せる形か（H-1、2026-09-07）。"""
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    # 種類はフィルターと URL の 2 つ。ハイライトは受け手が無いので出さない
+    assert 'const ACTION_LABELS = { filter: "フィルター", url: "URL を開く" };' in html
+    assert "highlight" not in html
+    # フィルターアクションは絞り込むフィールドが要る（「すべてのフィールド」は扱わない）
+    assert "絞り込むフィールド" in html
+    assert 'fieldOptions(area.datasource, area.action.field, "dimension")' in html
+    # 種別ごとに出す項目が変わる
+    assert "対象シート" in html
+    assert 'labeled("URL", url)' in html
+    # YAML も種別ごとに変わる
+    assert 'out += "            url: " + yamlKey(area.action.target)' in html
+    assert 'out += "            field: " + yamlKey(area.action.field)' in html
+
+
 def test_export_html_draw_specs_come_from_real_signatures(tmp_path) -> None:
     workbook = TwbWorkbook.open(SAMPLE)
     html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
