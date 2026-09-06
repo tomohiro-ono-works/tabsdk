@@ -322,23 +322,22 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `update` | `*, name=UNSET, visible=UNSET` | `TwbDashboard` | 自身を更新 |
 | `delete` | — | `None` | 削除 |
 
-`struct` は `{コンテナ名: コンテナ}`。**コンテナ名は表示名であって、挙動は変えない**
-（K-1、2026-09-07）。フィルタ置き場かどうかは区分値 `kind` で指定する。
+`struct` は `{コンテナ名: {"kind": ..., "items": [...]}}`。**コンテナ名は表示名であって、
+挙動は変えない**（K-1、2026-09-07）。何を置く枠かは区分値 `kind` で指定する。
+**`kind` は省略できない。**
 
 ```python
 struct={
-    "地域を選ぶ": {"kind": "filter", "items": [("売上データ", "地域")]},
-    "本体": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
-    "明細": ["SheetC"],  # リストだけの書き方はワークシート置き場
+    "地域を選ぶ": {"kind": "filter",    "items": [("売上データ", "地域")]},
+    "本体":     {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
 }
 ```
 
 | `kind` | 項目の書き方 |
 |---|---|
-| `"worksheet"`（既定） | `"シート名"`、または `["シート名", ...]` / `{"items": [...], "fixed_size": 200}`（縦に積むまとまり） |
+| `"worksheet"` | `"シート名"`、または `["シート名", ...]` / `{"items": [...], "fixed_size": 200}`（縦に積むまとまり） |
 | `"filter"` | `("データソース名", "フィールド名")` |
 
-`kind` を書かずにフィルタのタプルを並べると `TypeError`（区分値を書くよう促す）。
 高さの既定はフィルタ置き場が 50、それ以外が 300。`container_sizes=` で個別に変えられる。
 
 ### 3.9 `TwbDashboardContainer`

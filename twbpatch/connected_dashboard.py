@@ -68,44 +68,45 @@ _CONTAINER_KINDS = ("worksheet", "filter")
 def _container_spec(container_name: str, value: Any) -> tuple[str, list[Any]]:
     """`struct` の値からコンテナの区分と項目を取り出す。
 
-    区分は `kind` で明示する（K-1、2026-09-07）。以前はコンテナ名に「フィルタ」が
-    含まれるかで決めていたが、コンテナ名はダッシュボードに表示される枠の名前でも
-    あるため、名前を変えると挙動が変わっていた。
+    区分は `kind` で明示する。**省略できない**（K-1、2026-09-07）。
 
     ```python
     struct={
         "地域を選ぶ": {"kind": "filter", "items": [("売上データ", "地域")]},
         "本体": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
-        "明細": ["SheetC"],  # リストだけの書き方はワークシート置き場
     }
     ```
+
+    以前はコンテナ名に「フィルタ」が含まれるかで決めていた。コンテナ名は
+    ダッシュボードに表示される枠の名前でもあるため、名前を変えると挙動が変わり、
+    グラフの枠に「売上フィルタ状況」と付けると意図せずフィルタ置き場になっていた。
+
+    中身（タプルか文字列か）から推測する案も、`kind` 省略時の既定を置く案も採らない。
+    **どちらも「なぜこの枠がフィルタ置き場になったか」が呼び出し側から読めない。**
+    区分の判定は `kind` の値 1 箇所だけにする。
     """
-    if isinstance(value, dict):
-        unknown = set(value) - {"kind", "items"}
-        if unknown:
-            raise ValueError(
-                "container supports only kind and items: " + container_name
-            )
-        kind = value.get("kind", "worksheet")
-        if kind not in _CONTAINER_KINDS:
-            raise ValueError(
-                f"container kind must be one of {_CONTAINER_KINDS}: {container_name}"
-            )
-        items = value.get("items", [])
-        if not isinstance(items, list):
-            raise TypeError("container items must be a list: " + container_name)
-        return kind, items
-    if not isinstance(value, list):
+    if not isinstance(value, dict):
         raise TypeError(
-            "container must be a list of items or {kind, items}: " + container_name
+            "container must be {\"kind\": ..., \"items\": [...]}: " + container_name
         )
-    for item in value:
-        if isinstance(item, tuple):
-            raise TypeError(
-                "filters need an explicit kind: "
-                f'{container_name} -> {{"kind": "filter", "items": [...]}}'
-            )
-    return "worksheet", value
+    unknown = set(value) - {"kind", "items"}
+    if unknown:
+        raise ValueError(
+            "container supports only kind and items: " + container_name
+        )
+    if "kind" not in value:
+        raise ValueError(
+            f"container kind is required, one of {_CONTAINER_KINDS}: {container_name}"
+        )
+    kind = value["kind"]
+    if kind not in _CONTAINER_KINDS:
+        raise ValueError(
+            f"container kind must be one of {_CONTAINER_KINDS}: {container_name}"
+        )
+    items = value.get("items", [])
+    if not isinstance(items, list):
+        raise TypeError("container items must be a list: " + container_name)
+    return kind, items
 
 
 def _set_show_apply(zone_el: ET._Element, show_apply: bool) -> None:

@@ -109,9 +109,9 @@ def test_build_report_creates_named_rows_and_resolves_worksheet_names(tmp_path) 
     result = dashboard.build_report(
         dashboard_name="経営ダッシュボード",
         struct={
-            "フィルタコンテナ": [],
-            "スコアカード": ["SheetA", "SheetB"],
-            "表": ["SheetC"],
+            "フィルタコンテナ": {"kind": "filter", "items": []},
+            "スコアカード": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
+            "表": {"kind": "worksheet", "items": ["SheetC"]},
         },
     )
 
@@ -127,8 +127,8 @@ def test_build_report_creates_named_rows_and_resolves_worksheet_names(tmp_path) 
         "表",
     ]
     assert outer.get_zones()[0].fixed_size == 43
-    # 名前に「フィルタ」「スコア」が入っていても高さは変わらない（K-1、2026-09-07）
-    assert [item.fixed_size for item in root.get_containers()] == [300, 300, 300]
+    # 高さは kind から決まる。名前の「フィルタ」「スコア」は効かない（K-1、2026-09-07）
+    assert [item.fixed_size for item in root.get_containers()] == [50, 300, 300]
     assert outer.get_zones()[0].text == "経営ダッシュボード"
     assert root.get_containers()[0].get_zones() == []
     assert root.get_containers()[1].get_zones()[0].style == {
@@ -155,10 +155,13 @@ def test_build_report_places_vertical_worksheet_groups_in_columns(tmp_path) -> N
     dashboard.build_report(
         dashboard_name="経営ダッシュボード",
         struct={
-            "スコア・時系列コンテナ": [
-                {"items": ["SheetA", "SheetB"], "fixed_size": 200},
-                ["SheetC"],
-            ],
+            "スコア・時系列コンテナ": {
+                "kind": "worksheet",
+                "items": [
+                    {"items": ["SheetA", "SheetB"], "fixed_size": 200},
+                    ["SheetC"],
+                ],
+            },
         },
         container_sizes={"スコア・時系列コンテナ": 206},
         content_style={"padding": 16, "padding_top": 4},
@@ -231,7 +234,7 @@ def test_build_report_places_filters_registered_by_workbook_set_filter(tmp_path)
         dashboard_name="ダッシュボード",
         struct={
             "フィルタコンテナ": {"kind": "filter", "items": [("売上データ", "地域")]},
-            "グラフコンテナ": ["SheetA", "SheetB"],
+            "グラフコンテナ": {"kind": "worksheet", "items": ["SheetA", "SheetB"]},
         },
     )
 
@@ -268,7 +271,7 @@ def test_build_report_resolves_all_worksheets_before_editing(tmp_path) -> None:
     with pytest.raises(ValueError, match="worksheet not found: 不明"):
         dashboard.build_report(
             dashboard_name="経営ダッシュボード",
-            struct={"スコアカード": ["SheetA", "不明"]},
+            struct={"スコアカード": {"kind": "worksheet", "items": ["SheetA", "不明"]}},
         )
 
     assert dashboard.name == "Dashboard"

@@ -124,7 +124,7 @@ def test_build_report_applies_the_button_to_every_filter(tmp_path) -> None:
         dashboard_name="レポート",
         struct={
             "フィルタ": {"kind": "filter", "items": [("売上データ", "地域")]},
-            "本体": ["SheetA"],
+            "本体": {"kind": "worksheet", "items": ["SheetA"]},
         },
         filter_apply_button=True,
     )
@@ -142,7 +142,7 @@ def test_build_report_omits_the_button_by_default(tmp_path) -> None:
         dashboard_name="レポート",
         struct={
             "フィルタ": {"kind": "filter", "items": [("売上データ", "地域")]},
-            "本体": ["SheetA"],
+            "本体": {"kind": "worksheet", "items": ["SheetA"]},
         },
     )
 
@@ -158,6 +158,6 @@ def test_build_report_rejects_a_non_bool(tmp_path) -> None:
     with pytest.raises(TypeError, match="filter_apply_button must be bool"):
         dashboard.build_report(
             dashboard_name="レポート",
-            struct={"本体": ["SheetA"]},
+            struct={"本体": {"kind": "worksheet", "items": ["SheetA"]}},
             filter_apply_button="true",
         )
