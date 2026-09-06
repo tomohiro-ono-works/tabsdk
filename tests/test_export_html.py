@@ -55,6 +55,24 @@ def test_export_html_embeds_field_names(tmp_path) -> None:
     assert field_names(_embedded_data(html)) == field_names(workbook.export_json())
 
 
+def test_export_html_has_range_selection_and_row_delete(tmp_path) -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    # 範囲選択・複数セルのコピー・貼り付け
+    assert 'addEventListener("copy"' in html
+    assert 'addEventListener("paste"' in html
+    assert 'setData("text/plain"' in html
+    assert 'addEventListener("mouseover"' in html
+    # 計算フィールドの行削除
+    assert 'id="calc-delete"' in html
+    assert "selectedRowRange" in html
+    # 元に戻す / やり直し
+    assert "function undo()" in html
+    assert "function redo()" in html
+    assert 'key === "y"' in html
+
+
 def test_export_html_keeps_japanese_and_escapes_markup(tmp_path) -> None:
     source = tmp_path / "escape.twb"
     source.write_text(

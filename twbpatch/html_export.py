@@ -35,6 +35,8 @@ th { background: #eef1f6; position: sticky; top: 0; font-weight: 600; white-spac
 td.ro { background: #fafbfc; color: #555; }
 td[contenteditable]:focus { outline: 2px solid #4a7dff; outline-offset: -2px; background: #fffdf2; }
 td.invalid { background: #ffecec; }
+td.sel, td.ro.sel { background: #dbe6ff; }
+table.dragging { user-select: none; }
 .scroll { max-height: 60vh; overflow: auto; border: 1px solid #d8dde5; border-radius: 4px; }
 .grid { display: grid; grid-template-columns: 180px 1fr; gap: 8px 12px; align-items: center;
         max-width: 520px; }
@@ -68,41 +70,166 @@ document.querySelectorAll("nav button").forEach(btn => {
   });
 });
 
-/* ---- セル状の表: TSV 貼り付けと矢印移動 ---- */
-function enableGrid(table) {
-  table.addEventListener("paste", event => {
-    const cell = event.target.closest("td[contenteditable]");
-    if (!cell) return;
-    const text = (event.clipboardData || window.clipboardData).getData("text/plain");
-    if (!text) return;
-    event.preventDefault();
-    const rows = text.replace(/\r/g, "").replace(/\n$/, "").split("\n").map(r => r.split("\t"));
-    const bodyRows = Array.from(table.tBodies[0].rows);
-    const startRow = bodyRows.indexOf(cell.parentElement);
-    const startCol = cell.cellIndex;
-    rows.forEach((cols, r) => {
-      const row = bodyRows[startRow + r];
-      if (!row) return;
-      cols.forEach((value, c) => {
-        const target = row.cells[startCol + c];
-        if (target && target.isContentEditable) target.textContent = value.trim();
+/* ---- セル状の表: 範囲選択・コピー・貼り付け ---- */
+let activeGrid = null;
+
+function enableGrid(table, options) {
+  options = options || {};
+  const sel = { r1: -1, c1: -1, r2: -1, c2: -1 };
+  let dragging = false;
+
+  const rowsOf = () => Array.from(table.tBodies[0].rows);
+  const posOf = cell => ({ r: rowsOf().indexOf(cell.parentElement), c: cell.cellIndex });
+  const rect = () => ({
+    top: Math.min(sel.r1, sel.r2), bottom: Math.max(sel.r1, sel.r2),
+    left: Math.min(sel.c1, sel.c2), right: Math.max(sel.c1, sel.c2),
+  });
+  const hasRange = () => sel.r1 >= 0 && (sel.r1 !== sel.r2 || sel.c1 !== sel.c2);
+
+  function paint() {
+    const r = rect();
+    const range = hasRange();
+    rowsOf().forEach((row, ri) => {
+      Array.from(row.cells).forEach((cell, ci) => {
+        const on = range && sel.r1 >= 0
+          && ri >= r.top && ri <= r.bottom && ci >= r.left && ci <= r.right;
+        cell.classList.toggle("sel", on);
       });
     });
-    table.dispatchEvent(new Event("griddirty"));
+  }
+  function anchorAt(cell) { const p = posOf(cell); sel.r1 = sel.r2 = p.r; sel.c1 = sel.c2 = p.c; paint(); }
+  function extendTo(cell) { const p = posOf(cell); sel.r2 = p.r; sel.c2 = p.c; paint(); }
+  function dirty() { table.dispatchEvent(new Event("griddirty")); }
+
+  function ensureRows(count) {
+    if (!options.newRow) return;
+    const body = table.tBodies[0];
+    while (body.rows.length < count) body.appendChild(options.newRow());
+  }
+
+  /* ---- 元に戻す / やり直し ---- */
+  const HISTORY_LIMIT = 100;
+  let history = [];
+  let hIndex = -1;
+  let idleTimer = null;
+
+  function snapshot() {
+    const clone = table.tBodies[0].cloneNode(true);
+    clone.querySelectorAll("td").forEach(td => {
+      td.classList.remove("sel", "invalid");
+      if (!td.getAttribute("class")) td.removeAttribute("class");
+    });
+    return clone.innerHTML;
+  }
+  function resetHistory() {
+    history = [snapshot()];
+    hIndex = 0;
+  }
+  function commit() {
+    const current = snapshot();
+    if (hIndex >= 0 && history[hIndex] === current) return;
+    history = history.slice(0, hIndex + 1);
+    history.push(current);
+    if (history.length > HISTORY_LIMIT) history.shift();
+    hIndex = history.length - 1;
+  }
+  function restore(html) {
+    const active = document.activeElement;
+    if (active && table.contains(active)) active.blur();
+    table.tBodies[0].innerHTML = html;
+    sel.r1 = sel.c1 = sel.r2 = sel.c2 = -1;
+    dirty();
+  }
+  function undo() {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; commit(); }
+    if (hIndex <= 0) return;
+    hIndex -= 1;
+    restore(history[hIndex]);
+  }
+  function redo() {
+    if (hIndex < 0 || hIndex >= history.length - 1) return;
+    hIndex += 1;
+    restore(history[hIndex]);
+  }
+  function scheduleCommit() {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { idleTimer = null; commit(); }, 500);
+  }
+
+  document.addEventListener("keydown", event => {
+    if (activeGrid !== table) return;
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const key = event.key.toLowerCase();
+    if (key === "z" && !event.shiftKey) { event.preventDefault(); undo(); }
+    else if (key === "y" || (key === "z" && event.shiftKey)) { event.preventDefault(); redo(); }
   });
-  table.addEventListener("keydown", event => {
-    const cell = event.target.closest("td[contenteditable]");
+  table.addEventListener("focusin", () => { activeGrid = table; });
+  table.addEventListener("focusout", () => {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    commit();
+  });
+
+  table.addEventListener("mousedown", event => {
+    const cell = event.target.closest("td");
     if (!cell) return;
+    activeGrid = table;
+    if (event.shiftKey && sel.r1 >= 0) {
+      event.preventDefault();
+      extendTo(cell);
+      return;
+    }
+    anchorAt(cell);
+    dragging = true;
+    table.classList.add("dragging");
+  });
+  table.addEventListener("mouseover", event => {
+    if (!dragging) return;
+    const cell = event.target.closest("td");
+    if (!cell) return;
+    extendTo(cell);
+    if (hasRange()) {
+      const active = document.activeElement;
+      if (active && table.contains(active) && active.isContentEditable) active.blur();
+      const selection = window.getSelection();
+      if (selection) selection.removeAllRanges();
+    }
+  });
+  document.addEventListener("mouseup", () => {
+    dragging = false;
+    table.classList.remove("dragging");
+  });
+
+  table.addEventListener("keydown", event => {
+    const cell = event.target.closest("td");
+    if (!cell) return;
+    if ((event.key === "Delete" || event.key === "Backspace") && hasRange()) {
+      event.preventDefault();
+      forEachSelected(c => { if (c.isContentEditable) c.textContent = ""; });
+      dirty();
+      commit();
+      return;
+    }
     let dr = 0, dc = 0;
     if (event.key === "ArrowDown" || event.key === "Enter") dr = 1;
     else if (event.key === "ArrowUp") dr = -1;
+    else if (event.key === "ArrowLeft") dc = -1;
+    else if (event.key === "ArrowRight") dc = 1;
     else if (event.key === "Tab") dc = event.shiftKey ? -1 : 1;
     else return;
+    if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && !event.shiftKey) return;
+    if (event.shiftKey && event.key.startsWith("Arrow")) {
+      event.preventDefault();
+      const rows = rowsOf();
+      const nr = Math.max(0, Math.min(rows.length - 1, sel.r2 + dr));
+      const nc = Math.max(0, Math.min(rows[0].cells.length - 1, sel.c2 + dc));
+      sel.r2 = nr; sel.c2 = nc; paint();
+      return;
+    }
     event.preventDefault();
-    const rows = Array.from(table.tBodies[0].rows);
+    const rows = rowsOf();
     let ri = rows.indexOf(cell.parentElement), ci = cell.cellIndex;
     let next = null;
-    for (let step = 0; step < 50 && !next; step++) {
+    for (let step = 0; step < 200 && !next; step++) {
       ri += dr; ci += dc;
       const row = rows[ri];
       if (!row) break;
@@ -111,9 +238,76 @@ function enableGrid(table) {
       if (candidate.isContentEditable) next = candidate;
       else if (dc === 0) break;
     }
-    if (next) next.focus();
+    if (next) { next.focus(); anchorAt(next); }
   });
-  table.addEventListener("input", () => table.dispatchEvent(new Event("griddirty")));
+
+  function forEachSelected(callback) {
+    const r = rect();
+    const rows = rowsOf();
+    for (let ri = r.top; ri <= r.bottom; ri++) {
+      const row = rows[ri];
+      if (!row) continue;
+      for (let ci = r.left; ci <= r.right; ci++) {
+        const cell = row.cells[ci];
+        if (cell) callback(cell, ri - r.top, ci - r.left);
+      }
+    }
+  }
+
+  document.addEventListener("copy", event => {
+    if (activeGrid !== table || !hasRange()) return;
+    const r = rect();
+    const rows = rowsOf();
+    const lines = [];
+    for (let ri = r.top; ri <= r.bottom; ri++) {
+      const row = rows[ri];
+      if (!row) continue;
+      const cells = [];
+      for (let ci = r.left; ci <= r.right; ci++) {
+        const cell = row.cells[ci];
+        cells.push(cell ? cell.textContent.trim() : "");
+      }
+      lines.push(cells.join("\t"));
+    }
+    event.clipboardData.setData("text/plain", lines.join("\n"));
+    event.preventDefault();
+  });
+
+  table.addEventListener("paste", event => {
+    const cell = event.target.closest("td");
+    if (!cell && sel.r1 < 0) return;
+    const text = (event.clipboardData || window.clipboardData).getData("text/plain");
+    if (!text) return;
+    event.preventDefault();
+    const grid = text.replace(/\r/g, "").replace(/\n+$/, "").split("\n").map(r => r.split("\t"));
+    const start = cell ? posOf(cell) : { r: rect().top, c: rect().left };
+    ensureRows(start.r + grid.length);
+    const rows = rowsOf();
+    grid.forEach((cols, r) => {
+      const row = rows[start.r + r];
+      if (!row) return;
+      cols.forEach((value, c) => {
+        const target = row.cells[start.c + c];
+        if (target && target.isContentEditable) target.textContent = value.trim();
+      });
+    });
+    sel.r1 = start.r; sel.c1 = start.c;
+    sel.r2 = start.r + grid.length - 1;
+    sel.c2 = start.c + Math.max(...grid.map(cols => cols.length)) - 1;
+    paint();
+    dirty();
+    commit();
+  });
+
+  table.addEventListener("input", () => { dirty(); scheduleCommit(); });
+
+  table.grid = {
+    selectedRowRange: () => (sel.r1 < 0 ? null : { top: rect().top, bottom: rect().bottom }),
+    clearSelection: () => { sel.r1 = sel.c1 = sel.r2 = sel.c2 = -1; paint(); },
+    resetHistory: resetHistory,
+    commit: commit,
+  };
+  resetHistory();
 }
 
 function download(name, text) {
@@ -184,6 +378,9 @@ function refreshDatasource() {
   renderRenameTable(ds);
   renderCalcTable(ds);
   validateRename();
+  document.querySelectorAll("table").forEach(table => {
+    if (table.grid) table.grid.resetHistory();
+  });
 }
 dsSelect.addEventListener("change", refreshDatasource);
 
@@ -196,7 +393,24 @@ document.getElementById("field-search").addEventListener("input", event => {
 });
 
 document.getElementById("calc-add").addEventListener("click", () => {
+  const table = document.getElementById("calc-table");
   document.getElementById("calc-body").appendChild(calcRow("", "", "", "", ""));
+  activeGrid = table;
+  table.grid.commit();
+});
+
+document.getElementById("calc-delete").addEventListener("click", () => {
+  const table = document.getElementById("calc-table");
+  const range = table.grid.selectedRowRange();
+  if (!range) { alert("削除する行を選んでください。"); return; }
+  const rows = Array.from(table.tBodies[0].rows).slice(range.top, range.bottom + 1);
+  if (!rows.length) return;
+  const named = rows.filter(row => row.cells[0].textContent.trim()).length;
+  if (named && !confirm(rows.length + " 行を削除します。よろしいですか。")) return;
+  rows.forEach(row => row.remove());
+  table.grid.clearSelection();
+  activeGrid = table;
+  table.grid.commit();
 });
 
 /* ---- 画面側バリデーション ---- */
@@ -313,7 +527,7 @@ DATA.dashboards.forEach(dashboard => {
 
 refreshDatasource();
 enableGrid(document.getElementById("rename-table"));
-enableGrid(document.getElementById("calc-table"));
+enableGrid(document.getElementById("calc-table"), { newRow: () => calcRow("", "", "", "", "") });
 """
 
 _BODY = """
@@ -364,7 +578,9 @@ _BODY = """
 
   <div class="panel">
     <h2>リネーム・フォルダ設定</h2>
-    <p class="note">Excel から貼り付けできる。フォルダ欄が空の行は出力に含まれない。</p>
+    <p class="note">ドラッグまたは Shift+クリックで範囲選択。Ctrl+C でコピー、Ctrl+V で貼り付け、
+      Delete で選択セルを消去。Ctrl+Z / Ctrl+Y で元に戻す・やり直し。
+      フォルダ欄が空の行は出力に含まれない。</p>
     <div class="scroll">
       <table id="rename-table">
         <thead><tr>
@@ -380,7 +596,9 @@ _BODY = """
 
   <div class="panel">
     <h2>計算フィールド <span class="todo">受け手は未実装</span></h2>
-    <p class="note">Excel から貼り付けできる。名前と式が両方入った行だけ出力する。</p>
+    <p class="note">範囲選択・コピー・貼り付けはリネームの表と同じ。
+      Ctrl+Z / Ctrl+Y も同じ。
+      行が足りないときは貼り付けで自動的に増える。名前と式が両方入った行だけ出力する。</p>
     <div class="scroll">
       <table id="calc-table">
         <thead><tr>
@@ -391,6 +609,7 @@ _BODY = """
     </div>
     <p>
       <button class="act" id="calc-add">行を追加</button>
+      <button class="act" id="calc-delete">選択行を削除</button>
       <button class="act" id="calc-download">calculations.yaml をダウンロード</button>
     </p>
   </div>
