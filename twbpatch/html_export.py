@@ -7,16 +7,17 @@ _STYLE = """
 * { box-sizing: border-box; }
 body { margin: 0; font: 13px/1.6 "Meiryo UI", "Hiragino Kaku Gothic ProN", sans-serif;
        color: #222; background: #f6f7f9; }
-header { padding: 12px 20px; background: #2f3b52; color: #fff; }
-header h1 { margin: 0; font-size: 16px; font-weight: 600; }
-header p { margin: 4px 0 0; font-size: 12px; opacity: .75; }
-nav { display: flex; gap: 4px; padding: 0 20px; background: #2f3b52; }
-nav button { border: 0; padding: 8px 18px; font: inherit; cursor: pointer;
-             background: #46536e; color: #dbe1ec; border-radius: 6px 6px 0 0; }
+nav { position: sticky; top: 0; z-index: 10; display: flex; gap: 3px; align-items: center;
+      padding: 0 14px; background: #2f3b52; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+nav button { border: 0; padding: 6px 14px; margin-top: 4px; font: inherit; cursor: pointer;
+             background: #46536e; color: #dbe1ec; border-radius: 5px 5px 0 0; }
 nav button.active { background: #f6f7f9; color: #222; font-weight: 600; }
-nav button.dl { margin: 4px 0 4px 24px; border-radius: 4px; background: #4a7dff; color: #fff;
+nav button.dl { margin: 4px 0 4px 18px; border-radius: 4px; background: #4a7dff; color: #fff;
                 font-weight: 600; }
 nav button.dl:hover { background: #3a68e0; }
+nav .meta { margin-left: 14px; color: #c7d0e0; font-size: 11px; line-height: 1.35;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+nav .meta b { color: #fff; font-weight: 600; margin-right: 8px; }
 .color { display: flex; gap: 6px; align-items: center; }
 .color input[type=color] { width: 34px; height: 28px; padding: 0; border: 1px solid #c3cad6;
                            border-radius: 4px; background: none; cursor: pointer; }
@@ -30,6 +31,15 @@ h2 { font-size: 14px; margin: 0 0 4px; }
         background: #ffe6b3; color: #7a5200; font-size: 11px; }
 .panel { background: #fff; border: 1px solid #d8dde5; border-radius: 6px;
          padding: 16px; margin-bottom: 18px; }
+.acc { padding: 0; }
+.acc-head { margin: 0; padding: 10px 16px 10px 34px; cursor: pointer; position: relative;
+            border-radius: 6px; user-select: none; }
+.acc-head:hover { background: #eef1f6; }
+.acc-head::before { content: "\25B6"; position: absolute; left: 14px; color: #7a869c;
+                    font-size: 10px; transition: transform .12s; }
+.acc.open > .acc-head::before { transform: rotate(90deg); }
+.acc-body { display: none; padding: 0 16px 16px; }
+.acc.open > .acc-body { display: block; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
 input[type=text], input[type=search], select { font: inherit; padding: 4px 8px;
          border: 1px solid #c3cad6; border-radius: 4px; }
@@ -459,6 +469,18 @@ document.getElementById("calc-delete").addEventListener("click", () => {
   table.grid.commit();
 });
 
+/* ---- 折り畳み（片方を開くともう片方が閉じる） ---- */
+const ACCORDIONS = ["acc-rename", "acc-calc"];
+ACCORDIONS.forEach(id => {
+  const panel = document.getElementById(id);
+  panel.querySelector(".acc-head").addEventListener("click", () => {
+    if (panel.classList.contains("open")) return;
+    ACCORDIONS.forEach(other => {
+      document.getElementById(other).classList.toggle("open", other === id);
+    });
+  });
+});
+
 /* ---- 画面側バリデーション ---- */
 function validateState(state) {
   const errors = [];
@@ -618,15 +640,13 @@ enableGrid(document.getElementById("calc-table"), { newRow: () => calcRow("", ""
 """
 
 _BODY = """
-<header>
-  <h1>__TITLE__</h1>
-  <p>twbpatch が出力した設定画面 / データソース __DS_COUNT__ 件・ワークシート __WS_COUNT__ 件・ダッシュボード __DB_COUNT__ 件</p>
-</header>
 <nav>
   <button data-tab="tab-design">全体（デザインルール）</button>
   <button data-tab="tab-datasource" class="active">データソース</button>
   <button data-tab="tab-dashboard">ダッシュボード</button>
   <button class="dl" id="yaml-download">設定 YAML をダウンロード</button>
+  <span class="meta"><b>__TITLE__</b>
+    データソース __DS_COUNT__ 件・ワークシート __WS_COUNT__ 件・ダッシュボード __DB_COUNT__ 件</span>
 </nav>
 <main>
 
@@ -671,8 +691,9 @@ _BODY = """
     <input type="search" id="field-search" placeholder="フィールドを絞り込む">
   </div>
 
-  <div class="panel">
-    <h2>リネーム・フォルダ設定</h2>
+  <div class="panel acc open" id="acc-rename">
+    <h2 class="acc-head">リネーム・フォルダ設定</h2>
+    <div class="acc-body">
     <p class="note">ドラッグまたは Shift+クリックで範囲選択。Ctrl+C でコピー、Ctrl+V で貼り付け、
       Delete で選択セルを消去。Ctrl+Z / Ctrl+Y で元に戻す・やり直し。
       フォルダ欄が空の行は出力に含まれない。</p>
@@ -686,10 +707,12 @@ _BODY = """
       </table>
     </div>
     <p class="errors" id="rename-errors"></p>
+    </div>
   </div>
 
-  <div class="panel">
-    <h2>計算フィールド <span class="todo">受け手は未実装</span></h2>
+  <div class="panel acc" id="acc-calc">
+    <h2 class="acc-head">計算フィールド <span class="todo">受け手は未実装</span></h2>
+    <div class="acc-body">
     <p class="note">範囲選択・コピー・貼り付けはリネームの表と同じ。
       Ctrl+Z / Ctrl+Y も同じ。
       行が足りないときは貼り付けで自動的に増える。名前と式が両方入った行だけ出力する。</p>
@@ -705,6 +728,7 @@ _BODY = """
       <button class="act" id="calc-add">行を追加</button>
       <button class="act" id="calc-delete">選択行を削除</button>
     </p>
+    </div>
   </div>
 </section>
 

@@ -81,6 +81,27 @@ def test_export_html_has_single_yaml_download(tmp_path) -> None:
     assert '"\\ndatasources:\\n"' in html or "datasources:" in html
 
 
+def test_export_html_header_is_folded_into_sticky_nav(tmp_path) -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert "<header>" not in html
+    assert "nav { position: sticky" in html
+    # タイトルと件数はダウンロードボタンの右隣に置く
+    nav = html[html.index("<nav>"):html.index("</nav>")]
+    assert nav.index('id="yaml-download"') < nav.index('class="meta"')
+    assert "データソース 1 件" in nav
+
+
+def test_export_html_datasource_panels_are_exclusive_accordions(tmp_path) -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert 'class="panel acc open" id="acc-rename"' in html
+    assert 'class="panel acc" id="acc-calc"' in html
+    assert 'ACCORDIONS = ["acc-rename", "acc-calc"]' in html
+
+
 def test_export_html_has_range_selection_and_row_delete(tmp_path) -> None:
     workbook = TwbWorkbook.open(SAMPLE)
     html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
