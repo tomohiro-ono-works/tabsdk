@@ -55,7 +55,7 @@ Worksheet のみ `id == name == XML @name`。
 | `get_unsupported_features` | — | `list[TwbUnsupportedFeature]` | SDK が未対応の Tableau 機能を列挙する |
 | `export_json` | — | `dict` | 公開値のみを組み立てて辞書化する。非公開コンテキストと `caption` は含めない |
 | `export_html` | `path: str \| Path, *, title: str = "twbpatch 設定", overwrite: bool = False` | `Path` | 設定画面の HTML を 1 ファイル出力する。外部参照なしで単体で開ける。仕様は `docs/html_screen_spec.md` |
-| `apply_config` | `config: str \| Path \| dict, *, field_grouping: str = "folder"` | `TwbWorkbook` | 設定画面が出力した YAML を適用する。`design.font` と `datasources` を適用し、受け手が無い節は警告ログを出して読み飛ばす |
+| `apply_config` | `config: str \| Path \| dict, *, field_grouping: str = "folder"` | `TwbWorkbook` | 設定画面が出力した YAML を適用する。`design` / `datasources` / `dashboard` の全節に対応。届かない設定は警告ログを出して読み飛ばす |
 
 ### 2.3 リソース取得・作成
 

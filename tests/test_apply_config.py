@@ -163,19 +163,16 @@ def test_apply_config_does_not_touch_xml_when_a_datasource_is_missing() -> None:
 
 
 def test_apply_config_skips_sections_without_a_receiver(caplog) -> None:
+    """`design` の色と余白は `dashboard` を通してしか届かない。単独では読み飛ばす。"""
     workbook = TwbWorkbook.open(SAMPLE)
     with caplog.at_level(logging.WARNING, logger="twbpatch.config_apply"):
         workbook.apply_config(
-            {
-                "design": {"font": "Meiryo UI", "main_color": "#2f3b52", "spacing": "wide"},
-                "dashboard": {"name": "ダッシュボード"},
-            }
+            {"design": {"font": "Meiryo UI", "main_color": "#2f3b52", "spacing": "wide"}}
         )
 
     messages = "\n".join(record.getMessage() for record in caplog.records)
     assert "design.main_color" in messages
     assert "design.spacing" in messages
-    assert "dashboard" in messages
 
 
 def test_apply_config_rejects_a_non_mapping() -> None:

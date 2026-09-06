@@ -234,8 +234,8 @@ Tableau の関数を一通り実装することになるため、**画面で入�
 
 ```yaml
 # twbpatch 設定ファイル
-# 受け手: wb.apply_config() が design.font と datasources を適用する。
-# design の色・余白・適用ボタンと dashboard は未実装（読み飛ばす）。
+# 受け手: wb.apply_config() がこのファイルを読んで .twb へ反映する。
+# design の色・余白・適用ボタンは dashboard を組むときに使う。
 # 集計方法は画面で指定しない。役割とデータ型から自動で決める。
 
 design:
@@ -322,18 +322,32 @@ dashboard:
 
 ## 実装済みと未実装の境界
 
-受け手は `TwbWorkbook.apply_config()`。**データソース側は通る。ダッシュボード側は未実装。**
+受け手は `TwbWorkbook.apply_config()`。**画面が出す節はすべて届く（2026-09-07）。**
 
 | 出力 | 受け手 |
 |---|---|
-| `datasources.*.folders` | **実装済み**。`apply_field_config()` へ渡す |
-| `datasources.*.calculations` | **実装済み**。`create_calculated_field()`、同名があれば `update()` で上書き |
-| `design.font` | **実装済み**。`set_default_font()` |
-| `design` のその他 | 未実装（J-5）。**ワークブック全体の書式を扱う API 自体が無い**。読み飛ばす |
-| `dashboard` | 未実装。受け手（`apply_config()` から `build_report()` を呼ぶ部分）がまだ無い。読み飛ばす |
+| `datasources.*.folders` | `apply_field_config()` へ渡す |
+| `datasources.*.calculations` | `create_calculated_field()`、同名があれば `update()` で上書き |
+| `design.font` | `set_default_font()` |
+| `design` の色・余白・適用ボタン | **`dashboard` を組むときに使う。** 単独では届かないので、`dashboard` が無い設定では名前をログに出して読み飛ばす |
+| `dashboard` | `draw_*()` でシートを作り、`build_report()` で並べ、`create_action()` を張る |
 
 受け手が無い節はエラーにせず、名前を警告ログへ出して読み飛ばす。画面は常に全節を
 出力するため、エラーにすると出力した YAML がそのまま使えなくなる。
+
+### ダッシュボードの組み立ては 2 段
+
+画面の 1 エリア = 1 シートで、`build_report()` は**既にあるシートを並べるだけ**。
+
+```
+1 段目  areas[].chart と params から draw_*() でシートを作る
+        フィルターのエリアは set_filter() で登録する（全シートを作ってから）
+2 段目  rows から struct を組み立てて build_report() へ渡す
+3 段目  areas[].action から create_action() を張る
+```
+
+段の名前が空、または重複しているときは `段1` / `段2` を割り当てる。`struct` のキーは
+一意でなければならないため。
 
 ### 2 周方式で同じ YAML を 2 度通すとき
 

@@ -27,13 +27,34 @@ _LOGGER = logging.getLogger(__name__)
 # 最上位に置ける節。ここに無いキーは読み飛ばす。
 _SECTIONS = ("design", "datasources", "dashboard")
 
-# design のうち受け手があるもの。残りは J-5（全体の書式 API）待ち。
+#: `design` のうち、ワークブック全体へ直接書けるもの。
 _DESIGN_APPLIED = ("font",)
+
+#: `design` のうち、`dashboard` を組むときに使うもの。単独では届かない。
+_DESIGN_FOR_DASHBOARD = (
+    "main_color",
+    "sub_color_1",
+    "sub_color_2",
+    "text_color",
+    "spacing",
+    "filter_apply_button",
+)
 
 _CALCULATION_KEYS = ("name", "formula", "datatype", "role", "folder")
 
 _DEFAULT_DATATYPE = "real"
 _DEFAULT_ROLE = "measure"
+
+#: `@main_color` のように design を参照できるキー。
+_DESIGN_TOKENS = ("main_color", "sub_color_1", "sub_color_2", "text_color")
+
+#: 余白の指定を `build_report(content_style=)` へ写す。
+_SPACING = {
+    "wide": {"margin": 8, "padding": 16},
+    "narrow": {"margin": 4, "padding": 8},
+}
+
+_AREA_KINDS = ("worksheet", "filter")
 
 
 def _load(config: str | Path | dict[str, Any]) -> dict[str, Any]:
@@ -55,7 +76,12 @@ def _skip(section: str, keys: Any) -> None:
     _LOGGER.warning("受け手が未実装のため読み飛ばします: %s", names)
 
 
-def _apply_design(workbook: TwbWorkbook, design: Any) -> None:
+def _apply_design(workbook: TwbWorkbook, design: Any, *, has_dashboard: bool) -> None:
+    """`design` のうちワークブック全体へ書けるものを適用する。
+
+    色・余白・フィルタの「適用」ボタンは**ダッシュボードを組むときに使う**もので、
+    ワークブック全体に書く先は無い。`dashboard` が無い設定では届かないので読み飛ばす。
+    """
     if not isinstance(design, dict):
         raise ValueError("design must be a mapping")
 
@@ -65,7 +91,10 @@ def _apply_design(workbook: TwbWorkbook, design: Any) -> None:
             raise ValueError("design.font must be a non-empty string")
         workbook.set_default_font(font.strip())
 
-    pending = [key for key in design if key not in _DESIGN_APPLIED]
+    consumed = set(_DESIGN_APPLIED)
+    if has_dashboard:
+        consumed |= set(_DESIGN_FOR_DASHBOARD)
+    pending = [key for key in design if key not in consumed]
     if pending:
         _skip("design", pending)
 
@@ -186,6 +215,213 @@ def _apply_datasources(
             _skip(f"datasources[{datasource.name}]", unknown)
 
 
+def _resolve_token(value: Any, design: dict[str, Any]) -> Any:
+    """`@main_color` をデザインルールの実際の値へ置き換える。"""
+    if not isinstance(value, str) or not value.startswith("@"):
+        return value
+    key = value[1:]
+    if key not in _DESIGN_TOKENS:
+        raise ValueError(f"unknown design token: {value}")
+    resolved = design.get(key)
+    if not resolved:
+        raise ValueError(f"design has no {key}, referenced as {value}")
+    return resolved
+
+
+def _int_or_none(value: Any, label: str) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} must be a number: {value!r}") from None
+
+
+def _area_datasource(workbook: TwbWorkbook, area: dict[str, Any]) -> TwbDatasource:
+    name = area.get("datasource")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("area needs a datasource")
+    matches = workbook.get_datasources(name=name)
+    if len(matches) != 1:
+        raise NotFoundError(f"datasource not found or ambiguous: {name}")
+    return matches[0]
+
+
+def _draw_area(workbook: TwbWorkbook, area: dict[str, Any], design: dict[str, Any]) -> str:
+    """エリア 1 つ分のワークシートを作る。
+
+    画面の 1 エリア = 1 シート。`build_report()` は既にあるシートを並べるだけなので、
+    先に `draw_*()` で作ってから並べる 2 段になる。
+    """
+    sheet = area.get("sheet")
+    if not isinstance(sheet, str) or not sheet.strip():
+        raise ValueError("worksheet area needs a sheet name")
+    chart = area.get("chart")
+    if not isinstance(chart, str) or not chart.startswith("draw_"):
+        raise ValueError(f"unknown chart: {chart!r}")
+    method = getattr(workbook, chart, None)
+    if method is None or not callable(method):
+        raise ValueError(f"unknown chart: {chart}")
+
+    params = area.get("params") or {}
+    if not isinstance(params, dict):
+        raise ValueError(f"params must be a mapping: {sheet}")
+    resolved = {
+        key: [_resolve_token(item, design) for item in value]
+        if isinstance(value, list)
+        else _resolve_token(value, design)
+        for key, value in params.items()
+    }
+    method(_area_datasource(workbook, area), name=sheet.strip(), **resolved)
+    return sheet.strip()
+
+
+def _area_field(area: dict[str, Any]) -> tuple[str, str]:
+    field = area.get("field")
+    if not isinstance(field, str) or not field.strip():
+        raise ValueError("filter area needs a field")
+    return (area["datasource"], field.strip())
+
+
+def _row_names(rows: list[dict[str, Any]]) -> list[str]:
+    """段の表示名を決める。名前が空でも重複しても、一意なキーにする。"""
+    names: list[str] = []
+    for index, row in enumerate(rows):
+        name = str(row.get("name") or "").strip() or f"段{index + 1}"
+        while name in names:
+            name = f"{name}_{index + 1}"
+        names.append(name)
+    return names
+
+
+def _apply_dashboard(
+    workbook: TwbWorkbook,
+    dashboard: dict[str, Any],
+    design: dict[str, Any],
+) -> None:
+    if not isinstance(dashboard, dict):
+        raise ValueError("dashboard must be a mapping")
+    name = str(dashboard.get("name") or "").strip()
+    if not name:
+        raise ValueError("dashboard needs a name")
+
+    rows = dashboard.get("rows") or []
+    if not isinstance(rows, list):
+        raise ValueError("dashboard rows must be a list")
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("dashboard row must be a mapping")
+        if not isinstance(row.get("areas") or [], list):
+            raise ValueError("row areas must be a list")
+    names = _row_names(rows)
+
+    # 1 周目: シートを作り、フィルタを登録する。
+    struct: dict[str, dict[str, Any]] = {}
+    actions: list[tuple[str, str, dict[str, Any]]] = []
+    filter_fields: list[tuple[str, str]] = []
+    for row_name, row in zip(names, rows):
+        items: list[dict[str, Any]] = []
+        for area in row.get("areas") or []:
+            if not isinstance(area, dict):
+                raise ValueError(f"area must be a mapping: {row_name}")
+            kind = area.get("kind")
+            if kind not in _AREA_KINDS:
+                raise ValueError(f"area kind must be one of {_AREA_KINDS}: {row_name}")
+            if kind == "filter":
+                # set_filter() は既にあるワークシートへスライスを足す。すべての
+                # シートを作り終えてから呼ぶ（フィルタの段が先に来ても届くように）。
+                field = _area_field(area)
+                filter_fields.append(field)
+                items.append({"kind": "filter", "field": field})
+                continue
+            sheet = _draw_area(workbook, area, design)
+            width = _int_or_none(area.get("width"), "area width")
+            if width is None:
+                items.append({"kind": "worksheet", "sheet": sheet})
+            else:
+                items.append(
+                    {"kind": "worksheet", "sheets": [sheet], "fixed_size": width}
+                )
+            if area.get("action"):
+                actions.append((sheet, area["datasource"], area["action"]))
+        item_spec: dict[str, Any] = {"items": items}
+        height = _int_or_none(row.get("height"), "row height")
+        if height is not None:
+            item_spec["height"] = height
+        struct[row_name] = item_spec
+
+    for field in filter_fields:
+        workbook.set_filter(field)
+
+    # 2 周目: ダッシュボードを作って並べる。
+    header = dashboard.get("header") or {}
+    if not isinstance(header, dict):
+        raise ValueError("dashboard header must be a mapping")
+    content_style = _SPACING.get(str(design.get("spacing") or "wide"))
+    if content_style is None:
+        raise ValueError(f"design.spacing must be one of {tuple(_SPACING)}")
+
+    connected = workbook.create_dashboard(
+        name=name,
+        width=_int_or_none(dashboard.get("width"), "dashboard width") or 1200,
+        height=_int_or_none(dashboard.get("height"), "dashboard height") or 800,
+    )
+    build_options: dict[str, Any] = {"content_style": dict(content_style)}
+    if str(header.get("title") or "").strip():
+        build_options["header_title"] = header["title"].strip()
+    header_height = _int_or_none(header.get("height"), "header height")
+    if header_height is not None:
+        build_options["header_height"] = header_height
+    if header.get("background_color"):
+        build_options["header_background_color"] = header["background_color"]
+    if header.get("font_color"):
+        build_options["header_font_color"] = header["font_color"]
+    if design.get("filter_apply_button"):
+        build_options["filter_apply_button"] = True
+
+    connected.build_report(dashboard_name=name, struct=struct, **build_options)
+    _apply_actions(connected, actions)
+
+
+def _apply_actions(
+    dashboard: Any,
+    actions: list[tuple[str, str, dict[str, Any]]],
+) -> None:
+    """エリアに付いたアクションを張る。名前は画面が出さないので組み立てる。"""
+    used: set[str] = set()
+    for sheet, datasource, action in actions:
+        if not isinstance(action, dict):
+            raise ValueError(f"action must be a mapping: {sheet}")
+        kind = action.get("type")
+        if kind not in {"filter", "url"}:
+            raise ValueError(f"action type must be 'filter' or 'url': {sheet}")
+        label = f"{sheet} で絞り込む" if kind == "filter" else f"{sheet} からリンク"
+        candidate, index = label, 1
+        while candidate in used:
+            index += 1
+            candidate = f"{label}{index}"
+        used.add(candidate)
+
+        if kind == "url":
+            dashboard.create_action(
+                kind="url", name=candidate, source=sheet, url=action.get("url") or ""
+            )
+            continue
+        target = str(action.get("target") or "").strip()
+        field = str(action.get("field") or "").strip()
+        if not target:
+            raise ValueError(f"filter action needs a target sheet: {sheet}")
+        if not field:
+            raise ValueError(f"filter action needs a field: {sheet}")
+        dashboard.create_action(
+            kind="filter",
+            name=candidate,
+            source=sheet,
+            targets=[target],
+            field=(datasource, field),
+        )
+
+
 def apply_workbook_config(
     workbook: TwbWorkbook,
     config: str | Path | dict[str, Any],
@@ -198,17 +434,15 @@ def apply_workbook_config(
     if unknown:
         _skip("", unknown)
 
+    dashboard = data.get("dashboard")
     design = data.get("design")
     if design is not None:
-        _apply_design(workbook, design)
+        _apply_design(workbook, design, has_dashboard=bool(dashboard))
 
     datasources = data.get("datasources")
     if datasources:
         _apply_datasources(workbook, datasources, field_grouping=field_grouping)
 
-    if data.get("dashboard"):
-        _LOGGER.warning(
-            "受け手が未実装のため読み飛ばします: dashboard"
-            "（K-1 / H-10 / H-1 の後に実装する）"
-        )
+    if dashboard:
+        _apply_dashboard(workbook, dashboard, design if isinstance(design, dict) else {})
     return workbook

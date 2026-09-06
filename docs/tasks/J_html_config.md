@@ -150,19 +150,17 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 読み取りは前からあり、書き込みを足した（`add_filter(show_apply=)` /
 `TwbDashboardZone.update(show_apply=)` / `build_report(filter_apply_button=)`）。
 
-### D9. `dashboard` セクションと `build_report()` の対応
-
-**前提はすべて揃った（2026-09-07）。**
+### ~~D9. `dashboard` セクションと `build_report()` の対応~~ → 完了（2026-09-07）
 
 | 前提 | 状態 |
 |---|---|
-| `struct` の形（K-1） | 完了。区分値 `kind` で制御する |
+| `struct` の形（K-1） | 完了。区分値 `kind` を項目ごとに持つ |
 | アクションの作成（H-1） | 完了。フィルタと URL の 2 種 |
 | フィルタの「適用」ボタン（J-5） | 完了 |
 
-**残っているのは受け手そのもの。** 画面の 1 エリア = 1 シートなので、
-`draw_*` でシートを作ってから `build_report()` で並べる 2 段になる。
-エリアの px 幅を `build_report()` がどう受けるかは未確認。
+受け手は `_apply_dashboard()`。`draw_*()` でシートを作り、`set_filter()` を呼び、
+`build_report()` で並べ、`create_action()` を張る。エリアの px 幅は 1 枚の列
+（`{"kind": "worksheet", "sheets": [名前], "fixed_size": 幅}`）として渡す。
 
 ## 作業の順番
 
@@ -172,4 +170,4 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 | 2 | `datasources.*.calculations` の適用 | — | **完了** |
 | 3 | `design.font` の適用 | — | **完了** |
 | 4 | `design` のその他 | 届け先は `dashboard` の適用と同じ | 5 に統合 |
-| 5 | `dashboard` の適用（色・余白・適用ボタン・アクションの流し込みを含む） | 前提はすべて完了 | **未着手。ここが最後** |
+| 5 | `dashboard` の適用（色・余白・適用ボタン・アクションの流し込みを含む） | — | **完了 2026-09-07** |

@@ -48,13 +48,19 @@ wb.apply_config("twbpatch_config.yaml")
 wb.save("output.twb", overwrite=True)
 ```
 
-適用されるのは全体のフォント（`design.font`）と、データソースごとの表示名・フォルダ
-（`datasources.*.folders`）・計算フィールド（`datasources.*.calculations`）です。
-計算フィールドは同名があれば式・データ型・役割・フォルダを上書きします。
+適用されるのは次のとおりです。
 
-**全体の色・余白とダッシュボードの構成はまだ適用しません。** 受け手が無いので、
-名前を警告ログへ出して読み飛ばします。詳細は
-[docs/html_screen_spec.md](docs/html_screen_spec.md)。
+| 節 | 何をするか |
+|---|---|
+| `design.font` | ワークブック全体の既定フォント |
+| `datasources.*.folders` | 表示名の変更とフォルダ分類 |
+| `datasources.*.calculations` | 計算フィールドの作成。同名があれば式・データ型・役割・フォルダを上書き |
+| `dashboard` | シートを作って並べ、アクションを張る |
+
+`design` の色・余白・フィルターの「適用」ボタンは、**ダッシュボードを組むときに使います**。
+グラフの色に `@main_color` と書くと、デザインルールの色コードに置き換わります。
+`dashboard` が無い設定では届かないので、名前を警告ログへ出して読み飛ばします。
+詳細は [docs/html_screen_spec.md](docs/html_screen_spec.md)。
 
 計算フィールドを画面で定義した場合は、**一度 `.twb` へ焼き直してから画面を出し直します。**
 そうすると 2 周目にはグラフの項目候補として選べるようになります。
