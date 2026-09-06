@@ -127,6 +127,8 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 |---|---|---|---|
 | `get_fields` | `*, id=None, name=None` | `list[TwbField]` | 所有フィールド一覧 |
 | `get_folders` | `*, id=None, name=None` | `list[TwbFolder]` | フォルダ一覧 |
+| `get_drill_paths` | `*, id=None, name=None` | `list[TwbDrillPath]` | 階層（ドリルパス）一覧 |
+| `create_drill_path` | `*, name: str, fields: list[FieldInput], folder=None` | `TwbDrillPath` | 階層を1つ作成。`fields` の順がドリルの階層順。2つ以上が要る。`folder=` を渡すと `type="drillpath"` の項目として入れ、**階層に入れたフィールドの `folder-item` は取り除く** |
 | `get_relations` | `*, id=None, name=None` | `list[TwbRelation]` | 物理テーブルの結合構造 |
 | `get_relationships` | `*, id=None, name=None` | `list[TwbRelationship]` | 論理リレーションシップ |
 | `create_folder` | `*, name: str` | `TwbFolder` | フォルダを作成 |
@@ -365,6 +367,28 @@ struct={
 
 対象シートやフィールドを変えるときは、消して作り直す。組み立て直しになるため
 `TwbDashboardAction.update()` には含めない。
+
+### 3.8b `TwbDrillPath`
+
+データソースに置かれた階層（`drill-paths/drill-path[@name]`）。
+`<drill-path>` は `name` しか持たないため、**公開 `id` と `name` は同じ値**になる
+（Worksheet と同じ扱い、仕様 §3.5）。
+
+**変数**
+
+| 変数 | 型 | 説明 |
+|---|---|---|
+| `id` / `name` | `str` | 階層名。角括弧は付かない |
+| `datasource_id` | `str` | 所属データソースの `id` |
+| `field_ids` | `list[str]` | 並ぶフィールドの内部 ID。**ドリルの階層順** |
+
+**メソッド**
+
+| メソッド | 引数 | 戻り値 | 説明 |
+|---|---|---|---|
+| `get_fields` | — | `list[TwbField]` | 並ぶフィールド。順序は階層順で、XML の出現順ではない |
+| `update` | `*, name=UNSET, fields=UNSET` | `TwbDrillPath` | 改名するとフォルダの `folder-item` も追随する |
+| `delete` | — | `None` | 階層を消す。**含まれていたフィールドは消さない** |
 
 ### 3.9 `TwbDashboardContainer`
 

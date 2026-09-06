@@ -1017,6 +1017,7 @@ from twbpatch.models import TwbWorksheet   # 旧 dataclass
 ```
 
 - 対象は `TwbDatasource` / `TwbFolder` / `TwbParameter` / `TwbWorksheet` / `TwbWorksheetField` / `TwbDashboard` / `TwbDashboardZone` / `TwbDashboardAction` の 8 クラス。
+- `TwbDrillPath` は旧 dataclass に対応が無い新規クラス。`<drill-path>` が `name` しか持たないため、Worksheet と同じく `id == name` とする。
 - 旧 dataclass は `twbpatch.models` から引き続き import できる。改名も削除もしない。
 - 接続型モデルがまだ無いクラスは、引き続き `models.py` のものをトップレベルへ公開する。
 - `TwbWorkbook.list_*()` の戻り値は移行期のあいだ旧 dataclass のままとする。型注釈のために接続型モデルが必要な利用者は `get_*()` を使う。

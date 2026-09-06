@@ -4,7 +4,7 @@ import copy
 import logging
 import re
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import yaml
 from lxml import etree as ET
@@ -12,7 +12,21 @@ from lxml import etree as ET
 from .calculation import create_calculated_field_el, normalize_formula_for_datasource
 from .column import list_columns_from_datasource
 from .context import UNSET, ConnectedModel, WorkbookContext, _UnsetType, xml_equal
+from typing import TYPE_CHECKING
+
+from .drill_path import (
+    build_drill_path_element,
+    drill_path_field_ids,
+    ensure_drill_paths_element,
+    find_drill_path_element,
+    list_drill_path_elements,
+    remove_folder_items,
+    set_drill_path_fields,
+)
 from .datasource import datasource_elements, update_source_el
+if TYPE_CHECKING:  # pragma: no cover - 型注釈のためだけの import
+    from .field_input import FieldInput
+
 from .errors import (
     AmbiguousCaptionError,
     DetachedModelError,
@@ -295,6 +309,86 @@ class TwbDatasource(ConnectedModel):
                     )
                 )
         return result
+
+    def get_drill_paths(
+        self,
+        *,
+        id: str | None = None,
+        name: str | None = None,
+    ) -> list[TwbDrillPath]:
+        _validate_get_args(id, name)
+        result: list[TwbDrillPath] = []
+        for element in list_drill_path_elements(self._resolve_element()):
+            drill_id = element.get("name")
+            if not drill_id:
+                continue
+            if _matches(model_id=drill_id, model_name=drill_id, id=id, name=name):
+                result.append(TwbDrillPath(self._context, self._id, drill_id))
+        return result
+
+    def _resolve_drill_path_fields(self, fields: list[FieldInput]) -> list[str]:
+        """階層に並べるフィールドを内部 ID へ解決する。
+
+        並べた順がドリルの階層順になるので、順序を保つ。
+        """
+        # field_input は connected を import するので、ここで遅延 import する。
+        from .field_input import resolve_field_input
+
+        if not isinstance(fields, list) or len(fields) < 2:
+            raise ValueError("a drill path needs at least two fields")
+        field_ids: list[str] = []
+        for field in fields:
+            resolved = resolve_field_input(
+                self._context, field, datasources=[self], argument="drill path field"
+            )
+            if resolved.datasource_id != self._id:
+                raise ValueError("drill path fields must belong to the same datasource")
+            if resolved.id in field_ids:
+                raise ValueError(f"field is listed more than once: {resolved.id}")
+            field_ids.append(resolved.id)
+        return field_ids
+
+    def create_drill_path(
+        self,
+        *,
+        name: str,
+        fields: list[FieldInput],
+        folder: str | TwbFolder | None = None,
+    ) -> TwbDrillPath:
+        """階層を 1 つ作る。
+
+        `fields` の順がドリルの階層順になる（上から下へ）。2 つ以上が要る。
+
+        `folder=` を渡すと、そのフォルダへ `type="drillpath"` の項目として入れる。
+        **このとき、階層に入れたフィールドの `folder-item` は取り除く。**
+        Tableau がそう書くため（実測、`docs/backlog.md` L-2）。
+        """
+        name = name.strip() if isinstance(name, str) else name
+        if not isinstance(name, str) or not name:
+            raise ValueError("name must be a non-empty string")
+        datasource_el = self._resolve_element()
+        if find_drill_path_element(datasource_el, name) is not None:
+            raise ValueError(f"drill path name already exists: {name}")
+        field_ids = self._resolve_drill_path_fields(fields)
+        target_folder = self._resolve_folder(folder)
+
+        container = ensure_drill_paths_element(datasource_el)
+        container.append(build_drill_path_element(name, field_ids))
+        # 階層に入ったフィールドは個別の folder-item を持たなくなる。
+        remove_folder_items(datasource_el, field_ids)
+        if target_folder is not None:
+            folder_el = target_folder._resolve_element()
+            ET.SubElement(
+                folder_el, "folder-item", attrib={"name": name, "type": "drillpath"}
+            )
+        self._context.mark_dirty()
+        _LOGGER.info(
+            "階層を作成しました: datasource=%s, name=%s, fields=%s",
+            self.name,
+            name,
+            field_ids,
+        )
+        return TwbDrillPath(self._context, self._id, name)
 
     def get_folders(
         self,
@@ -1362,6 +1456,117 @@ class TwbField(ConnectedModel):
         if parent is None:
             raise DetachedModelError(f"field is detached: {self._id}")
         parent.remove(field_el)
+        self._context.mark_dirty()
+        self._detach()
+
+
+class TwbDrillPath(ConnectedModel):
+    """データソースに置かれた階層（`drill-paths/drill-path[@name]`）。
+
+    `<drill-path>` は `name` しか持たない。表示名がそのまま識別子を兼ねるため、
+    公開 `id` と `name` は同じ値になる（Worksheet と同じ扱い、仕様 §3.5）。
+    """
+
+    def __init__(self, context: WorkbookContext, datasource_id: str, drill_path_id: str):
+        super().__init__(context)
+        self._datasource_id = datasource_id
+        self._id = drill_path_id
+
+    @property
+    def datasource_id(self) -> str:
+        self._ensure_attached()
+        return self._datasource_id
+
+    def _resolve_datasource_element(self) -> ET._Element:
+        self._ensure_attached()
+        hits = self._context.tree.getroot().xpath(
+            "/workbook/datasources/datasource[@name=$id]",
+            id=self._datasource_id,
+        )
+        if not hits:
+            self._detach()
+            raise DetachedModelError(f"datasource is detached: {self._datasource_id}")
+        return hits[0]
+
+    def _resolve_element(self) -> ET._Element:
+        element = find_drill_path_element(self._resolve_datasource_element(), self._id)
+        if element is None:
+            self._detach()
+            raise DetachedModelError(f"drill path is detached: {self._id}")
+        return element
+
+    @property
+    def id(self) -> str:
+        self._resolve_element()
+        return self._id
+
+    @property
+    def name(self) -> str:
+        return self.id
+
+    @property
+    def field_ids(self) -> list[str]:
+        """階層に並ぶフィールドの内部 ID。ドリルの階層順。"""
+        return drill_path_field_ids(self._resolve_element())
+
+    def get_fields(self) -> list[TwbField]:
+        """階層に並ぶフィールド。**並び順は階層の順**で、XML の出現順ではない。"""
+        return [
+            TwbField(self._context, self._datasource_id, field_id)
+            for field_id in self.field_ids
+        ]
+
+    def update(
+        self,
+        *,
+        name: str | _UnsetType = UNSET,
+        fields: list[FieldInput] | _UnsetType = UNSET,
+    ) -> TwbDrillPath:
+        datasource = TwbDatasource(self._context, self._datasource_id)
+        datasource_el = self._resolve_datasource_element()
+
+        resolved_name = self._id
+        if name is not UNSET:
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("name must be a non-empty string")
+            resolved_name = name.strip()
+            if resolved_name != self._id and find_drill_path_element(
+                datasource_el, resolved_name
+            ) is not None:
+                raise ValueError(f"drill path name already exists: {resolved_name}")
+
+        field_ids: list[str] | _UnsetType = UNSET
+        if fields is not UNSET:
+            field_ids = datasource._resolve_drill_path_fields(fields)
+
+        element = self._resolve_element()
+        updated = copy.deepcopy(element)
+        if name is not UNSET:
+            updated.set("name", resolved_name)
+        if field_ids is not UNSET:
+            set_drill_path_fields(updated, field_ids)
+
+        if _replace_if_changed(element, updated, self._context) and name is not UNSET:
+            # フォルダは階層名で参照する。改名したら追随させる。
+            for item in datasource_el.xpath(
+                ".//*[local-name()='folder-item'][@type='drillpath'][@name=$old]",
+                old=self._id,
+            ):
+                item.set("name", resolved_name)
+            self._id = resolved_name
+        elif name is not UNSET:
+            self._id = resolved_name
+        return self
+
+    def delete(self) -> None:
+        """階層を消す。**含まれていたフィールドは消さない。**"""
+        datasource_el = self._resolve_datasource_element()
+        element = self._resolve_element()
+        parent = element.getparent()
+        if parent is None:
+            raise DetachedModelError(f"drill path is detached: {self._id}")
+        parent.remove(element)
+        remove_folder_items(datasource_el, [self._id])
         self._context.mark_dirty()
         self._detach()
 

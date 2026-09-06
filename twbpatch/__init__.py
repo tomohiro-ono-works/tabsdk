@@ -20,6 +20,7 @@ from .export import write_dicts_csv
 from .connected import (
     TwbDatasource,
     TwbField,
+    TwbDrillPath,
     TwbFolder,
     TwbRelation,
     TwbRelationship,
@@ -74,6 +75,7 @@ __all__ = [
     "TwbPane",
     "TwbDashboardContainer",
     "TwbDatasource",
+    "TwbDrillPath",
     "TwbFolder",
     "TwbParameter",
     "TwbRelation",
