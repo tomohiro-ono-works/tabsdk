@@ -158,6 +158,17 @@ def test_export_html_draw_specs_come_from_real_signatures(tmp_path) -> None:
     assert 'if (role && field.role !== role) return;' in html
     assert "if (field.hidden) return;" in html
 
+    # 集計方法は画面に出さない。役割とデータ型から自動で決まるため
+    assert [
+        (chart, param["name"])
+        for chart, spec in specs.items()
+        for param in spec["params"]
+        if "aggregation" in param["name"]
+    ] == []
+    # 必須だけ前面に出し、残りは詳細設定に畳む
+    assert 'el("summary", { text: "詳細設定（"' in html
+    assert "specs.filter(spec => spec.required)" in html
+
     # フィールドを取る引数はすべて役割が決まっていること
     assert [
         (chart, param["name"])

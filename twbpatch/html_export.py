@@ -78,6 +78,10 @@ button.mini.danger { color: #b00020; border-color: #e6b8bf; }
 .fields { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .params { display: flex; gap: 10px; flex-wrap: wrap; border-top: 1px dashed #d8dde5;
           padding-top: 8px; margin-bottom: 6px; }
+details.more > summary { cursor: pointer; font-size: 11px; color: #46536e; padding: 4px 0;
+                        user-select: none; }
+details.more > summary:hover { color: #2f3b52; }
+details.more > .params { border-top: 0; }
 label.f { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #555; }
 label.f input[type=text], label.f select { font-size: 12px; padding: 3px 6px; max-width: 190px; }
 label.f select[multiple] { min-height: 56px; }
@@ -567,7 +571,8 @@ function buildYaml() {
   captureCurrent();
   let out = "# twbpatch 設定ファイル\n";
   out += "# 受け手の実装状況: datasources.*.folders のみ実装済み。\n";
-  out += "# design / calculations / dashboard は案（Python 側は未実装）。\n\n";
+  out += "# design / calculations / dashboard は案（Python 側は未実装）。\n";
+  out += "# 集計方法は画面で指定しない。役割とデータ型から自動で決める。\n\n";
   out += designYaml();
   out += "\ndatasources:\n";
   let wrote = false;
@@ -760,9 +765,20 @@ function renderArea(row, area) {
     card.appendChild(head);
 
     const specs = (DRAW_SPECS[area.chart] || {}).params || [];
-    if (specs.length) {
+    const required = specs.filter(spec => spec.required);
+    const optional = specs.filter(spec => !spec.required);
+    if (required.length) {
       card.appendChild(el("div", { class: "params" },
-        specs.map(spec => paramControl(area, spec))));
+        required.map(spec => paramControl(area, spec))));
+    }
+    if (optional.length) {
+      const more = el("details", { class: "more" }, [
+        el("summary", { text: "詳細設定（" + optional.length + "）" }),
+        el("div", { class: "params" }, optional.map(spec => paramControl(area, spec))),
+      ]);
+      if (area.moreOpen) more.setAttribute("open", "open");
+      more.addEventListener("toggle", () => { area.moreOpen = more.open; });
+      card.appendChild(more);
     }
   }
 
@@ -1103,7 +1119,13 @@ FONT_CHOICES = (
 
 
 #: グラフの引数のうち、画面に出さないもの。
+#: 集計方法（`*aggregation`）は出さない。フィールドの役割とデータ型が分かっていれば
+#: `draw.py` の `_auto_metric_aggregation()` が決められるため、人が選ぶ必要がない。
 _DRAW_SKIP = {"self", "datasource", "name"}
+
+
+def _is_skipped(name: str) -> bool:
+    return name in _DRAW_SKIP or name == "aggregation" or name.endswith("_aggregation")
 
 #: グラフ種類の表示名。仕様 §6.14 の説明に合わせる。
 _CHART_LABELS = {
@@ -1213,7 +1235,7 @@ def _draw_specs() -> dict[str, dict[str, Any]]:
         signature = inspect.signature(getattr(TwbWorkbook, method_name))
         params = []
         for parameter in signature.parameters.values():
-            if parameter.name in _DRAW_SKIP:
+            if _is_skipped(parameter.name):
                 continue
             annotation = str(parameter.annotation)
             params.append(
