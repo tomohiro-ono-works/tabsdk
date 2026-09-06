@@ -58,10 +58,27 @@ table.dragging { user-select: none; }
 .grid { display: grid; grid-template-columns: 180px 1fr; gap: 8px 12px; align-items: center;
         max-width: 520px; }
 .errors { color: #b00020; font-size: 12px; margin: 8px 0 0; white-space: pre-wrap; }
-ul.tree { list-style: none; margin: 4px 0; padding-left: 18px; font-size: 12px; }
-ul.tree > li { margin: 2px 0; }
 .tag { font-size: 11px; color: #666; }
 .empty { color: #888; font-size: 12px; }
+button.mini { border: 1px solid #c3cad6; background: #fff; border-radius: 4px; cursor: pointer;
+              width: 26px; height: 26px; padding: 0; font-size: 12px; line-height: 1; }
+button.mini:hover { background: #eef1f6; }
+button.mini.danger { color: #b00020; border-color: #e6b8bf; }
+.spacer { flex: 1; }
+.row-card { border: 1px solid #c9d2e0; border-radius: 6px; margin-bottom: 12px; background: #fbfcfe; }
+.row-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            padding: 8px 12px; background: #eef1f6; border-radius: 6px 6px 0 0; }
+.row-no { font-weight: 600; font-size: 12px; color: #46536e; white-space: nowrap; }
+.areas { display: flex; gap: 10px; padding: 12px; overflow-x: auto; align-items: flex-start; }
+.area { min-width: 280px; flex: 1; border: 1px solid #d8dde5; border-radius: 6px;
+        background: #fff; padding: 10px; }
+.area-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.fields { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.params { display: flex; gap: 10px; flex-wrap: wrap; border-top: 1px dashed #d8dde5;
+          padding-top: 8px; margin-bottom: 6px; }
+label.f { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #555; }
+label.f input[type=text], label.f select { font-size: 12px; padding: 3px 6px; max-width: 190px; }
+label.f select[multiple] { min-height: 56px; }
 """
 
 _SCRIPT = r"""
@@ -469,14 +486,17 @@ document.getElementById("calc-delete").addEventListener("click", () => {
   table.grid.commit();
 });
 
-/* ---- 折り畳み（片方を開くともう片方が閉じる） ---- */
-const ACCORDIONS = ["acc-rename", "acc-calc"];
-ACCORDIONS.forEach(id => {
-  const panel = document.getElementById(id);
+/* ---- 折り畳み。データソースの 2 表だけ排他にする ---- */
+const EXCLUSIVE = ["acc-rename", "acc-calc"];
+document.querySelectorAll(".acc").forEach(panel => {
   panel.querySelector(".acc-head").addEventListener("click", () => {
     const close = panel.classList.contains("open");
-    ACCORDIONS.forEach(other => {
-      document.getElementById(other).classList.toggle("open", !close && other === id);
+    if (EXCLUSIVE.indexOf(panel.id) < 0) {
+      panel.classList.toggle("open", !close);
+      return;
+    }
+    EXCLUSIVE.forEach(other => {
+      document.getElementById(other).classList.toggle("open", !close && other === panel.id);
     });
   });
 });
@@ -545,7 +565,7 @@ function buildYaml() {
   captureCurrent();
   let out = "# twbpatch 設定ファイル\n";
   out += "# 受け手の実装状況: datasources.*.folders のみ実装済み。\n";
-  out += "# design と datasources.*.calculations は案（Python 側は未実装）。\n\n";
+  out += "# design / calculations / dashboard は案（Python 側は未実装）。\n\n";
   out += designYaml();
   out += "\ndatasources:\n";
   let wrote = false;
@@ -583,6 +603,7 @@ function buildYaml() {
     }
   });
   if (!wrote) out += "  {}\n";
+  out += "\n" + dashboardYaml();
   return out;
 }
 
@@ -602,37 +623,283 @@ document.getElementById("yaml-download").addEventListener("click", () => {
   download("twbpatch_config.yaml", buildYaml());
 });
 
-/* ---- ダッシュボードタブ（読み取り専用） ---- */
-function containerNode(container) {
-  const label = (container.direction === "horz" ? "横配置" : "縦段組")
-    + " " + (container.name || "(無名)");
-  const children = [];
-  (container.containers || []).forEach(c => children.push(containerNode(c)));
-  (container.zones || []).forEach(z => children.push(el("li", {
-    text: "エリア: " + (z.worksheet_id ? ("シート " + z.worksheet_id) : (z.name || "(空)"))
-  })));
-  return el("li", {}, [
-    el("span", { text: label }),
-    children.length ? el("ul", { class: "tree" }, children)
-                    : el("span", { class: "tag", text: " (空)" }),
+/* ---- ダッシュボードタブ（新規作成） ---- */
+const DRAW_SPECS = JSON.parse(document.getElementById("draw-specs").textContent);
+const CHART_TYPES = Object.keys(DRAW_SPECS);
+
+const DASH = { rows: [] };
+let rowSeq = 0;
+
+function newArea() {
+  return {
+    id: ++rowSeq,
+    kind: "chart",
+    width: "",
+    sheet: "",
+    chart: CHART_TYPES[0] || "",
+    datasource: 0,
+    params: {},
+    filterField: "",
+    action: { enabled: false, type: "filter", target: "" },
+  };
+}
+function newRow() {
+  return { id: ++rowSeq, name: "", height: "", areas: [newArea()] };
+}
+
+function dsOptions(selected) {
+  return DATA.datasources.map((ds, i) =>
+    el("option", Object.assign({ value: String(i), text: ds.name || ds.id },
+                               Number(selected) === i ? { selected: "selected" } : {}))
+  );
+}
+function fieldOptions(dsIndex, selected) {
+  const ds = DATA.datasources[Number(dsIndex) || 0];
+  const options = [el("option", { value: "", text: "（選ぶ）" })];
+  ((ds && ds.fields) || []).forEach(field => {
+    const name = field.name || "";
+    options.push(el("option", Object.assign({ value: name, text: name },
+                                            name === selected ? { selected: "selected" } : {})));
+  });
+  return options;
+}
+
+function labeled(text, control) {
+  return el("label", { class: "f" }, [el("span", { text: text }), control]);
+}
+
+function paramControl(area, spec) {
+  const value = area.params[spec.name] === undefined ? "" : area.params[spec.name];
+  let control;
+  if (spec.kind === "bool") {
+    control = el("input", Object.assign({ type: "checkbox" }, value ? { checked: "checked" } : {}));
+    control.addEventListener("change", () => { area.params[spec.name] = control.checked; });
+  } else if (spec.kind === "field" || spec.kind === "fields") {
+    control = el("select", {}, fieldOptions(area.datasource, value));
+    if (spec.kind === "fields") control.setAttribute("multiple", "multiple");
+    control.addEventListener("change", () => {
+      area.params[spec.name] = spec.kind === "fields"
+        ? Array.from(control.selectedOptions).map(o => o.value).filter(Boolean)
+        : control.value;
+    });
+  } else if (spec.kind === "color") {
+    control = el("input", { type: "color", value: value || "#4a7dff" });
+    control.addEventListener("input", () => { area.params[spec.name] = control.value; });
+  } else {
+    control = el("input", { type: "text", value: value });
+    control.addEventListener("input", () => { area.params[spec.name] = control.value.trim(); });
+  }
+  return labeled(spec.name + (spec.required ? " *" : ""), control);
+}
+
+function renderArea(row, area) {
+  const card = el("div", { class: "area" });
+
+  const kind = el("select", {}, [
+    el("option", Object.assign({ value: "chart", text: "グラフ" },
+                               area.kind === "chart" ? { selected: "selected" } : {})),
+    el("option", Object.assign({ value: "filter", text: "フィルター" },
+                               area.kind === "filter" ? { selected: "selected" } : {})),
+  ]);
+  kind.addEventListener("change", () => { area.kind = kind.value; renderRows(); });
+
+  const width = el("input", { type: "text", value: area.width, placeholder: "自動" });
+  width.addEventListener("input", () => { area.width = width.value.trim(); });
+
+  const left = el("button", { class: "mini", text: "←", title: "左へ" });
+  const right = el("button", { class: "mini", text: "→", title: "右へ" });
+  const remove = el("button", { class: "mini danger", text: "×", title: "エリアを削除" });
+  left.addEventListener("click", () => moveArea(row, area, -1));
+  right.addEventListener("click", () => moveArea(row, area, 1));
+  remove.addEventListener("click", () => {
+    row.areas = row.areas.filter(a => a !== area);
+    renderRows();
+  });
+
+  card.appendChild(el("div", { class: "area-head" }, [
+    kind, labeled("幅 (px)", width),
+    el("span", { class: "spacer" }), left, right, remove,
+  ]));
+
+  const dsSelectEl = el("select", {}, dsOptions(area.datasource));
+  dsSelectEl.addEventListener("change", () => {
+    area.datasource = Number(dsSelectEl.value);
+    area.params = {};
+    area.filterField = "";
+    renderRows();
+  });
+
+  if (area.kind === "filter") {
+    const field = el("select", {}, fieldOptions(area.datasource, area.filterField));
+    field.addEventListener("change", () => { area.filterField = field.value; });
+    card.appendChild(el("div", { class: "fields" }, [
+      labeled("データソース", dsSelectEl),
+      labeled("フィールド", field),
+    ]));
+  } else {
+    const sheet = el("input", { type: "text", value: area.sheet, placeholder: "シート名" });
+    sheet.addEventListener("input", () => { area.sheet = sheet.value.trim(); });
+
+    const chart = el("select", {}, CHART_TYPES.map(type =>
+      el("option", Object.assign({ value: type, text: type },
+                                 type === area.chart ? { selected: "selected" } : {}))));
+    chart.addEventListener("change", () => { area.chart = chart.value; area.params = {}; renderRows(); });
+
+    const head = el("div", { class: "fields" }, [
+      labeled("シート名", sheet),
+      labeled("グラフ種類", chart),
+      labeled("データソース", dsSelectEl),
+    ]);
+    card.appendChild(head);
+
+    const specs = DRAW_SPECS[area.chart] || [];
+    if (specs.length) {
+      card.appendChild(el("div", { class: "params" },
+        specs.map(spec => paramControl(area, spec))));
+    }
+  }
+
+  /* アクション設定 */
+  const enabled = el("input", Object.assign({ type: "checkbox" },
+                                            area.action.enabled ? { checked: "checked" } : {}));
+  enabled.addEventListener("change", () => { area.action.enabled = enabled.checked; renderRows(); });
+  const actionBox = el("div", { class: "fields" }, [
+    labeled("アクション", enabled),
+  ]);
+  if (area.action.enabled) {
+    const type = el("select", {}, ["filter", "highlight", "url"].map(value =>
+      el("option", Object.assign({ value: value, text: value },
+                                 value === area.action.type ? { selected: "selected" } : {}))));
+    type.addEventListener("change", () => { area.action.type = type.value; });
+    const target = el("input", { type: "text", value: area.action.target,
+                                 placeholder: "対象シート名 / URL" });
+    target.addEventListener("input", () => { area.action.target = target.value.trim(); });
+    actionBox.appendChild(labeled("種類", type));
+    actionBox.appendChild(labeled("対象", target));
+  }
+  card.appendChild(actionBox);
+  return card;
+}
+
+function moveArea(row, area, delta) {
+  const index = row.areas.indexOf(area);
+  const next = index + delta;
+  if (next < 0 || next >= row.areas.length) return;
+  row.areas.splice(index, 1);
+  row.areas.splice(next, 0, area);
+  renderRows();
+}
+function moveRow(row, delta) {
+  const index = DASH.rows.indexOf(row);
+  const next = index + delta;
+  if (next < 0 || next >= DASH.rows.length) return;
+  DASH.rows.splice(index, 1);
+  DASH.rows.splice(next, 0, row);
+  renderRows();
+}
+
+function renderRow(row, index) {
+  const name = el("input", { type: "text", value: row.name, placeholder: "段の名前" });
+  name.addEventListener("input", () => { row.name = name.value.trim(); });
+  const height = el("input", { type: "text", value: row.height, placeholder: "自動" });
+  height.addEventListener("input", () => { row.height = height.value.trim(); });
+
+  const up = el("button", { class: "mini", text: "↑", title: "上へ" });
+  const down = el("button", { class: "mini", text: "↓", title: "下へ" });
+  const remove = el("button", { class: "mini danger", text: "×", title: "段を削除" });
+  const addArea = el("button", { class: "act", text: "エリアを追加" });
+  up.addEventListener("click", () => moveRow(row, -1));
+  down.addEventListener("click", () => moveRow(row, 1));
+  remove.addEventListener("click", () => {
+    if (row.areas.some(a => a.sheet || a.filterField)
+        && !confirm("この段を削除します。よろしいですか。")) return;
+    DASH.rows = DASH.rows.filter(r => r !== row);
+    renderRows();
+  });
+  addArea.addEventListener("click", () => { row.areas.push(newArea()); renderRows(); });
+
+  return el("div", { class: "row-card" }, [
+    el("div", { class: "row-head" }, [
+      el("span", { class: "row-no", text: (index + 1) + "段目" }),
+      labeled("名前", name), labeled("高さ (px)", height),
+      el("span", { class: "spacer" }), addArea, up, down, remove,
+    ]),
+    el("div", { class: "areas" }, row.areas.map(area => renderArea(row, area))),
   ]);
 }
-const dashRoot = document.getElementById("dash-root");
-if (!DATA.dashboards.length) {
-  dashRoot.appendChild(el("p", { class: "empty", text: "ダッシュボードがありません。" }));
+
+function renderRows() {
+  const root = document.getElementById("rows-root");
+  root.innerHTML = "";
+  if (!DASH.rows.length) {
+    root.appendChild(el("p", { class: "empty", text: "段がありません。「段を追加」から始める。" }));
+    return;
+  }
+  DASH.rows.forEach((row, index) => root.appendChild(renderRow(row, index)));
 }
-DATA.dashboards.forEach(dashboard => {
-  const items = (dashboard.containers || []).map(containerNode);
-  dashRoot.appendChild(el("div", { class: "panel" }, [
-    el("h2", { text: dashboard.name || dashboard.id }),
-    el("p", { class: "note",
-      text: "サイズ: " + (dashboard.width || "?") + " x " + (dashboard.height || "?")
-            + " / シート " + (dashboard.worksheets || []).length + " 件"
-            + " / アクション " + (dashboard.actions || []).length + " 件" }),
-    items.length ? el("ul", { class: "tree" }, items)
-                 : el("p", { class: "empty", text: "コンテナがありません。" }),
-  ]));
+
+document.getElementById("row-add").addEventListener("click", () => {
+  DASH.rows.push(newRow());
+  renderRows();
 });
+["h-bg", "h-fg"].forEach(bindColor);
+renderRows();
+
+function dashboardYaml() {
+  const value = id => document.getElementById(id).value.trim();
+  let out = "dashboard:\n";
+  out += "  name: " + yamlKey(value("db-name")) + "\n";
+  out += "  width: " + yamlKey(value("db-width")) + "\n";
+  out += "  height: " + yamlKey(value("db-height")) + "\n";
+  out += "  header:\n";
+  out += "    title: " + yamlKey(value("h-title")) + "\n";
+  out += "    height: " + yamlKey(value("h-height")) + "\n";
+  out += "    background_color: " + yamlKey(value("h-bg")) + "\n";
+  out += "    font_color: " + yamlKey(value("h-fg")) + "\n";
+  out += "  rows:\n";
+  if (!DASH.rows.length) { out += "    []\n"; return out; }
+  DASH.rows.forEach(row => {
+    out += "    - name: " + yamlKey(row.name) + "\n";
+    if (row.height) out += "      height: " + yamlKey(row.height) + "\n";
+    out += "      areas:\n";
+    row.areas.forEach(area => {
+      const ds = DATA.datasources[area.datasource];
+      out += "        - kind: " + yamlKey(area.kind) + "\n";
+      out += "          datasource: " + yamlKey(ds ? (ds.name || ds.id) : "") + "\n";
+      if (area.width) out += "          width: " + yamlKey(area.width) + "\n";
+      if (area.kind === "filter") {
+        out += "          field: " + yamlKey(area.filterField) + "\n";
+      } else {
+        out += "          sheet: " + yamlKey(area.sheet) + "\n";
+        out += "          chart: " + yamlKey(area.chart) + "\n";
+        const names = Object.keys(area.params).filter(key => {
+          const v = area.params[key];
+          return v !== "" && v !== undefined && !(Array.isArray(v) && !v.length);
+        });
+        if (names.length) {
+          out += "          params:\n";
+          names.forEach(key => {
+            const v = area.params[key];
+            if (Array.isArray(v)) {
+              out += "            " + key + ":\n";
+              v.forEach(item => { out += "              - " + yamlKey(item) + "\n"; });
+            } else if (typeof v === "boolean") {
+              out += "            " + key + ": " + (v ? "true" : "false") + "\n";
+            } else {
+              out += "            " + key + ": " + yamlKey(v) + "\n";
+            }
+          });
+        }
+      }
+      if (area.action.enabled) {
+        out += "          action:\n";
+        out += "            type: " + yamlKey(area.action.type) + "\n";
+        out += "            target: " + yamlKey(area.action.target) + "\n";
+      }
+    });
+  });
+  return out;
+}
 
 refreshDatasource();
 enableGrid(document.getElementById("rename-table"));
@@ -734,10 +1001,48 @@ _BODY = """
 
 <section id="tab-dashboard">
   <div class="panel">
-    <h2>ダッシュボード <span class="todo">読み取り専用</span></h2>
-    <p class="note">編集画面は未着手。コンテナ階層の形が確定してから作る。</p>
+    <h2>ダッシュボード <span class="todo">受け手は未実装</span></h2>
+    <p class="note">新しく組むダッシュボードの構成を作る。既存ダッシュボードの読み込み編集はしない。</p>
+    <div class="grid">
+      <label for="db-name">ダッシュボード名</label>
+      <input type="text" id="db-name" value="ダッシュボード">
+      <label for="db-width">幅 (px)</label>
+      <input type="text" id="db-width" value="1600">
+      <label for="db-height">高さ (px)</label>
+      <input type="text" id="db-height" value="900">
+    </div>
   </div>
-  <div id="dash-root"></div>
+
+  <div class="panel acc open" id="acc-header">
+    <h2 class="acc-head">ヘッダー</h2>
+    <div class="acc-body">
+      <div class="grid">
+        <label for="h-title">タイトル</label>
+        <input type="text" id="h-title" value="">
+        <label for="h-height">高さ (px)</label>
+        <input type="text" id="h-height" value="43">
+        <label for="h-bg">背景色</label>
+        <span class="color">
+          <input type="color" id="h-bg-pick"><input type="text" id="h-bg" value="#c0c0c0">
+        </span>
+        <label for="h-fg">文字色</label>
+        <span class="color">
+          <input type="color" id="h-fg-pick"><input type="text" id="h-fg" value="#333333">
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel acc open" id="acc-body">
+    <h2 class="acc-head">ボディ（縦段組）</h2>
+    <div class="acc-body">
+      <p class="note">上から順に段が並ぶ。段の中のエリアは左から右へ横に並ぶ。
+        エリアはグラフかフィルターのどちらか。</p>
+      <div id="rows-root"></div>
+      <p><button class="act" id="row-add">段を追加</button></p>
+    </div>
+  </div>
+
 </section>
 
 </main>
@@ -748,6 +1053,7 @@ _TEMPLATE = """<meta charset="utf-8">
 <style>__STYLE__</style>
 __BODY__
 <script type="application/json" id="wb-data">__DATA__</script>
+<script type="application/json" id="draw-specs">__DRAW_SPECS__</script>
 <script>__SCRIPT__</script>
 """
 
@@ -774,6 +1080,51 @@ FONT_CHOICES = (
     "Segoe UI",
     "Helvetica Neue",
 )
+
+
+#: グラフの引数のうち、画面に出さないもの。
+_DRAW_SKIP = {"self", "datasource", "name"}
+
+
+def _param_kind(name: str, annotation: str) -> str:
+    if "list[FieldInput]" in annotation:
+        return "fields"
+    if "FieldInput" in annotation:
+        return "field"
+    if "color" in name:
+        return "color"
+    if "bool" in annotation:
+        return "bool"
+    if "float" in annotation or "int" in annotation:
+        return "number"
+    return "text"
+
+
+def _draw_specs() -> dict[str, list[dict[str, Any]]]:
+    """`TwbWorkbook.draw_*()` の引数を実物から読み、画面の入力欄の定義にする。"""
+    import inspect
+
+    from .workbook import TwbWorkbook
+
+    specs: dict[str, list[dict[str, Any]]] = {}
+    for method_name in sorted(dir(TwbWorkbook)):
+        if not method_name.startswith("draw_"):
+            continue
+        signature = inspect.signature(getattr(TwbWorkbook, method_name))
+        params = []
+        for parameter in signature.parameters.values():
+            if parameter.name in _DRAW_SKIP:
+                continue
+            annotation = str(parameter.annotation)
+            params.append(
+                {
+                    "name": parameter.name,
+                    "kind": _param_kind(parameter.name, annotation),
+                    "required": parameter.default is inspect.Parameter.empty,
+                }
+            )
+        specs[method_name] = params
+    return specs
 
 
 def _font_options(selected: str) -> str:
@@ -820,5 +1171,6 @@ def render_workbook_html(
         .replace("__BODY__", body)
         .replace("__SCRIPT__", _SCRIPT)
         .replace("__DATA__", _embed_json(data))
+        .replace("__DRAW_SPECS__", _embed_json(_draw_specs()))
         .replace("__TITLE__", _escape(title))
     )

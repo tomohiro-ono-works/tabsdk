@@ -73,7 +73,7 @@ def test_export_html_has_single_yaml_download(tmp_path) -> None:
     html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
 
     assert 'id="yaml-download"' in html
-    assert html.count('class="act"') == 2  # 行を追加 / 選択行を削除 のみ
+    assert html.count('class="act"') == 3  # 行を追加 / 選択行を削除 / 段を追加
     for removed in ("rename-download", "calc-download", "design-download"):
         assert removed not in html
     assert 'download("twbpatch_config.yaml"' in html
@@ -99,10 +99,45 @@ def test_export_html_datasource_panels_are_exclusive_accordions(tmp_path) -> Non
 
     assert 'class="panel acc open" id="acc-rename"' in html
     assert 'class="panel acc" id="acc-calc"' in html
-    assert 'ACCORDIONS = ["acc-rename", "acc-calc"]' in html
+    assert 'EXCLUSIVE = ["acc-rename", "acc-calc"]' in html
     # 三角アイコンの \25B6 が Python の 8 進エスケープに食われないこと
     assert r'content: "\25B6"' in html
     assert not [c for c in html if ord(c) < 32 and c not in "\n\t\r"]
+
+
+def test_export_html_dashboard_tab_is_an_editor(tmp_path) -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    # ヘッダー編集とボディ（縦段組 → 横配置 → エリア）
+    assert 'id="acc-header"' in html
+    assert 'id="acc-body"' in html
+    assert 'id="rows-root"' in html
+    assert 'id="row-add"' in html
+    assert "エリアを追加" in html
+    # 既存ダッシュボードの読み取り表示は持たない
+    assert "dash-root" not in html
+    # dashboard: セクションが YAML に出る
+    assert 'let out = "dashboard:\\n"' in html
+    assert "function dashboardYaml()" in html
+
+
+def test_export_html_draw_specs_come_from_real_signatures(tmp_path) -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    match = re.search(r'id="draw-specs">(.*?)</script>', html, re.S)
+    assert match is not None
+    specs = json.loads(match.group(1).replace("<\\/", "</"))
+
+    assert set(specs) == {
+        name for name in dir(TwbWorkbook) if name.startswith("draw_")
+    }
+    names = {param["name"]: param for param in specs["draw_bar"]}
+    assert names["item"]["kind"] == "field" and names["item"]["required"]
+    assert names["descending"]["kind"] == "bool"
+    assert "datasource" not in names and "name" not in names
+    assert specs["draw_sheet"][0]["kind"] == "fields"  # list[FieldInput]
 
 
 def test_export_html_has_range_selection_and_row_delete(tmp_path) -> None:
@@ -147,7 +182,7 @@ def test_export_html_keeps_japanese_and_escapes_markup(tmp_path) -> None:
     assert "<script>売上" in names
     assert "売上&分析" == data["datasources"][0]["name"]
     # 生の </script> が埋め込みデータを閉じてしまわないこと
-    assert html.count("</script>") == 2
+    assert html.count("</script>") == 3
 
 
 def test_export_html_refuses_to_overwrite(tmp_path) -> None:
