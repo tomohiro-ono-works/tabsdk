@@ -45,6 +45,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | A-7 | **完了** | `folder=` の書き味が揃っていない | 不要 | 完了（2026-09-06） |
 | A-8 | **完了** | フィールド指定の書き味が揃っていない | 済 | 完了（2026-09-06） |
 | A-9 | **完了** | 自分の値を変える `set_*` が `update()` の外にある | 済 | 完了（2026-09-06） |
+| A-10 | 中 | 仕様書の中で書き方が食い違っている | 不要 | — |
 | B-1 | **完了** | 4 メソッドが完全に未検証 | 済 | 完了（2026-09-05） |
 | B-2 | 中 | 直接テストが無いメソッド 4 件 | 不要 | 未（2026-09-06 再計測） |
 | B-3 | 中 | 仕様 §13 の 3 項目が静的検査で判定できない | **要** | 未 |
@@ -59,6 +60,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | E-2 | 低 | 旧 API の削除 | 保留 | 移行完了後に判断 |
 | F-1 | 中 | README のドリフト | **要** | 未 |
 | F-2 | 低 | `docs/` の文書体系が不明瞭 | 不要 | — |
+| F-3 | 中 | `api_reference.md` に投影モデル 5 クラスの節が無い | 不要 | — |
 | G-1 | **完了** | 未使用ファイルの削除（`.twb` / `.py` / `.md`） | 済 | 完了（2026-09-05） |
 | G-2 | **完了** | サンプルスクリプトの削除 | 済 | `docs/tasks/G2_sample_inventory.md` |
 | G-3 | **完了** | 展開用サンプルの作成 | 済 | `examples/build_dashboard.py` |
@@ -339,6 +341,21 @@ from twbpatch.models import TwbWorksheet   # dataclass（旧）
   メソッド版にできないことが残ってしまう。今は機能が同じで、書き方だけが 1 つになった
 - 呼び出し側（テスト 2 ファイル）を追随済み
 
+### A-10 【中】仕様書の中で書き方が食い違っている
+
+`/spec-conformance` が見つけた、**仕様書どうしの矛盾**。実装の問題ではない。
+
+| 箇所 | 内容 | どちらが正か |
+|---|---|---|
+| §6.6 / §12 のサンプル | `worksheet.add_field(region, shelf="columns")` と第 1 引数を位置で渡している | §5.4a の「キーワード専用」が正。実装もそちら。**サンプルが古い** |
+| §3.2 と `TwbReferenceLine` | §3.2 は公開モデルに `caption` を設けないと定めるが、`TwbReferenceLine.axis_caption` / `value_caption`（`connected_worksheet.py:1971/1983`）が残っている。`serialization.py:22` は出力時に `axis_name` / `value_name` へ改名するので、モデル名と JSON 名が食い違う | **未決。** モデル側を `axis_name` / `value_name` へ揃えるか、§3.2 に「`*_caption` は XML 由来の投影値として例外」と書き足すか |
+
+`folder=` の食い違い（§6.3 と実装）は **2026-09-07 に解消済み**。
+文字列と `TwbFolder` の両方を受ける形で、仕様書・実装・テストを揃えた。
+
+> **次のアクション**: §6.6 / §12 のサンプルはそのまま直せる。
+> `*_caption` は投影モデル全体の方針（F-3）と一緒に決める。
+
 ### A-5 【低】`TwbWorkbook` に重複メソッド
 
 `unsupported_features()`（`workbook.py:166`）と `get_unsupported_features()`（`:169`）が同じもの。
@@ -462,18 +479,19 @@ A-6 と A-9 で `update_*()` / `set_*()` を `update()` へ畳んだ結果、
 
 ### B-3 【中】仕様 §13 の 3 項目が静的検査で判定できない
 
-`docs/migration_status.md` で `要目視` としているもの。
+`/spec-conformance` が `要目視` と判定するもの（2026-09-07 時点で 3 件）。
+**`docs/migration_status.md` は毎回全文を作り直すので、検証の中身はここに置く。**
 
-- Dashboard タイル配置・座標計算・既存編集の非破壊性
-- `ResourceInUseError` の発生条件の網羅
-- `DetachedModelError` の発生条件の網羅
+| 条件 | 何が確認できないか | 足すべきテスト |
+|---|---|---|
+| #20 既存 Dashboard 編集の局所性 | `copy.deepcopy` + `_replace_if_changed()` の部分置換だが、変更が対象コンテナ配下に限られる保証が無い | 浮動 Zone・デバイスレイアウト・SDK が解釈しない属性を持つ Dashboard を `tmp_path` に組み、`container.add_worksheet()` の前後で**対象外要素の XML が完全一致**することを確認する |
+| #21 未対応属性・対象外 Zone・デバイスレイアウトの保持 | 保持を保証する検査もテストも無い | 同上。仕様 §6.13 が根拠 |
+| #41 新旧 API の XML 出力が同等 | 突き合わせる比較テストが無い | `rename_field()` / `update_formula()` / `move_field_to_folder()` / `create_calculated_field()` の 4 つを旧 API と新 API で別々の Workbook へ適用し、`ET.tostring()` の一致を確認する |
 
 **これらを検証するテストを追加すれば、`/spec-conformance` が自動判定できるようになる。**
 
-> **次のアクション**: **個別タスクに分解する。** 3 項目それぞれで検証内容が全く異なる。
-> 特に「既存 Dashboard 編集の非破壊性」は、仕様 §6.13 の
-> 「未対応属性・対象外 Zone・デバイスレイアウトを暗黙に削除しない」を
-> XML 差分で確認する必要があり、単体で 1 タスクになる。
+> **次のアクション**: **個別タスクに分解する。** #20 と #21 は 1 つのテストで両方を満たせる。
+> #41 は別タスク。
 
 ### B-4 【低】テスト実行の前提を恒久化する
 
@@ -649,9 +667,38 @@ GitHub は force-push 後も古いコミットを一定期間参照でき、API 
 いずれも新 API には存在しない、または `name` / `id=` へ置き換わっている。
 A-6 の改名対象は README に 1 件も出てこないため、A-6 起因のドリフトはない。**全面改訂は未着手。**
 
+**ドリフトは一方向。** README に書かれていて実装に存在しないシンボル・引数は 0 件で、
+旧 dataclass の属性表は実装と完全に一致する。問題は**新 API がまるごと未記載**なこと。
+
+`__all__` のうち README に一度も現れないもの: `write_dicts_csv` / `TwbField` / `TwbPane` /
+`TwbDashboardContainer` / `AmbiguousFormulaReferenceError` / `DetachedModelError` /
+`ResourceInUseError` / `ResourceReference`。
+
 > **次のアクション**: **個別タスクに分解する。ただし着手は API 確定後。**
-> README は 526 行 / 28 節あり、節単位でタスク化する。
+> README は 566 行あり、節単位でタスク化する。
 > `docs/api_reference.md` が目標形なので、それを正として節ごとに突き合わせる。
+>
+> 最小の応急処置は 2 つ。冒頭に `docs/api_reference.md` へのリンクを足すことと、
+> 仕様 §11.1「同名クラスは接続型モデルを公開する」の 1 段落を足すこと。
+> 本格対応では「クラス方式」（`get_*` / `create_*` / `update()` / `delete()`）と
+> 「API 方式」（`draw_*` / `set_*` / `apply_config()`）の 2 章立てにし、
+> 現在の `list_*` / `by=` の表は「移行期の旧 API」節へ落として §11 の対応表を引く。
+
+### F-3 【中】`docs/api_reference.md` に投影モデル 5 クラスの節が無い
+
+`__all__` の 35 シンボルのうち、次の 5 クラスだけプロパティの節が無い。
+§3 は `TwbDashboardAction` で終わっている。
+
+| クラス | 未記載のプロパティ |
+|---|---|
+| `TwbRelation` | `attrs` / `clauses` / `connection` / `join` / `logical_table` / `logical_table_id` / `get_children()` |
+| `TwbRelationship` | `attrs` / `expression` / `left_object` / `left_object_id` / `right_object` / `right_object_id` |
+| `TwbReferenceLine` | `attrs` / `axis_caption` / `axis_column` / `axis_role` / `tooltip_type` / `value_caption` / `value_column` / `value_role` |
+| `TwbWorksheetFilter` | `attrs` / `apply_scope` / `apply_scope_label` / `enumeration` / `filter_class` / `filter_group` / `functions` / `selection_type` / `value_scope` / `value_scope_label` |
+| `TwbFilterControl` | `apply_scope` / `apply_scope_label` / `enumeration` / `filter_class` / `selection_type` / `show_caption` / `value_scope` / `value_scope_label` |
+
+> **次のアクション**: 分解不要。プロパティ表は README の「返却モデルの変数」の内容が
+> そのまま使える。A-10（`*_caption` の扱い）が決まってから書く。
 
 ### F-2 【低】`docs/` の文書体系が不明瞭
 
