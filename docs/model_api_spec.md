@@ -15,6 +15,41 @@
 
 ## 2. 基本方針
 
+### 2.0 クラス方式と API 方式
+
+公開 API は 2 つの層からなる。**どちらも正であり、片方を非推奨にしない。**
+
+| | クラス方式 | API 方式 |
+|---|---|---|
+| 何か | XML の構造を**踏襲しつつ体系化した**オブジェクトの階層 | クラス方式を内部で組み合わせ、まとまった処理を少ない引数で呼べるようにしたもの |
+| 呼び方 | 親から辿って子を取り、その子を操作する | 1 回の呼び出しで完結する |
+| XML への影響 | 1 操作が 1 箇所に対応する | 1 回の呼び出しで複数箇所が変わる |
+| 例 | `datasource.get_fields()[0].update(name="売上")` | `workbook.draw_sheet(name="帳票", items=[...])` |
+
+```python
+# クラス方式
+worksheet = workbook.get_worksheets(name="帳票")[0]
+worksheet.add_field(field, shelf="rows")
+worksheet.get_panes()[0].update(mark_type="bar")
+
+# API 方式（上と同じことを 1 行で）
+workbook.draw_bar(name="帳票", item=(...), metric=(...))
+```
+
+**クラス方式は XML の写しではない。** 構造を踏襲したうえで体系化する。
+`TwbPane` は `worksheet/table/panes/pane` という階層を `worksheet.get_panes()` へ畳み、
+`TwbField` は `datasource/column` と `datasource-dependencies` を 1 つのモデルにまとめる。
+
+**API 方式はクラス方式の上に建てる。** API 方式が XML を直接組み立てることはしない。
+クラス方式で表現できない操作を API 方式に持たせない。逆に、API 方式で書けるからといって
+クラス方式の対応する操作を省かない。
+
+命名規則（§3.3）と取得の契約（§4）は**クラス方式に適用する**。API 方式は動作を表す動詞名を持ち、
+`get_*` / `create_*` / `update` / `delete` の枠には収めない。
+
+現在の API 方式（`TwbWorkbook.draw_*()` / `set_filter()` / `set_default_font()` /
+`apply_field_config()` / `TwbDashboard.build_report()`）は §6.14 に一覧する。
+
 ### 2.1 メモリ上の XML を唯一の正とする
 
 `TwbWorkbook.open()` は対象ファイルを一度だけ読み込み、メモリ上に XML ツリーを保持する。
@@ -707,6 +742,48 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 - Dashboard全体を作り直す操作が将来必要になった場合は、通常の編集APIとは別の明示的なAPIとして設計する。
 
 未実装の操作は、呼び出すと常に失敗するスタブとして追加しない。XML 更新処理と検証を実装する時点で公開する。
+
+### 6.14 API 方式
+
+§2.0 の API 方式にあたる公開メソッド。いずれもクラス方式の上に建てる。
+
+**`TwbWorkbook`**
+
+| メソッド | 何をするか |
+|---|---|
+| `draw_sheet()` | 項目を指定シェルフへ並べた土台シート |
+| `draw_bar()` | 棒グラフ |
+| `draw_yoy()` | 前年比の時系列 |
+| `draw_card()` | KPI カード |
+| `draw_quadrant()` | 散布図の四象限 |
+| `draw_crosstab()` | ヒートマップ付きクロス集計 |
+| `draw_colored_yoy_sheet()` | 前年差を色分けした帳票 |
+| `set_filter()` | 指定フィールドを全ワークシートのフィルタ対象にする |
+| `set_default_font()` | ワークブック全体の既定フォント |
+| `apply_field_config()` | YAML でフィールドの改名とフォルダ分類を一括適用 |
+
+**`TwbDashboard`**
+
+| メソッド | 何をするか |
+|---|---|
+| `build_report()` | `struct` からコンテナ階層とゾーン配置を一括で組み立てる |
+
+**`TwbDashboardContainer`**
+
+| メソッド | 何をするか |
+|---|---|
+| `add_worksheet()` / `add_filter()` / `add_text()` / `add_image()` / `add_spacer()` | コンテナへ 1 ゾーンを追加する。座標と重みの再計算を伴う |
+
+**`TwbPane` / `TwbWorksheet` の `set_*`**
+
+`set_title()` / `set_mark_color()` / `set_mark_size()` / `set_mark_sizing()` /
+`set_mark_opacity()` / `set_label_style()` / `set_customized_label()` /
+`set_axis_visibility()` / `set_categorical_colors()` / `set_continuous_colors()` /
+`add_sort()` は、複数の XML 箇所（`style-rule` と `format` の組など）をまとめて書く。
+
+> **未決**: このうち自分のスカラー値だけを変える `set_title()` と `set_mark_opacity()` は、
+> §3.3 に従えば `update()` のキーワード引数へ寄せるべきものである。A-6 の対象外だったため
+> 現状は `set_*` のまま。扱いを別途決める。
 
 ## 7. コレクション属性の扱い
 
