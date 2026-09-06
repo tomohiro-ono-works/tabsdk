@@ -571,9 +571,38 @@ worksheet.add_field(
     discrete=discrete,
 )
 
-worksheet.update(name=UNSET, visible=UNSET)
+worksheet.set_subtotal_visibility(field=field, visible=True)
+
+worksheet.update(name=UNSET, visible=UNSET, grand_totals=UNSET)
 worksheet.delete()
 ```
+
+**総計と小計は置き場所を分ける。** どちらも `TwbWorksheet` が持つが、§3.3 の区分に従う。
+
+| | 公開形 | XML |
+|---|---|---|
+| 総計 | `update(grand_totals=...)` とプロパティ `grand_totals` | `<table>` の `<rows total onTop>` / `<cols total onLeft>` |
+| 小計 | `set_subtotal_visibility(field=, visible=)` | `<table>/<subtotals>/<column>` |
+
+総計はワークシート自身のスカラー設定なので `update()` のグループ引数とし、
+キー集合が固定なので `GrandTotals` を `TypedDict` で定義する。
+小計は対象を `TwbWorksheetField` で受けるため `update()` へ統合せず、動詞名で公開する。
+
+`grand_totals` のキーは**合計が現れる位置**を表す。値は位置、`None` は総計を付けないこと。
+
+| キー | 値 | 意味 |
+|---|---|---|
+| `row` | `"top"` / `"bottom"` / `None` | 合計行。Tableau UI の「列の総計」 |
+| `column` | `"left"` / `"right"` / `None` | 合計列。Tableau UI の「行の総計」 |
+
+シェルフ名（`rows` / `columns`）をキーにしない。Tableau UI の「行の総計」は XML では
+`<cols>` 側にあたり、`add_field(shelf=...)` の語と逆転して取り違えるため。
+
+`set_subtotal_visibility()` の `field` は `rows` または `columns` へ配置済みの
+`TwbWorksheetField` に限る。`visible=False` で `<column>` を外し、`<subtotals>` が
+空になれば要素ごと削除する（XSD が `<column>` を 1 件以上要求するため）。
+
+合計の集計方法（`column-instance/@visual-totals`）は初期対応に含めない。
 
 `TwbWorksheet.get_fields()` は配置情報を表す `list[TwbWorksheetField]` を返す。`TwbDatasource.get_fields()` が返す `list[TwbField]` とはクラスの文脈と戻り値型で区別する。
 
@@ -805,9 +834,9 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 **`TwbPane` / `TwbWorksheet` の `set_*`**
 
 `set_customized_label()` / `set_axis_visibility()` / `set_categorical_colors()` /
-`set_continuous_colors()` / `add_sort()` は、複数の XML 箇所（`style-rule` と
-`format` の組など）をまとめて書く。**いずれも他モデルを引数に取る**ため §3.3 で
-`update()` へ統合しない側に当たる。
+`set_continuous_colors()` / `add_sort()` / `set_subtotal_visibility()` は、複数の
+XML 箇所（`style-rule` と `format` の組など）をまとめて書く。**いずれも他モデルを
+引数に取る**ため §3.3 で `update()` へ統合しない側に当たる。
 
 自分のスカラー値だけを変えるものは `update()` のキーワード引数へ統合済み（A-9）。
 `worksheet.update(title=...)`、`pane.update(mark_color=, mark_size=, mark_opacity=,
@@ -1100,6 +1129,8 @@ right.add_worksheet(kpi_sheet, order=0, weight=1)
 - Worksheetのシェルフ配置が `rows`、`columns`、`pages`、`filters` を検証する。
 - `TwbPane` が `mark_type` を更新し、対応エンコーディングへフィールドを配置できる。
 - 複数Paneでは対象Paneの明示的な選択が必要になる。
+- 総計が `worksheet.update(grand_totals=...)` と同名プロパティの対称形で読み書きできる。
+- 小計が `worksheet.set_subtotal_visibility()` で付け外しでき、`update()` に含まれない。
 - `TwbWorksheetField.delete()` が配置だけを解除し、Datasourceの `TwbField` を削除しない。
 - フォルダ指定が文字列ではなく、同じDatasourceへ接続された `TwbFolder` になっている。
 - Dashboardの標準配置が `TwbDashboardContainer` によるタイル配置になっている。

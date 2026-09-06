@@ -324,3 +324,90 @@ def test_invalid_worksheet_operations_leave_xml_unchanged(tmp_path) -> None:
     assert first.is_dirty is False
     assert first.tree.getroot().xpath("string(/workbook/worksheets/worksheet/@caption)") == before
     assert worksheet.get_fields() == []
+
+
+def test_update_grand_totals_writes_shelf_attributes(tmp_path) -> None:
+    workbook = TwbWorkbook.open(str(_write_workbook(tmp_path)))
+    worksheet = workbook.get_worksheets()[0]
+
+    assert worksheet.grand_totals == {"row": None, "column": None}
+    assert worksheet.update(grand_totals={"row": "bottom", "column": "right"}) is worksheet
+
+    def shelf(tag: str) -> dict[str, str]:
+        # update() は worksheet 要素ごと差し替えるため、都度取り直す。
+        return dict(
+            workbook.tree.xpath(f"/workbook/worksheets/worksheet/table/{tag}")[0].attrib
+        )
+
+    assert shelf("rows") == {"total": "true", "onTop": "false"}
+    assert shelf("cols") == {"total": "true", "onLeft": "false"}
+    assert worksheet.grand_totals == {"row": "bottom", "column": "right"}
+
+    worksheet.update(grand_totals={"row": "top", "column": "left"})
+    assert shelf("rows") == {"total": "true", "onTop": "true"}
+    assert shelf("cols") == {"total": "true", "onLeft": "true"}
+    assert worksheet.grand_totals == {"row": "top", "column": "left"}
+
+    worksheet.update(grand_totals={"column": None})
+    assert shelf("cols") == {}
+    assert worksheet.grand_totals == {"row": "top", "column": None}
+    assert not [message for message in workbook.validate() if message.severity == "error"]
+
+
+def test_update_grand_totals_rejects_unknown_key_and_position(tmp_path) -> None:
+    workbook = TwbWorkbook.open(str(_write_workbook(tmp_path)))
+    worksheet = workbook.get_worksheets()[0]
+
+    with pytest.raises(ValueError):
+        worksheet.update(grand_totals={"rows": "bottom"})
+    with pytest.raises(ValueError):
+        worksheet.update(grand_totals={"row": "left"})
+    with pytest.raises(ValueError):
+        worksheet.update(grand_totals={"column": "top"})
+    with pytest.raises(TypeError):
+        worksheet.update(grand_totals="bottom")
+
+    # 検証で弾いた呼び出しは XML を変えない（仕様 §5.5）。
+    assert workbook.tree.xpath("/workbook/worksheets/worksheet/table/rows") == []
+    assert worksheet.grand_totals == {"row": None, "column": None}
+
+
+def test_set_subtotal_visibility_adds_and_removes_subtotals(tmp_path) -> None:
+    workbook = TwbWorkbook.open(str(_write_workbook(tmp_path)))
+    datasource = workbook.get_datasources()[0]
+    worksheet = workbook.get_worksheets()[0]
+    region = worksheet.add_field(field=datasource.get_fields(name="地域")[0], shelf="rows")
+
+    def subtotal_columns() -> list[str]:
+        return workbook.tree.xpath(
+            "/workbook/worksheets/worksheet/table/subtotals/column/text()"
+        )
+
+    assert worksheet.set_subtotal_visibility(field=region) is worksheet
+    assert subtotal_columns() == ["[ds1].[none:Region:nk]"]
+    # <subtotals> は <table> 直下、rows / cols より後ろに置く（validator の要素順）。
+    table = workbook.tree.xpath("/workbook/worksheets/worksheet/table")[0]
+    names = [child.tag for child in table]
+    assert names.index("subtotals") > names.index("rows")
+    assert not [message for message in workbook.validate() if message.severity == "error"]
+
+    # 二重に呼んでも column は増えない。
+    worksheet.set_subtotal_visibility(field=region)
+    assert subtotal_columns() == ["[ds1].[none:Region:nk]"]
+
+    worksheet.set_subtotal_visibility(field=region, visible=False)
+    assert workbook.tree.xpath("/workbook/worksheets/worksheet/table/subtotals") == []
+    assert not [message for message in workbook.validate() if message.severity == "error"]
+
+
+def test_set_subtotal_visibility_rejects_unusable_fields(tmp_path) -> None:
+    workbook = TwbWorkbook.open(str(_write_workbook(tmp_path)))
+    datasource = workbook.get_datasources()[0]
+    worksheet = workbook.get_worksheets()[0]
+    filtered = worksheet.add_field(field=datasource.get_fields(name="地域")[0], shelf="filters")
+
+    with pytest.raises(TypeError):
+        worksheet.set_subtotal_visibility(field="地域")
+    with pytest.raises(ValueError):
+        worksheet.set_subtotal_visibility(field=filtered)
+    assert workbook.tree.xpath("/workbook/worksheets/worksheet/table/subtotals") == []

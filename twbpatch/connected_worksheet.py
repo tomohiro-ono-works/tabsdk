@@ -51,9 +51,26 @@ class TitleStyle(TypedDict, total=False):
     background_color: str
 
 
+class GrandTotals(TypedDict, total=False):
+    """`TwbWorksheet.update(grand_totals=...)` が受け取る総計の設定。
+
+    値は合計が現れる位置。`None` は総計を付けないことを表す。
+    """
+
+    row: str | None
+    column: str | None
+
+
 _TABLE_STYLE_KEYS = frozenset(TableStyle.__annotations__)
 _TITLE_STYLE_KEYS = frozenset(TitleStyle.__annotations__)
 _LABEL_STYLE_KEYS = frozenset(LabelStyle.__annotations__)
+_GRAND_TOTALS_KEYS = frozenset(GrandTotals.__annotations__)
+# 総計は新しい要素ではなく、既存シェルフ要素の属性として書かれる。
+# <rows total="true" onTop="true|false"> / <cols total="true" onLeft="true|false">
+_GRAND_TOTAL_SHELVES = {
+    "row": ("rows", "onTop", {"top": True, "bottom": False}),
+    "column": ("cols", "onLeft", {"left": True, "right": False}),
+}
 
 _FIELD_REF = re.compile(r"^\[([^\]]+)\]\.\[([^\]]+)\]$")
 _SHELVES = {"rows": "rows", "columns": "cols", "pages": "pages"}
@@ -118,6 +135,9 @@ _TABLE_CHILD_ORDER = (
     "cols",
     "table-calc-densification",
     "pages",
+    "join-lod-include-overrides",
+    "join-lod-exclude-overrides",
+    "subtotals",
 )
 _PANE_CHILD_ORDER = (
     "view", "mark", "mark-sizing", "encodings", "label-data", "dropline",
@@ -192,6 +212,22 @@ def _replace_if_changed(
     parent.replace(current, updated)
     context.mark_dirty()
     return True
+
+
+def _validate_grand_totals(
+    value: dict[str, Any] | _UnsetType,
+) -> dict[str, Any] | _UnsetType:
+    """`update(grand_totals=...)` の位置指定を XML へ触れる前に検証する。"""
+    if value is UNSET:
+        return value
+    for key, position in value.items():
+        if position is None:
+            continue
+        positions = _GRAND_TOTAL_SHELVES[key][2]
+        if position not in positions:
+            expected = " or ".join(sorted(positions))
+            raise ValueError(f"grand_totals[{key!r}] must be {expected} or None")
+    return value
 
 
 def _worksheet_display_name(element: ET._Element) -> str:
@@ -977,6 +1013,21 @@ class TwbWorksheet(ConnectedModel):
         ]
 
     @property
+    def grand_totals(self) -> dict[str, str | None]:
+        """総計の位置。`update(grand_totals=...)` と対になる。"""
+        worksheet_el = self._resolve_element()
+        table_el = _direct_child(worksheet_el, "table")
+        result: dict[str, str | None] = {}
+        for key, (tag, position_attr, positions) in _GRAND_TOTAL_SHELVES.items():
+            shelf = _direct_child(table_el, tag) if table_el is not None else None
+            if shelf is None or (shelf.get("total") or "false").lower() != "true":
+                result[key] = None
+                continue
+            on = (shelf.get(position_attr) or "false").lower() == "true"
+            result[key] = next(name for name, flag in positions.items() if flag is on)
+        return result
+
+    @property
     def table_style(self) -> dict[str, Any]:
         """表スタイル。`update(table_style=...)` と対になる。"""
         worksheet_el = self._resolve_element()
@@ -1196,6 +1247,65 @@ class TwbWorksheet(ConnectedModel):
         _set_style_value(style_el, "title", "border-width", "0")
         _set_style_value(style_el, "title", "border-style", "none")
         _set_style_value(style_el, "title", "background-color", background_color)
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def _apply_grand_totals(self, grand_totals: dict[str, Any]) -> TwbWorksheet:
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        table_el = _ensure_table(updated)
+        for key, position in grand_totals.items():
+            tag, position_attr, positions = _GRAND_TOTAL_SHELVES[key]
+            if position is None:
+                shelf = _direct_child(table_el, tag)
+                if shelf is not None:
+                    shelf.attrib.pop("total", None)
+                    shelf.attrib.pop(position_attr, None)
+                continue
+            shelf = _ensure_shelf(table_el, tag)
+            shelf.set("total", "true")
+            shelf.set(position_attr, str(positions[position]).lower())
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def set_subtotal_visibility(
+        self,
+        *,
+        field: TwbWorksheetField,
+        visible: bool = True,
+    ) -> TwbWorksheet:
+        """行・列に配置したフィールドへ小計を付ける、または外す。"""
+        if not isinstance(field, TwbWorksheetField):
+            raise TypeError("field must be TwbWorksheetField")
+        if not isinstance(visible, bool):
+            raise TypeError("visible must be bool")
+        if field._context is not self._context or field._worksheet_id != self._id:
+            raise ValueError("field must belong to the worksheet")
+        placement = field._resolve_placement()
+        if placement.shelf not in {"rows", "columns"}:
+            raise ValueError("field must be placed on rows or columns")
+
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        table_el = _ensure_table(updated)
+        subtotals = _direct_child(table_el, "subtotals")
+        existing = (
+            subtotals.xpath("./*[local-name()='column'][text()=$ref]", ref=placement.reference)
+            if subtotals is not None
+            else []
+        )
+        if visible and not existing:
+            if subtotals is None:
+                subtotals = ET.Element("subtotals")
+                _insert_in_order(table_el, subtotals, _TABLE_CHILD_ORDER)
+            column = ET.SubElement(subtotals, "column")
+            column.text = placement.reference
+        elif not visible and existing:
+            for column in existing:
+                subtotals.remove(column)
+            # <subtotals> は column を 1 件以上要求するため、空になったら要素ごと外す。
+            if _direct_child(subtotals, "column") is None:
+                table_el.remove(subtotals)
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
 
@@ -1706,6 +1816,7 @@ class TwbWorksheet(ConnectedModel):
         title: str | None | _UnsetType = UNSET,
         table_style: TableStyle | _UnsetType = UNSET,
         title_style: TitleStyle | _UnsetType = UNSET,
+        grand_totals: GrandTotals | _UnsetType = UNSET,
     ) -> TwbWorksheet:
         worksheet_el = self._resolve_element()
         table_style = _validate_style_group(
@@ -1713,6 +1824,9 @@ class TwbWorksheet(ConnectedModel):
         )
         title_style = _validate_style_group(
             "title_style", title_style, _TITLE_STYLE_KEYS
+        )
+        grand_totals = _validate_grand_totals(
+            _validate_style_group("grand_totals", grand_totals, _GRAND_TOTALS_KEYS)
         )
         if name is not UNSET:
             if not isinstance(name, str):
@@ -1732,6 +1846,8 @@ class TwbWorksheet(ConnectedModel):
             self._apply_table_style(**table_style)
         if title_style is not UNSET:
             self._apply_title_style(**title_style)
+        if grand_totals is not UNSET:
+            self._apply_grand_totals(grand_totals)
 
         root = self._context.tree.getroot()
         updated_root = copy.deepcopy(root)

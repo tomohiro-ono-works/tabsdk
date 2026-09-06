@@ -210,6 +210,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `title` | `str \| None` | タイトル文字列 |
 | `table_style` | `dict[str, Any]` | 表スタイル |
 | `title_style` | `dict[str, Any]` | タイトルスタイル |
+| `grand_totals` | `dict[str, str \| None]` | 総計の位置。`{"row": "top"\|"bottom"\|None, "column": "left"\|"right"\|None}` |
 
 **メソッド**
 
@@ -223,10 +224,10 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `add_filter` | `field: TwbField` | `TwbWorksheetField` | フィルタとして配置 |
 | `add_filter_slice` | `field: TwbField` | `TwbWorksheet` | スライス用フィルタを追加 |
 | `add_sort` | `field: TwbField, *, by: TwbField, direction="descending", aggregation="sum"` | `TwbWorksheet` | 指定フィールドで並べ替え |
+| `set_subtotal_visibility` | `*, field: TwbWorksheetField, visible=True` | `TwbWorksheet` | 行・列に配置したフィールドへ小計を付ける / 外す |
 | `add_reference_line` | `field: TwbWorksheetField, *, formula="median", scope="per-table", label_type="value", probability=95, z_order=1` | `TwbReferenceLine` | リファレンスラインを追加 |
-| `set_title` | `title: str \| None` | `TwbWorksheet` | タイトルを設定。`None` で解除 |
 | `set_axis_visibility` | `field: TwbWorksheetField, *, visible: bool` | `TwbWorksheet` | 軸の表示 / 非表示 |
-| `update` | `*, name=UNSET, visible=UNSET, table_style=UNSET, title_style=UNSET` | `TwbWorksheet` | 自身を更新。**旧 `update_table_style()` / `update_title_style()` を統合** |
+| `update` | `*, name=UNSET, visible=UNSET, title=UNSET, table_style=UNSET, title_style=UNSET, grand_totals=UNSET` | `TwbWorksheet` | 自身を更新。**旧 `update_table_style()` / `update_title_style()` を統合** |
 | `delete` | — | `None` | 削除。ダッシュボードから参照されていれば `ResourceInUseError` |
 
 `table_style` に渡す辞書（`TypedDict`、すべて任意）:
