@@ -303,7 +303,7 @@ class TwbWorkbook:
                 id=datasource.id,
             )
             if uses_datasource:
-                worksheet.add_filter_slice(fields[0])
+                worksheet.add_filter_slice(field=fields[0])
         return self
 
     def draw_sheet(

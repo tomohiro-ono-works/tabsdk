@@ -163,7 +163,7 @@ def test_export_json_uses_new_names_and_contains_no_connected_context(tmp_path) 
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.get_worksheets()[0]
     field = datasource.get_fields()[0]
-    worksheet.add_field(field, shelf="rows", aggregation="sum")
+    worksheet.add_field(field=field, shelf="rows", aggregation="sum")
     dashboard = workbook.get_dashboards()[0]
     dashboard.create_container(direction="horizontal").add_worksheet(worksheet)
 
@@ -244,7 +244,7 @@ def test_connected_edits_round_trip_through_save_and_reopen(tmp_path) -> None:
     workbook = TwbWorkbook.open(str(_write_workbook(tmp_path)))
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.get_worksheets()[0]
-    worksheet.add_field(datasource.get_fields()[0], shelf="rows", aggregation="sum")
+    worksheet.add_field(field=datasource.get_fields()[0], shelf="rows", aggregation="sum")
     dashboard = workbook.get_dashboards()[0]
     dashboard.create_container(direction="horizontal").add_worksheet(worksheet)
     output = tmp_path / "roundtrip.twb"

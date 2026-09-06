@@ -70,10 +70,10 @@ def test_add_field_places_id_references_on_all_worksheet_shelves(tmp_path) -> No
     region = datasource.get_fields(name="地域")[0]
     worksheet = workbook.get_worksheets()[0]
 
-    rows = worksheet.add_field(sales, shelf="rows", aggregation="sum")
-    columns = worksheet.add_field(region, shelf="columns", discrete=True)
-    pages = worksheet.add_field(region, shelf="pages")
-    filters = worksheet.add_field(region, shelf="filters")
+    rows = worksheet.add_field(field=sales, shelf="rows", aggregation="sum")
+    columns = worksheet.add_field(field=region, shelf="columns", discrete=True)
+    pages = worksheet.add_field(field=region, shelf="pages")
+    filters = worksheet.add_field(field=region, shelf="filters")
 
     assert (rows.field_id, rows.name, rows.shelf, rows.aggregation, rows.discrete) == (
         "[Sales]",
@@ -116,7 +116,7 @@ def test_workbook_set_filter_applies_to_all_worksheets_using_datasource(tmp_path
     datasource = workbook.get_datasources(name="売上データ")[0]
     second = workbook.create_worksheet(name="Sheet2")
     second.add_field(
-        datasource.get_fields(name="売上")[0],
+        field=datasource.get_fields(name="売上")[0],
         shelf="rows",
         aggregation="sum",
     )
@@ -157,7 +157,7 @@ def test_add_sort_creates_computed_sort_and_field_instances(tmp_path) -> None:
     region = datasource.get_fields(name="地域")[0]
     worksheet = workbook.get_worksheets()[0]
 
-    assert worksheet.add_sort(region, by=sales) is worksheet
+    assert worksheet.add_sort(field=region, by=sales) is worksheet
 
     worksheet_el = workbook.tree.xpath("/workbook/worksheets/worksheet")[0]
     sort = worksheet_el.xpath("./table/view/computed-sort")[0]
@@ -183,9 +183,9 @@ def test_pane_updates_mark_and_adds_encodings(tmp_path) -> None:
     pane = workbook.get_worksheets()[0].get_panes()[0]
 
     assert pane.update(mark_type="bar") is pane
-    color = pane.add_field(region, encoding="color")
-    label = pane.add_field(sales, encoding="label", aggregation="sum")
-    angle = pane.add_field(sales, encoding="angle", aggregation="sum")
+    color = pane.add_field(field=region, encoding="color")
+    label = pane.add_field(field=sales, encoding="label", aggregation="sum")
+    angle = pane.add_field(field=sales, encoding="angle", aggregation="sum")
 
     assert pane.mark_type == "bar"
     assert (color.encoding, color.pane_id, color.field_id) == ("color", "1", "[Region]")
@@ -211,7 +211,7 @@ def test_worksheet_field_update_and_delete_only_change_placement(tmp_path) -> No
     datasource = workbook.get_datasources()[0]
     sales = datasource.get_fields(name="売上")[0]
     worksheet = workbook.get_worksheets()[0]
-    placement = worksheet.add_field(sales, shelf="rows", aggregation="sum")
+    placement = worksheet.add_field(field=sales, shelf="rows", aggregation="sum")
 
     assert placement.update(aggregation="avg", discrete=True) is placement
     assert placement.aggregation == "avg"
@@ -311,13 +311,13 @@ def test_invalid_worksheet_operations_leave_xml_unchanged(tmp_path) -> None:
     before = first.tree.getroot().getroottree().xpath("string(/workbook/worksheets/worksheet/@caption)")
 
     with pytest.raises(ValueError, match="unsupported shelf"):
-        worksheet.add_field(field, shelf="invalid")
+        worksheet.add_field(field=field, shelf="invalid")
     with pytest.raises(ValueError, match="unsupported aggregation"):
-        worksheet.add_field(field, shelf="rows", aggregation="median")
+        worksheet.add_field(field=field, shelf="rows", aggregation="median")
     with pytest.raises(ValueError, match="same workbook"):
-        worksheet.add_field(foreign_field, shelf="rows")
+        worksheet.add_field(field=foreign_field, shelf="rows")
     with pytest.raises(ValueError, match="unsupported encoding"):
-        pane.add_field(field, encoding="invalid")
+        pane.add_field(field=field, encoding="invalid")
     with pytest.raises(ValueError, match="unsupported mark type"):
         pane.update(mark_type="hexbin")
 

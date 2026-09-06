@@ -33,7 +33,7 @@ def test_worksheet_update_accepts_style_groups(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.create_worksheet(name="一覧")
-    worksheet.add_field(datasource.get_fields(name="カテゴリ")[0], shelf="rows")
+    worksheet.add_field(field=datasource.get_fields(name="カテゴリ")[0], shelf="rows")
 
     assert worksheet.update(
         name="一覧2",
@@ -52,7 +52,7 @@ def test_worksheet_update_style_group_is_incremental(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.create_worksheet(name="一覧")
-    worksheet.add_field(datasource.get_fields(name="カテゴリ")[0], shelf="rows")
+    worksheet.add_field(field=datasource.get_fields(name="カテゴリ")[0], shelf="rows")
 
     worksheet.update(table_style={"header_background": "#f5f5f5", "row_band": False})
     worksheet.update(table_style={"header_bold": True})

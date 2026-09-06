@@ -34,7 +34,7 @@ def _workbook(tmp_path):
 def _worksheet(workbook, name="Sheet1"):
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.create_worksheet(name=name)
-    worksheet.add_field(datasource.get_fields(name="売上")[0], shelf="rows")
+    worksheet.add_field(field=datasource.get_fields(name="売上")[0], shelf="rows")
     return worksheet
 
 
@@ -57,7 +57,7 @@ def test_add_filter_slice_registers_the_field_without_a_filter(tmp_path) -> None
     worksheet = _worksheet(workbook)
     region = workbook.get_datasources()[0].get_fields(name="地域")[0]
 
-    assert worksheet.add_filter_slice(region) is worksheet
+    assert worksheet.add_filter_slice(field=region) is worksheet
 
     assert _slice_columns(worksheet) == ["[ds1].[none:Region:nk]"]
     # slice はフィルタそのものではないので、フィルタとしては現れない
@@ -71,10 +71,10 @@ def test_add_filter_slice_replaces_an_existing_filter(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     worksheet = _worksheet(workbook)
     region = workbook.get_datasources()[0].get_fields(name="地域")[0]
-    worksheet.add_filter(region)
+    worksheet.add_filter(field=region)
     assert [item.id for item in worksheet.get_filters()] == ["[ds1].[none:Region:nk]"]
 
-    worksheet.add_filter_slice(region)
+    worksheet.add_filter_slice(field=region)
 
     assert worksheet.get_filters() == []
     assert _slice_columns(worksheet) == ["[ds1].[none:Region:nk]"]
@@ -85,8 +85,8 @@ def test_add_filter_slice_is_idempotent(tmp_path) -> None:
     worksheet = _worksheet(workbook)
     region = workbook.get_datasources()[0].get_fields(name="地域")[0]
 
-    worksheet.add_filter_slice(region)
-    worksheet.add_filter_slice(region)
+    worksheet.add_filter_slice(field=region)
+    worksheet.add_filter_slice(field=region)
 
     assert _slice_columns(worksheet) == ["[ds1].[none:Region:nk]"]
 
@@ -100,7 +100,7 @@ def test_add_filter_slice_rejects_a_field_from_another_workbook(tmp_path) -> Non
     other_region = other.get_datasources()[0].get_fields(name="地域")[0]
 
     with pytest.raises(ValueError):
-        worksheet.add_filter_slice(other_region)
+        worksheet.add_filter_slice(field=other_region)
 
 
 # --- TwbDashboardContainer.add_dashboard_object（削除済み）-------------------

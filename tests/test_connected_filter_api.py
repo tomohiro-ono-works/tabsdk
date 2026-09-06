@@ -38,8 +38,8 @@ def _workbook(tmp_path):
 def _worksheet_with_filter(workbook):
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.create_worksheet(name="Sheet1")
-    worksheet.add_field(datasource.get_fields(name="売上")[0], shelf="rows")
-    placement = worksheet.add_filter(datasource.get_fields(name="地域")[0])
+    worksheet.add_field(field=datasource.get_fields(name="売上")[0], shelf="rows")
+    placement = worksheet.add_filter(field=datasource.get_fields(name="地域")[0])
     return worksheet, placement
 
 

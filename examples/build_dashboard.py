@@ -13,6 +13,7 @@
 4. 表スタイル         update(table_style=...) / set_title()
 5. ダッシュボード     build_report() と create_container() の 2 通り
 6. ペイン直接操作     draw_* に無いグラフ（円グラフ）を get_panes() で作る
+                     フィールドは名前・タプル・オブジェクトのどれでも指定できる
 """
 
 from __future__ import annotations
@@ -157,14 +158,13 @@ def main() -> None:
 
     # 5. ペイン直接操作 -----------------------------------------------------
     # draw_* に円グラフは無いので、ペインの mark_type を直接変えて組む。
-    category = datasource.get_fields(name="カテゴリ")[0]
-    sales = datasource.get_fields(name="売上")[0]
+    # フィールドは名前でも (データソース名, フィールド名) でも TwbField でも指定できる。
     pie = workbook.create_worksheet(name="カテゴリ別売上_円")
     pane = pie.get_panes()[0]
     pane.update(mark_type="pie")
-    pane.add_field(category, encoding="color", discrete=True)
-    pane.add_field(category, encoding="label", discrete=True)
-    pane.add_field(sales, encoding="angle", aggregation="sum", discrete=False)
+    pane.add_field(field=(DATASOURCE, "カテゴリ"), encoding="color", discrete=True)
+    pane.add_field(field="カテゴリ", encoding="label", discrete=True)
+    pane.add_field(field="売上", encoding="angle", aggregation="sum", discrete=False)
 
     # 6-a. build_report() によるダッシュボード ------------------------------
     # struct の値がそのまま配置になる。ネストした配列は横並びの行を作る。

@@ -31,8 +31,8 @@ def test_get_and_update_table_style_round_trip(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.create_worksheet(name="一覧")
-    worksheet.add_field(datasource.get_fields(name="#")[0], shelf="rows")
-    worksheet.add_field(datasource.get_fields(name="カテゴリ")[0], shelf="rows")
+    worksheet.add_field(field=datasource.get_fields(name="#")[0], shelf="rows")
+    worksheet.add_field(field=datasource.get_fields(name="カテゴリ")[0], shelf="rows")
 
     assert worksheet.table_style == {
         "header_background": None,
@@ -74,11 +74,11 @@ def test_worksheet_supports_explicit_table_down_calculation(tmp_path) -> None:
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.draw_sheet(datasource, name="一覧")
     worksheet.add_field(
-        datasource.get_fields(name="#")[0],
+        field=datasource.get_fields(name="#")[0],
         shelf="rows",
         table_calculation="table_down",
     )
-    worksheet.add_field(datasource.get_fields(name="カテゴリ")[0], shelf="rows")
+    worksheet.add_field(field=datasource.get_fields(name="カテゴリ")[0], shelf="rows")
 
     root = workbook.tree.getroot()
     calculation = root.xpath(

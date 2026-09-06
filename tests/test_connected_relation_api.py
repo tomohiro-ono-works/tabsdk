@@ -78,7 +78,7 @@ def _relation_workbook(tmp_path):
 def _worksheet_with_reference_line(workbook):
     datasource = workbook.get_datasources()[0]
     worksheet = workbook.create_worksheet(name="Sheet1")
-    field = worksheet.add_field(datasource.get_fields(name="売上")[0], shelf="rows")
+    field = worksheet.add_field(field=datasource.get_fields(name="売上")[0], shelf="rows")
     line = worksheet.add_reference_line(field, formula="median")
     return worksheet, line
 

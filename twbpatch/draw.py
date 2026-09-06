@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING
 from .connected import TwbDatasource, TwbField
 from .connected_worksheet import TwbWorksheet
 from .errors import AmbiguousCaptionError, NotFoundError
+from .field_input import FieldInput, resolve_field_inputs
 
 if TYPE_CHECKING:
     from .workbook import TwbWorkbook
 
-FieldInput = str | tuple[str, str] | TwbField
 _NUMERIC_DATATYPES = {"integer", "real", "decimal", "number"}
 
 
@@ -19,43 +19,16 @@ def _resolve_fields(
     values: list[FieldInput],
     datasource: TwbDatasource | None = None,
 ) -> list[TwbField]:
+    """A-8 で `field_input` へ一本化した。ここは薄いラッパー。"""
     if datasource is not None and not isinstance(datasource, TwbDatasource):
         raise TypeError("datasource must be TwbDatasource or None")
     if datasource is not None and datasource._context is not workbook._context:
         raise ValueError("datasource must belong to the workbook")
-
-    result: list[TwbField] = []
-    for value in values:
-        if isinstance(value, TwbField):
-            if value._context is not workbook._context:
-                raise ValueError("field must belong to the workbook")
-            result.append(value)
-            continue
-
-        field_datasource = datasource
-        field_name = value
-        if isinstance(value, tuple):
-            if len(value) != 2 or not all(isinstance(part, str) for part in value):
-                raise TypeError("field tuple must be (datasource name, field name)")
-            datasource_name, field_name = value
-            datasource_matches = workbook.get_datasources(name=datasource_name)
-            if not datasource_matches:
-                raise NotFoundError(f"datasource not found: {datasource_name}")
-            if len(datasource_matches) > 1:
-                raise AmbiguousCaptionError(f"datasource name is ambiguous: {datasource_name}")
-            field_datasource = datasource_matches[0]
-        elif not isinstance(value, str):
-            raise TypeError("field must be a name, tuple, or TwbField")
-
-        if field_datasource is None:
-            raise TypeError("field must be (datasource name, field name)")
-        matches = field_datasource.get_fields(name=field_name)
-        if not matches:
-            raise NotFoundError(f"field not found: {field_name}")
-        if len(matches) > 1:
-            raise AmbiguousCaptionError(f"field name is ambiguous: {field_name}")
-        result.append(matches[0])
-    return result
+    return resolve_field_inputs(
+        workbook._context,
+        values,
+        datasources=None if datasource is None else [datasource],
+    )
 
 
 def _shelves(item_shelf: str) -> tuple[str, str]:
@@ -116,7 +89,7 @@ def draw_sheet(
     if title is not None:
         worksheet.set_title(title)
     for field in resolved_items:
-        worksheet.add_field(field, shelf=item_shelf)
+        worksheet.add_field(field=field, shelf=item_shelf)
     return worksheet
 
 
@@ -206,7 +179,7 @@ def draw_colored_yoy_sheet(
     index_placement = None
     for item in resolved_items:
         placement = worksheet.add_field(
-            item,
+            field=item,
             shelf="rows",
             discrete=True,
             table_calculation="table_down" if item.name == "#" else None,
@@ -262,13 +235,13 @@ def draw_yoy(
     item_shelf, metric_shelf = _shelves(item_shelf)
     worksheet = workbook.create_worksheet(name=name, visible=visible)
     item_placement = worksheet.add_field(
-        item,
+        field=item,
         shelf=item_shelf,
         discrete=False,
         date_level=date_level,
     )
     metric_placement = worksheet.add_field(
-        metric,
+        field=metric,
         shelf=metric_shelf,
         aggregation=aggregation,
         discrete=False,
@@ -298,16 +271,16 @@ def draw_bar(
     item, metric = _resolve_fields(workbook, [item, metric], datasource)
     item_shelf, metric_shelf = _shelves(item_shelf)
     worksheet = workbook.create_worksheet(name=name, visible=visible)
-    worksheet.add_field(item, shelf=item_shelf, discrete=True)
+    worksheet.add_field(field=item, shelf=item_shelf, discrete=True)
     worksheet.add_field(
-        metric,
+        field=metric,
         shelf=metric_shelf,
         aggregation=aggregation,
         discrete=False,
     )
     worksheet.get_panes()[0].update(mark_type="bar")
     worksheet.add_sort(
-        item,
+        field=item,
         by=metric,
         direction="descending" if descending else "ascending",
         aggregation=aggregation,
@@ -354,13 +327,13 @@ def draw_card(
     sub_placement = None
     if sub_metric is not None:
         sub_placement = pane.add_field(
-            sub_metric,
+            field=sub_metric,
             encoding="label",
             aggregation=resolved_sub_aggregation,
             discrete=False,
         )
     main_placement = pane.add_field(
-        main_metric,
+        field=main_metric,
         encoding="label",
         aggregation=resolved_main_aggregation,
         discrete=False,
@@ -443,13 +416,13 @@ def draw_quadrant(
     if title is not None:
         worksheet.set_title(title)
     x_placement = worksheet.add_field(
-        x_metric,
+        field=x_metric,
         shelf="columns",
         aggregation=x_aggregation,
         discrete=False,
     )
     y_placement = worksheet.add_field(
-        y_metric,
+        field=y_metric,
         shelf="rows",
         aggregation=y_aggregation,
         discrete=False,
@@ -459,15 +432,15 @@ def draw_quadrant(
     pane.set_mark_sizing(scaling=False)
     pane.set_mark_opacity(opacity)
     pane.set_mark_size(4)
-    pane.add_field(item, encoding="detail", discrete=True)
+    pane.add_field(field=item, encoding="detail", discrete=True)
     pane.add_field(
-        size_metric,
+        field=size_metric,
         encoding="size",
         aggregation=size_aggregation,
         discrete=False,
     )
     color_placement = pane.add_field(
-        quadrant,
+        field=quadrant,
         encoding="color",
         discrete=True,
         table_calculation="field",
@@ -530,18 +503,18 @@ def draw_crosstab(
     worksheet = workbook.create_worksheet(name=name, visible=visible)
     if title is not None:
         worksheet.set_title(title)
-    worksheet.add_field(x_item, shelf="columns", discrete=True)
-    worksheet.add_field(y_item, shelf="rows", discrete=True)
+    worksheet.add_field(field=x_item, shelf="columns", discrete=True)
+    worksheet.add_field(field=y_item, shelf="rows", discrete=True)
     pane = worksheet.get_panes()[0]
     pane.update(mark_type="square")
     color_placement = pane.add_field(
-        color_metric,
+        field=color_metric,
         encoding="color",
         aggregation=color_aggregation,
         discrete=False,
     )
     pane.add_field(
-        label_metric,
+        field=label_metric,
         encoding="label",
         aggregation=label_aggregation,
         discrete=False,

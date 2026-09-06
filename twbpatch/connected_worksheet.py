@@ -17,6 +17,11 @@ from .context import (
     validate_style_group as _validate_style_group,
 )
 from .errors import DetachedModelError, ResourceInUseError, UnsupportedFeatureError
+from .field_input import (
+    FieldInput,
+    resolve_field_input,
+    worksheet_datasources,
+)
 from .field_ref import FIELD_REF_RE, field_name_from_token
 from .filter import list_filters_from_tree
 from .references import worksheet_references
@@ -1219,18 +1224,31 @@ class TwbWorksheet(ConnectedModel):
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
 
+    def _resolve_field(self, value: FieldInput, *, argument: str = "field") -> TwbField:
+        """`field=` を `TwbField` へ解決する。素の文字列はこのシートの依存から探す。"""
+        return resolve_field_input(
+            self._context,
+            value,
+            datasources=worksheet_datasources(self._context, self._resolve_element()),
+            argument=argument,
+        )
+
     def add_field(
         self,
-        field: TwbField,
         *,
+        field: FieldInput,
         shelf: str,
         aggregation: str | None = None,
         discrete: bool | None = None,
         table_calculation: str | None | _UnsetType = UNSET,
-        table_calculation_field: TwbField | None = None,
+        table_calculation_field: FieldInput | None = None,
         date_level: str | None = None,
     ) -> TwbWorksheetField:
-        _validate_field(field, self._context)
+        field = self._resolve_field(field)
+        if table_calculation_field is not None:
+            table_calculation_field = self._resolve_field(
+                table_calculation_field, argument="table_calculation_field"
+            )
         shelf = shelf.lower()
         if shelf not in {*_SHELVES, "filters"}:
             raise ValueError(f"unsupported shelf: {shelf}")
@@ -1564,9 +1582,9 @@ class TwbWorksheet(ConnectedModel):
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
 
-    def add_filter(self, field: TwbField) -> TwbWorksheetField:
+    def add_filter(self, *, field: FieldInput) -> TwbWorksheetField:
         placement = self.add_field(
-            field,
+            field=field,
             shelf="filters",
             discrete=True,
             table_calculation=None,
@@ -1609,8 +1627,8 @@ class TwbWorksheet(ConnectedModel):
         _replace_if_changed(worksheet_el, updated, self._context)
         return placement
 
-    def add_filter_slice(self, field: TwbField) -> TwbWorksheet:
-        _validate_field(field, self._context)
+    def add_filter_slice(self, *, field: FieldInput) -> TwbWorksheet:
+        field = self._resolve_field(field)
         reference = _build_reference(
             field,
             aggregation=None,
@@ -1640,14 +1658,14 @@ class TwbWorksheet(ConnectedModel):
 
     def add_sort(
         self,
-        field: TwbField,
         *,
-        by: TwbField,
+        field: FieldInput,
+        by: FieldInput,
         direction: str = "descending",
         aggregation: str | None = "sum",
     ) -> TwbWorksheet:
-        _validate_field(field, self._context)
-        _validate_field(by, self._context)
+        field = self._resolve_field(field)
+        by = self._resolve_field(by, argument="by")
         directions = {"ascending": "ASC", "descending": "DESC"}
         if direction not in directions:
             raise ValueError("direction must be ascending or descending")
@@ -2351,17 +2369,32 @@ class TwbPane(ConnectedModel):
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
+    def _resolve_field(self, value: FieldInput, *, argument: str = "field") -> TwbField:
+        """`field=` を `TwbField` へ解決する。素の文字列は属するシートの依存から探す。"""
+        return resolve_field_input(
+            self._context,
+            value,
+            datasources=worksheet_datasources(
+                self._context, self._resolve_worksheet_element()
+            ),
+            argument=argument,
+        )
+
     def add_field(
         self,
-        field: TwbField,
         *,
+        field: FieldInput,
         encoding: str,
         aggregation: str | None = None,
         discrete: bool | None = None,
         table_calculation: str | None = None,
-        table_calculation_field: TwbField | None = None,
+        table_calculation_field: FieldInput | None = None,
     ) -> TwbWorksheetField:
-        _validate_field(field, self._context)
+        field = self._resolve_field(field)
+        if table_calculation_field is not None:
+            table_calculation_field = self._resolve_field(
+                table_calculation_field, argument="table_calculation_field"
+            )
         encoding = encoding.lower()
         if encoding not in _ENCODINGS:
             raise ValueError(f"unsupported encoding: {encoding}")

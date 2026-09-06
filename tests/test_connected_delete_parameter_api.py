@@ -117,7 +117,7 @@ def test_placement_delete_removes_unused_dependency_before_field_delete(tmp_path
     datasource = workbook.get_datasources()[0]
     field = datasource.get_fields()[0]
     worksheet = workbook.get_worksheets()[0]
-    placement = worksheet.add_field(field, shelf="rows", aggregation="sum")
+    placement = worksheet.add_field(field=field, shelf="rows", aggregation="sum")
 
     with pytest.raises(ResourceInUseError) as caught:
         field.delete()
