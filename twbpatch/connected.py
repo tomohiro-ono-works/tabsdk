@@ -1634,6 +1634,31 @@ class TwbFolder(ConnectedModel):
                 result.append(field)
         return result
 
+    def update(self, *, name: str | _UnsetType = UNSET) -> TwbFolder:
+        """自身の値を更新する。
+
+        `<folder>` は `name` しか持たず、それが識別子と表示名を兼ねる。
+        改名しても `<folder-item>` はフィールドと階層を指しているだけなので、
+        追随させるものは無い。
+        """
+        if name is UNSET:
+            return self
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name must not be empty")
+        resolved = name.strip()
+        if resolved == self._id:
+            return self
+        datasource_el = self._resolve_datasource_element()
+        for folder_el in _folder_elements(datasource_el):
+            if folder_el.get("name") == resolved:
+                raise ValueError(f"folder name already exists: {resolved}")
+
+        element = self._resolve_element()
+        element.set("name", resolved)
+        self._id = resolved
+        self._context.mark_dirty()
+        return self
+
     def delete(self) -> None:
         folder_el = self._resolve_element()
         items = [

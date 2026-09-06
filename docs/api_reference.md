@@ -179,6 +179,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
 | `get_fields` | `*, id=None, name=None` | `list[TwbField]` | 収容しているフィールド |
+| `update` | `*, name=UNSET` | `TwbFolder` | 改名。同名があれば `ValueError`。`<folder-item>` はフィールドと階層を指すので追随は要らない |
 | `delete` | — | `None` | 削除。フィールドを保持していれば `ResourceInUseError` |
 
 ### 3.4 `TwbParameter`
