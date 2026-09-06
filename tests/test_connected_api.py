@@ -137,7 +137,7 @@ def test_formula_input_uses_names_and_xml_stores_ids_atomically() -> None:
     assert field.raw_formula == before
 
 
-def test_folder_is_connected_model_and_move_requires_folder_object() -> None:
+def test_folder_is_connected_model_and_move_accepts_a_name() -> None:
     workbook = TwbWorkbook.open(SAMPLE)
     datasource = workbook.get_datasources()[0]
     folder = datasource.create_folder(name="KPI")
@@ -150,11 +150,18 @@ def test_folder_is_connected_model_and_move_requires_folder_object() -> None:
     assert field.folder.id == "KPI"
     assert [item.id for item in folder.get_fields()] == ["[Sales]"]
 
-    with pytest.raises(TypeError, match="TwbFolder"):
-        field.move_to_folder("KPI")  # type: ignore[arg-type]
-
     field.remove_from_folder()
     assert field.folder is None
+
+    # フォルダ名でも渡せる。folder= を取る他のメソッドと揃えてある（2026-09-07）
+    assert field.move_to_folder("KPI") is field
+    assert field.folder is not None and field.folder.id == "KPI"
+
+    with pytest.raises(NotFoundError, match="folder not found"):
+        field.move_to_folder("無いフォルダ")
+
+    with pytest.raises(TypeError, match="folder must be"):
+        field.move_to_folder(1)  # type: ignore[arg-type]
 
 
 def test_datasource_field_grouping_can_be_saved_as_folder_mode() -> None:

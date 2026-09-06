@@ -1308,11 +1308,18 @@ class TwbField(ConnectedModel):
             _replace_if_changed(field_el, updated, self._context)
         return self
 
-    def move_to_folder(self, folder: TwbFolder) -> TwbField:
-        if not isinstance(folder, TwbFolder):
-            raise TypeError("folder must be TwbFolder")
-        folder._ensure_attached()
-        folder._resolve_element()
+    def move_to_folder(self, folder: str | TwbFolder) -> TwbField:
+        """フォルダへ移す。フォルダ名でも `TwbFolder` でも渡せる。
+
+        `folder=` を受け取る他のメソッド（`create_calculated_field()` など）と
+        揃えてある。以前はここだけ文字列を拒否していた（2026-09-07）。
+        名前で渡す場合、そのフォルダが無ければ `NotFoundError`。
+        """
+        datasource = TwbDatasource(self._context, self._datasource_id)
+        resolved = datasource._resolve_folder(folder)
+        if resolved is None:
+            raise TypeError("folder must be a name or TwbFolder")
+        folder = resolved
         if folder._context is not self._context or folder.datasource_id != self._datasource_id:
             raise ValueError("folder must belong to the same datasource")
         datasource_el = self._resolve_datasource_element()

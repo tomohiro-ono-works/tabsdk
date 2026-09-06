@@ -532,7 +532,9 @@ field.remove_from_folder()
 field.delete()
 ```
 
-`folder` は同じ `TwbDatasource` に接続された `TwbFolder` とする。文字列は受け付けない。フォルダの取得・作成は `datasource.get_folders()` / `datasource.create_folder()` が担当する。
+`folder` は同じ `TwbDatasource` のフォルダ名（文字列）か、そのデータソースに接続された `TwbFolder` とする。文字列で渡した場合、そのフォルダが無ければ `NotFoundError` にする。暗黙に作らない。フォルダの取得・作成は `datasource.get_folders()` / `datasource.create_folder()` が担当する。
+
+**`folder=` を受け取るメソッドはすべて同じ規則に従う。** `create_calculated_field()`、`create_calculated_fields()`、`create_yoy_calculated_fields()`、`field.move_to_folder()`。解決は `TwbDatasource._resolve_folder()` に集約する（2026-09-07 に `move_to_folder()` も揃えた）。
 
 フォルダ所属は独立した関連操作とし、`field.update(folder=...)` には含めない。
 
@@ -1136,7 +1138,7 @@ right.add_worksheet(kpi_sheet, order=0, weight=1)
 - 総計が `worksheet.update(grand_totals=...)` と同名プロパティの対称形で読み書きできる。
 - 小計が `worksheet.set_subtotal_visibility()` で付け外しでき、`update()` に含まれない。
 - `TwbWorksheetField.delete()` が配置だけを解除し、Datasourceの `TwbField` を削除しない。
-- フォルダ指定が文字列ではなく、同じDatasourceへ接続された `TwbFolder` になっている。
+- フォルダ指定が、同じDatasourceのフォルダ名か、そこへ接続された `TwbFolder` を受け取る。`folder=` を取るメソッドすべてで規則が同じ。
 - Dashboardの標準配置が `TwbDashboardContainer` によるタイル配置になっている。
 - タイル配置APIが `direction`、`order`、`weight` を受け取り、`x` / `y` を受け付けない。
 - SDKがタイルの階層・順序・比率からXMLの座標とサイズを計算する。

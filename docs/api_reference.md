@@ -166,7 +166,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
 | `update` | `*, name=UNSET, datatype=UNSET, role=UNSET, discrete=UNSET, hidden=UNSET, formula=UNSET, formula_ref="auto", strict=True, ref_map=None` | `TwbField` | 自身を更新。`formula` 未指定で formula 系オプションだけ渡すと例外。`datatype` は計算フィールドのみ（それ以外は `UnsupportedFeatureError`） |
-| `move_to_folder` | `folder: TwbFolder` | `TwbField` | フォルダへ移動。同一データソースのフォルダのみ |
+| `move_to_folder` | `folder: str \| TwbFolder` | `TwbField` | フォルダへ移動。フォルダ名でも `TwbFolder` でも渡せる。同一データソースのフォルダのみで、無ければ `NotFoundError` |
 | `remove_from_folder` | — | `TwbField` | フォルダから外す |
 | `delete` | — | `None` | 削除。計算式・配置・フィルタ等から参照されていれば `ResourceInUseError` |
 
