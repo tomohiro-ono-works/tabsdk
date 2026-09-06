@@ -52,3 +52,6 @@ CLAUDE.md
 
 # Generated workbooks (examples/ の出力先。成果物は追跡しない)
 outputs/
+
+# Tableau の復旧ファイル
+~*.twbr
