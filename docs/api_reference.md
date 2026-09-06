@@ -26,7 +26,7 @@
 | 自身の削除 | `delete()` | `field.delete()` |
 | 関連付け / 解除 | 動詞 | `move_to_folder()` / `remove_from_folder()` |
 | 配置の追加 | `add_<対象>()` | `add_field()` / `add_worksheet()` |
-| 属性の設定 | `set_<対象>()` | `set_mark_color()` |
+| 属性の設定 | `set_<対象>()` | `set_categorical_colors()` / `set_axis_visibility()` |
 
 `id` は XML の `@name`（Tableau 内部 ID）、`name` は caption 由来の表示名。
 Worksheet のみ `id == name == XML @name`。
@@ -269,15 +269,10 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `get_fields` | `*, id=None, name=None` | `list[TwbWorksheetField]` | このペインに配置されたフィールド |
 | `add_field` | `field: TwbField, *, encoding: str, aggregation=None, discrete=None, table_calculation=None, table_calculation_field=None` | `TwbWorksheetField` | エンコーディングへ配置。`encoding` は `color` / `label` / `tooltip` / `size` / `shape` / `detail` / `path` / `angle` |
 | `set_customized_label` | `*, main_metric: TwbWorksheetField, sub_metric: TwbWorksheetField \| None, main_color: str, value_color="#333333", vertical_alignment="center"` | `TwbPane` | カード用のラベル構成を組み立てる。**旧 `update_customized_label()`。自身の値の更新ではなく他フィールドを受け取る操作のため動詞名へ** |
-| `set_label_style` | `*, show: bool = True, cull: bool = False` | `TwbPane` | ラベルの表示と重なり除去 |
-| `set_mark_opacity` | `opacity: float` | `TwbPane` | 不透明度を設定 |
-| `set_mark_size` | `size: float` | `TwbPane` | マークサイズを設定 |
-| `set_mark_sizing` | `*, scaling: bool` | `TwbPane` | サイズの自動スケーリング |
-| `set_mark_color` | `color: str` | `TwbPane` | 単色を設定 |
 | `get_categorical_colors` | `field: TwbWorksheetField` | `dict[str, str]` | カテゴリ別の色割り当てを取得 |
 | `set_categorical_colors` | `field: TwbWorksheetField, colors: dict[str, str]` | `TwbPane` | カテゴリ別の色を設定 |
 | `set_continuous_colors` | `field: TwbWorksheetField, *, min_color, mid_color, max_color` | `TwbPane` | 連続値の3色グラデーションを設定 |
-| `update` | `*, mark_type=UNSET` | `TwbPane` | マーク種別を変更 |
+| `update` | `*, mark_type=UNSET, mark_color=UNSET, mark_size=UNSET, mark_opacity=UNSET, mark_scaling=UNSET, label_style=UNSET` | `TwbPane` | 自身の値を更新。**旧 `set_mark_color()` / `set_mark_size()` / `set_mark_opacity()` / `set_mark_sizing()` / `set_label_style()` を統合済み（A-9）** |
 
 ### 3.7 `TwbWorksheetField`
 
