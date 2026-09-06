@@ -64,6 +64,7 @@ wb.save("output.twb", overwrite=True)
 
 計算フィールドを画面で定義した場合は、**一度 `.twb` へ焼き直してから画面を出し直します。**
 そうすると 2 周目にはグラフの項目候補として選べるようになります。
+手順は [docs/roundtrip.md](docs/roundtrip.md) にまとめています。
 
 ## `TwbWorkbook` API
 
