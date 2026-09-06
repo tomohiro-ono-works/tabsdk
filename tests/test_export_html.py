@@ -55,6 +55,32 @@ def test_export_html_embeds_field_names(tmp_path) -> None:
     assert field_names(_embedded_data(html)) == field_names(workbook.export_json())
 
 
+def test_export_html_design_tab_uses_pickers(tmp_path) -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    # フォントは選択式
+    assert '<select id="d-font">' in html
+    assert '<option value="Meiryo UI" selected>' in html
+    assert '<option value="Tableau Book">' in html
+    # カラーコードは色味を選べる
+    for name in ("d-main", "d-sub1", "d-sub2", "d-text"):
+        assert f'<input type="color" id="{name}-pick">' in html
+
+
+def test_export_html_has_single_yaml_download(tmp_path) -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert 'id="yaml-download"' in html
+    assert html.count('class="act"') == 2  # 行を追加 / 選択行を削除 のみ
+    for removed in ("rename-download", "calc-download", "design-download"):
+        assert removed not in html
+    assert 'download("twbpatch_config.yaml"' in html
+    # design と datasources を 1 つの YAML にまとめる
+    assert '"\\ndatasources:\\n"' in html or "datasources:" in html
+
+
 def test_export_html_has_range_selection_and_row_delete(tmp_path) -> None:
     workbook = TwbWorkbook.open(SAMPLE)
     html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")

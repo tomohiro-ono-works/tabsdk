@@ -14,6 +14,13 @@ nav { display: flex; gap: 4px; padding: 0 20px; background: #2f3b52; }
 nav button { border: 0; padding: 8px 18px; font: inherit; cursor: pointer;
              background: #46536e; color: #dbe1ec; border-radius: 6px 6px 0 0; }
 nav button.active { background: #f6f7f9; color: #222; font-weight: 600; }
+nav button.dl { margin: 4px 0 4px 24px; border-radius: 4px; background: #4a7dff; color: #fff;
+                font-weight: 600; }
+nav button.dl:hover { background: #3a68e0; }
+.color { display: flex; gap: 6px; align-items: center; }
+.color input[type=color] { width: 34px; height: 28px; padding: 0; border: 1px solid #c3cad6;
+                           border-radius: 4px; background: none; cursor: pointer; }
+.color input[type=text] { width: 110px; font-family: monospace; }
 main { padding: 20px; }
 section { display: none; }
 section.active { display: block; }
@@ -61,9 +68,9 @@ function el(tag, attrs, children) {
 }
 
 /* ---- タブ ---- */
-document.querySelectorAll("nav button").forEach(btn => {
+document.querySelectorAll("nav button[data-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll("nav button[data-tab]").forEach(b => b.classList.remove("active"));
     document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
     btn.classList.add("active");
     document.getElementById(btn.dataset.tab).classList.add("active");
@@ -326,6 +333,9 @@ DATA.datasources.forEach((ds, i) => {
   dsSelect.appendChild(el("option", { value: String(i), text: ds.name || ds.id }));
 });
 
+/* データソースごとの編集内容。切り替えても保持する */
+const EDITS = {};
+
 function folderNameOf(ds, field) {
   const folder = (ds.folders || []).find(f => f.id === field.folder_id);
   return folder ? folder.name : "";
@@ -335,20 +345,29 @@ function originalNameOf(field) {
   return id.startsWith("[") && id.endsWith("]") ? id.slice(1, -1) : (id || field.name || "");
 }
 
-function renderRenameTable(ds) {
-  const body = document.getElementById("rename-body");
-  body.innerHTML = "";
-  (ds.fields || []).filter(f => !f.is_calculated).forEach(field => {
-    body.appendChild(el("tr", {}, [
-      el("td", { class: "ro", text: originalNameOf(field) }),
-      el("td", { contenteditable: "true", text: field.name || "" }),
-      el("td", { contenteditable: "true", text: folderNameOf(ds, field) }),
-      el("td", { class: "ro", text: field.datatype || "" }),
-      el("td", { class: "ro", text: field.role || "" }),
-      el("td", { class: "ro", text: field.hidden ? "非表示" : "" }),
-    ]));
-  });
+function initialState(ds) {
+  const rename = (ds.fields || []).filter(f => !f.is_calculated).map(field => ({
+    original: originalNameOf(field),
+    display: field.name || "",
+    folder: folderNameOf(ds, field),
+    datatype: field.datatype || "",
+    role: field.role || "",
+    hidden: field.hidden ? "非表示" : "",
+  }));
+  const calcs = (ds.fields || []).filter(f => f.is_calculated).map(field => ([
+    field.name || "", field.formula || "", field.datatype || "",
+    field.role || "", folderNameOf(ds, field),
+  ]));
+  for (let i = 0; i < 3; i++) calcs.push(["", "", "", "", ""]);
+  return { rename: rename, calcs: calcs };
 }
+
+function stateAt(index) {
+  if (!EDITS[index]) EDITS[index] = initialState(DATA.datasources[index]);
+  return EDITS[index];
+}
+function currentIndex() { return Number(dsSelect.value) || 0; }
+function currentDatasource() { return DATA.datasources[currentIndex()]; }
 
 function calcRow(name, formula, datatype, role, folder) {
   return el("tr", {}, [
@@ -360,23 +379,50 @@ function calcRow(name, formula, datatype, role, folder) {
   ]);
 }
 
-function renderCalcTable(ds) {
-  const body = document.getElementById("calc-body");
-  body.innerHTML = "";
-  (ds.fields || []).filter(f => f.is_calculated).forEach(field => {
-    body.appendChild(calcRow(field.name || "", field.formula || "",
-                             field.datatype || "", field.role || "", folderNameOf(ds, field)));
+function renderTables(state) {
+  const renameBody = document.getElementById("rename-body");
+  renameBody.innerHTML = "";
+  state.rename.forEach(row => {
+    renameBody.appendChild(el("tr", {}, [
+      el("td", { class: "ro", text: row.original }),
+      el("td", { contenteditable: "true", text: row.display }),
+      el("td", { contenteditable: "true", text: row.folder }),
+      el("td", { class: "ro", text: row.datatype }),
+      el("td", { class: "ro", text: row.role }),
+      el("td", { class: "ro", text: row.hidden }),
+    ]));
   });
-  for (let i = 0; i < 3; i++) body.appendChild(calcRow("", "", "", "", ""));
+  const calcBody = document.getElementById("calc-body");
+  calcBody.innerHTML = "";
+  state.calcs.forEach(cells => calcBody.appendChild(calcRow.apply(null, cells)));
 }
 
-function currentDatasource() { return DATA.datasources[Number(dsSelect.value) || 0]; }
+/* 画面の内容を、いま表示しているデータソースの編集内容へ書き戻す */
+function captureInto(index) {
+  const state = stateAt(index);
+  state.rename = Array.from(document.getElementById("rename-body").rows).map(row => ({
+    original: row.cells[0].textContent.trim(),
+    display: row.cells[1].textContent.trim(),
+    folder: row.cells[2].textContent.trim(),
+    datatype: row.cells[3].textContent.trim(),
+    role: row.cells[4].textContent.trim(),
+    hidden: row.cells[5].textContent.trim(),
+  }));
+  state.calcs = Array.from(document.getElementById("calc-body").rows)
+    .map(row => Array.from(row.cells).map(cell => cell.textContent.trim()));
+  return state;
+}
+
+let renderedIndex = null;
+function captureCurrent() {
+  return captureInto(renderedIndex === null ? currentIndex() : renderedIndex);
+}
 
 function refreshDatasource() {
-  const ds = currentDatasource();
-  if (!ds) return;
-  renderRenameTable(ds);
-  renderCalcTable(ds);
+  if (!DATA.datasources.length) return;
+  if (renderedIndex !== null && renderedIndex !== currentIndex()) captureInto(renderedIndex);
+  renderedIndex = currentIndex();
+  renderTables(stateAt(renderedIndex));
   validateRename();
   document.querySelectorAll("table").forEach(table => {
     if (table.grid) table.grid.resetHistory();
@@ -414,83 +460,124 @@ document.getElementById("calc-delete").addEventListener("click", () => {
 });
 
 /* ---- 画面側バリデーション ---- */
-function validateRename() {
-  const rows = Array.from(document.getElementById("rename-body").rows);
+function validateState(state) {
   const errors = [];
   const assigned = new Set();
-  rows.forEach(row => {
-    const original = row.cells[0].textContent.trim();
-    const display = row.cells[1].textContent.trim();
-    const folder = row.cells[2].textContent.trim();
-    row.cells[1].classList.toggle("invalid", !!folder && !display);
-    row.cells[2].classList.remove("invalid");
-    if (!folder) return;
-    if (!display) errors.push("表示名が空: " + original);
-    if (assigned.has(original)) {
-      errors.push("同じフィールドが 2 回割り当てられている: " + original);
-      row.cells[2].classList.add("invalid");
+  state.rename.forEach(row => {
+    if (!row.folder) return;
+    if (!row.display) errors.push("表示名が空: " + row.original);
+    if (assigned.has(row.original)) {
+      errors.push("同じフィールドが 2 回割り当てられている: " + row.original);
     }
-    assigned.add(original);
+    assigned.add(row.original);
   });
-  document.getElementById("rename-errors").textContent = errors.join("\n");
-  return errors.length === 0;
+  return errors;
 }
-document.getElementById("rename-table").addEventListener("griddirty", validateRename);
 
-/* ---- YAML 出力 ---- */
-document.getElementById("rename-download").addEventListener("click", () => {
-  if (!validateRename()) { alert("エラーを直してから出力してください。"); return; }
-  const ds = currentDatasource();
-  const folders = new Map();
+function validateRename() {
+  const seen = new Set();
   Array.from(document.getElementById("rename-body").rows).forEach(row => {
     const original = row.cells[0].textContent.trim();
     const display = row.cells[1].textContent.trim();
     const folder = row.cells[2].textContent.trim();
-    if (!folder || !display) return;
-    if (!folders.has(folder)) folders.set(folder, []);
-    folders.get(folder).push([original, display]);
+    row.cells[1].classList.toggle("invalid", !!folder && !display);
+    row.cells[2].classList.toggle("invalid", !!folder && seen.has(original));
+    if (folder) seen.add(original);
   });
-  if (!folders.size) { alert("フォルダが 1 つも指定されていません。"); return; }
-  let out = yamlKey(ds.name || ds.id) + ":\n";
-  folders.forEach((pairs, folder) => {
-    out += "  " + yamlKey(folder) + ":\n";
-    pairs.forEach(pair => {
-      out += "    " + yamlKey(pair[0]) + ": " + yamlKey(pair[1]) + "\n";
-    });
-  });
-  download("fields.yaml", out);
-});
-
-document.getElementById("calc-download").addEventListener("click", () => {
-  const rows = Array.from(document.getElementById("calc-body").rows)
-    .map(row => Array.from(row.cells).map(c => c.textContent.trim()))
-    .filter(cells => cells[0] && cells[1]);
-  if (!rows.length) { alert("名前と式が入った行がありません。"); return; }
-  let out = "# 案: Python 側の受け手は未実装（設定ファイル形式の拡張が必要）\n";
-  out += yamlKey(currentDatasource().name) + ":\n  calculations:\n";
-  rows.forEach(cells => {
-    out += "    - name: " + yamlKey(cells[0]) + "\n";
-    out += "      formula: " + yamlKey(cells[1]) + "\n";
-    if (cells[2]) out += "      datatype: " + yamlKey(cells[2]) + "\n";
-    if (cells[3]) out += "      role: " + yamlKey(cells[3]) + "\n";
-    if (cells[4]) out += "      folder: " + yamlKey(cells[4]) + "\n";
-  });
-  download("calculations.yaml", out);
-});
+  const errors = validateState(captureCurrent());
+  document.getElementById("rename-errors").textContent = errors.join("\n");
+  return errors.length === 0;
+}
+document.getElementById("rename-table").addEventListener("griddirty", validateRename);
+document.getElementById("calc-table").addEventListener("griddirty", () => captureCurrent());
 
 /* ---- デザインルールタブ ---- */
-document.getElementById("design-download").addEventListener("click", () => {
+function bindColor(id) {
+  const text = document.getElementById(id);
+  const picker = document.getElementById(id + "-pick");
+  picker.value = text.value;
+  picker.addEventListener("input", () => { text.value = picker.value; });
+  text.addEventListener("input", () => {
+    if (/^#[0-9a-fA-F]{6}$/.test(text.value.trim())) picker.value = text.value.trim();
+  });
+}
+["d-main", "d-sub1", "d-sub2", "d-text"].forEach(bindColor);
+
+function designYaml() {
   const value = id => document.getElementById(id).value.trim();
-  let out = "# 案: Python 側の受け手は set_default_font() のみ（他は未実装）\n";
-  out += "design:\n";
+  let out = "design:\n";
   out += "  font: " + yamlKey(value("d-font")) + "\n";
   out += "  main_color: " + yamlKey(value("d-main")) + "\n";
   out += "  sub_color_1: " + yamlKey(value("d-sub1")) + "\n";
   out += "  sub_color_2: " + yamlKey(value("d-sub2")) + "\n";
   out += "  text_color: " + yamlKey(value("d-text")) + "\n";
-  out += "  filter_apply_button: " + (document.getElementById("d-apply").checked ? "true" : "false") + "\n";
-  out += "  spacing: " + yamlKey(document.querySelector("input[name=d-space]:checked").value) + "\n";
-  download("design.yaml", out);
+  out += "  filter_apply_button: "
+       + (document.getElementById("d-apply").checked ? "true" : "false") + "\n";
+  out += "  spacing: "
+       + yamlKey(document.querySelector("input[name=d-space]:checked").value) + "\n";
+  return out;
+}
+
+/* ---- YAML 出力（全タブ分を 1 ファイルに） ---- */
+function buildYaml() {
+  captureCurrent();
+  let out = "# twbpatch 設定ファイル\n";
+  out += "# 受け手の実装状況: datasources.*.folders のみ実装済み。\n";
+  out += "# design と datasources.*.calculations は案（Python 側は未実装）。\n\n";
+  out += designYaml();
+  out += "\ndatasources:\n";
+  let wrote = false;
+  DATA.datasources.forEach((ds, index) => {
+    const state = EDITS[index];
+    if (!state) return;
+    const folders = new Map();
+    state.rename.forEach(row => {
+      if (!row.folder || !row.display) return;
+      if (!folders.has(row.folder)) folders.set(row.folder, []);
+      folders.get(row.folder).push([row.original, row.display]);
+    });
+    const calcs = state.calcs.filter(cells => cells[0] && cells[1]);
+    if (!folders.size && !calcs.length) return;
+    wrote = true;
+    out += "  " + yamlKey(ds.name || ds.id) + ":\n";
+    if (folders.size) {
+      out += "    folders:\n";
+      folders.forEach((pairs, folder) => {
+        out += "      " + yamlKey(folder) + ":\n";
+        pairs.forEach(pair => {
+          out += "        " + yamlKey(pair[0]) + ": " + yamlKey(pair[1]) + "\n";
+        });
+      });
+    }
+    if (calcs.length) {
+      out += "    calculations:\n";
+      calcs.forEach(cells => {
+        out += "      - name: " + yamlKey(cells[0]) + "\n";
+        out += "        formula: " + yamlKey(cells[1]) + "\n";
+        if (cells[2]) out += "        datatype: " + yamlKey(cells[2]) + "\n";
+        if (cells[3]) out += "        role: " + yamlKey(cells[3]) + "\n";
+        if (cells[4]) out += "        folder: " + yamlKey(cells[4]) + "\n";
+      });
+    }
+  });
+  if (!wrote) out += "  {}\n";
+  return out;
+}
+
+document.getElementById("yaml-download").addEventListener("click", () => {
+  captureCurrent();
+  const errors = [];
+  DATA.datasources.forEach((ds, index) => {
+    if (!EDITS[index]) return;
+    validateState(EDITS[index]).forEach(message => {
+      errors.push((ds.name || ds.id) + ": " + message);
+    });
+  });
+  if (errors.length) {
+    alert("エラーを直してから出力してください。\n\n" + errors.join("\n"));
+    return;
+  }
+  download("twbpatch_config.yaml", buildYaml());
 });
 
 /* ---- ダッシュボードタブ（読み取り専用） ---- */
@@ -539,6 +626,7 @@ _BODY = """
   <button data-tab="tab-design">全体（デザインルール）</button>
   <button data-tab="tab-datasource" class="active">データソース</button>
   <button data-tab="tab-dashboard">ダッシュボード</button>
+  <button class="dl" id="yaml-download">設定 YAML をダウンロード</button>
 </nav>
 <main>
 
@@ -548,15 +636,23 @@ _BODY = """
     <p class="note">ここで設定した内容を Python 側へ渡す API は未実装。今は YAML の案を出力するだけ。</p>
     <div class="grid">
       <label for="d-font">フォント</label>
-      <input type="text" id="d-font" value="Meiryo UI">
+      <select id="d-font">__FONT_OPTIONS__</select>
       <label for="d-main">メインカラーコード</label>
-      <input type="text" id="d-main" value="#2f3b52">
+      <span class="color">
+        <input type="color" id="d-main-pick"><input type="text" id="d-main" value="#2f3b52">
+      </span>
       <label for="d-sub1">サブカラー&#9312;</label>
-      <input type="text" id="d-sub1" value="#4a7dff">
+      <span class="color">
+        <input type="color" id="d-sub1-pick"><input type="text" id="d-sub1" value="#4a7dff">
+      </span>
       <label for="d-sub2">サブカラー&#9313;</label>
-      <input type="text" id="d-sub2" value="#c0c0c0">
+      <span class="color">
+        <input type="color" id="d-sub2-pick"><input type="text" id="d-sub2" value="#c0c0c0">
+      </span>
       <label for="d-text">通常時の文字色</label>
-      <input type="text" id="d-text" value="#333333">
+      <span class="color">
+        <input type="color" id="d-text-pick"><input type="text" id="d-text" value="#333333">
+      </span>
       <label for="d-apply">フィルターに「適用」ボタン</label>
       <span><input type="checkbox" id="d-apply"> 入れる</span>
       <label>余白</label>
@@ -565,7 +661,6 @@ _BODY = """
         <label><input type="radio" name="d-space" value="narrow"> 少なめ</label>
       </span>
     </div>
-    <p><button class="act" id="design-download">design.yaml をダウンロード</button></p>
   </div>
 </section>
 
@@ -591,7 +686,6 @@ _BODY = """
       </table>
     </div>
     <p class="errors" id="rename-errors"></p>
-    <p><button class="act" id="rename-download">fields.yaml をダウンロード</button></p>
   </div>
 
   <div class="panel">
@@ -610,7 +704,6 @@ _BODY = """
     <p>
       <button class="act" id="calc-add">行を追加</button>
       <button class="act" id="calc-delete">選択行を削除</button>
-      <button class="act" id="calc-download">calculations.yaml をダウンロード</button>
     </p>
   </div>
 </section>
@@ -635,6 +728,41 @@ __BODY__
 """
 
 
+#: フォント候補。Tableau Desktop の既定フォントと、Windows / macOS の日本語標準フォント。
+FONT_CHOICES = (
+    "Meiryo UI",
+    "メイリオ",
+    "Yu Gothic UI",
+    "游ゴシック",
+    "游明朝",
+    "BIZ UDPGothic",
+    "BIZ UDPMincho",
+    "MS PGothic",
+    "MS Gothic",
+    "MS PMincho",
+    "Hiragino Kaku Gothic ProN",
+    "Hiragino Mincho ProN",
+    "Noto Sans JP",
+    "Tableau Book",
+    "Tableau Medium",
+    "Tableau Regular",
+    "Arial",
+    "Segoe UI",
+    "Helvetica Neue",
+)
+
+
+def _font_options(selected: str) -> str:
+    return "".join(
+        '<option value="{value}"{mark}>{label}</option>'.format(
+            value=_escape(font),
+            mark=" selected" if font == selected else "",
+            label=_escape(font),
+        )
+        for font in FONT_CHOICES
+    )
+
+
 def _escape(value: Any) -> str:
     return (
         str(value)
@@ -650,9 +778,15 @@ def _embed_json(data: dict[str, Any]) -> str:
     return text.replace("</", "<\\/")
 
 
-def render_workbook_html(data: dict[str, Any], *, title: str = "twbpatch 設定") -> str:
+def render_workbook_html(
+    data: dict[str, Any],
+    *,
+    title: str = "twbpatch 設定",
+    font: str = "Meiryo UI",
+) -> str:
     body = (
-        _BODY.replace("__TITLE__", _escape(title))
+        _BODY.replace("__FONT_OPTIONS__", _font_options(font))
+        .replace("__TITLE__", _escape(title))
         .replace("__DS_COUNT__", str(len(data.get("datasources", []))))
         .replace("__WS_COUNT__", str(len(data.get("worksheets", []))))
         .replace("__DB_COUNT__", str(len(data.get("dashboards", []))))
