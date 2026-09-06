@@ -41,8 +41,10 @@ h2 { font-size: 14px; margin: 0 0 4px; }
 .acc-body { display: none; padding: 0 16px 16px; }
 .acc.open > .acc-body { display: block; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-input[type=text], input[type=search], select { font: inherit; padding: 4px 8px;
-         border: 1px solid #c3cad6; border-radius: 4px; }
+input[type=text], input[type=search], input[type=number], select { font: inherit;
+         padding: 4px 8px; border: 1px solid #c3cad6; border-radius: 4px; }
+input[type=number] { width: 96px; }
+label.f input[type=number] { width: 88px; font-size: 12px; padding: 3px 6px; }
 button.act { font: inherit; padding: 5px 12px; border: 1px solid #c3cad6;
              background: #fff; border-radius: 4px; cursor: pointer; }
 button.act:hover { background: #eef1f6; }
@@ -72,7 +74,7 @@ button.mini.danger { color: #b00020; border-color: #e6b8bf; }
             padding: 8px 12px; background: #eef1f6; border-radius: 6px 6px 0 0; }
 .row-no { font-weight: 600; font-size: 12px; color: #46536e; white-space: nowrap; }
 .areas { display: flex; gap: 10px; padding: 12px; overflow-x: auto; align-items: flex-start; }
-.area { min-width: 280px; flex: 1; border: 1px solid #d8dde5; border-radius: 6px;
+.area { flex: 0 0 360px; width: 360px; border: 1px solid #d8dde5; border-radius: 6px;
         background: #fff; padding: 10px; }
 .area-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .fields { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
@@ -659,7 +661,7 @@ function newArea() {
   return {
     id: ++rowSeq,
     kind: "chart",
-    width: "",
+    width: "600",
     sheet: "",
     chart: CHART_TYPES[0] || "",
     datasource: 0,
@@ -669,7 +671,7 @@ function newArea() {
   };
 }
 function newRow() {
-  return { id: ++rowSeq, name: "", height: "", collapsed: false, areas: [newArea()] };
+  return { id: ++rowSeq, name: "", height: "300", collapsed: false, areas: [newArea()] };
 }
 
 function dsOptions(selected) {
@@ -817,7 +819,7 @@ function renderArea(row, area) {
   ]);
   kind.addEventListener("change", () => { area.kind = kind.value; renderRows(); });
 
-  const width = el("input", { type: "text", value: area.width, placeholder: "自動" });
+  const width = el("input", { type: "number", step: "10", min: "0", value: area.width });
   width.addEventListener("input", () => { area.width = width.value.trim(); });
 
   const remove = el("button", { class: "mini danger", text: "×", title: "エリアを削除" });
@@ -937,7 +939,7 @@ function moveRow(row, delta) {
 function renderRow(row, index) {
   const name = el("input", { type: "text", value: row.name, placeholder: "段の名前" });
   name.addEventListener("input", () => { row.name = name.value.trim(); });
-  const height = el("input", { type: "text", value: row.height, placeholder: "自動" });
+  const height = el("input", { type: "number", step: "10", min: "0", value: row.height });
   height.addEventListener("input", () => { row.height = height.value.trim(); });
 
   const up = el("button", { class: "mini", text: "↑", title: "上へ" });
@@ -985,8 +987,7 @@ function renderRow(row, index) {
   card.appendChild(el("div", { class: "row-head" }, [
     grip, toggle,
     el("span", { class: "row-no", text: (index + 1) + "段目" }),
-    addArea,
-    labeled("名前", name), labeled("高さ (px)", height), summary,
+    labeled("名前", name), labeled("高さ (px)", height), summary, addArea,
     el("span", { class: "spacer" }), up, down, remove,
   ]));
 
@@ -1187,9 +1188,9 @@ _BODY = """
       <label for="db-name">ダッシュボード名</label>
       <input type="text" id="db-name" value="ダッシュボード">
       <label for="db-width">幅 (px)</label>
-      <input type="text" id="db-width" value="1600">
+      <input type="number" step="10" min="0" id="db-width" value="1600">
       <label for="db-height">高さ (px)</label>
-      <input type="text" id="db-height" value="900">
+      <input type="number" step="10" min="0" id="db-height" value="900">
     </div>
     </div>
   </div>

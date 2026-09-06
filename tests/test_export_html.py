@@ -113,6 +113,14 @@ def test_export_html_dashboard_tab_is_an_editor(tmp_path) -> None:
     assert 'id="acc-dashboard"' in html
     assert 'id="acc-header"' in html
     assert 'id="acc-body"' in html
+    # エリアは 360px 固定で、段の中を横スクロールする
+    assert ".area { flex: 0 0 360px; width: 360px;" in html
+    assert ".areas { display: flex; gap: 10px; padding: 12px; overflow-x: auto;" in html
+    # px の入力は 10 刻み。既定は段の高さ 300 / エリアの幅 600
+    assert '<input type="number" step="10" min="0" id="db-width" value="1600">' in html
+    assert 'type: "number", step: "10", min: "0", value: row.height' in html
+    assert 'height: "300"' in html
+    assert 'width: "600"' in html
     # 段とエリアはドラッグで動かす。左右ボタンは持たない
     assert "function attachGrip(" in html
     assert 'kind: "area"' in html and 'kind: "row"' in html
