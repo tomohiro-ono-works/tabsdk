@@ -138,15 +138,17 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 
 ## 残っていること
 
-### D7. ワークブック全体の書式を扱う API の形（J-5）
+### ~~D7. ワークブック全体の書式を扱う API の形~~ → 不要だった（2026-09-07）
 
-**今は存在しない。** `set_default_font()` は `font-family` しか書かない。
-色パレット・余白・フィルターの適用ボタンを扱う API を新設するか決める。
-クラス方式（`style-rule` を扱うモデル）を先に足す必要があるかも含める。
+デザインルールの各項目が `.twb` のどこへ届くかを実測した結果、**ワークブック全体に
+書くものはフォントだけ**だった。色と余白はダッシュボードを組むときの引数で、
+クラス方式（`draw_*` の色引数、`TwbDashboardZone.update(style=)`）は既に揃っている。
 
-### D8. フィルターの「適用」ボタンの XML 表現
+### ~~D8. フィルターの「適用」ボタンの XML 表現~~ → 調査済み・実装済み（2026-09-07）
 
-未調査。`twb-xml-probe` サブエージェントで調べる。
+`zone[@type-v2='filter']` の `show-apply="true"`。付けないときは属性ごと書かない。
+読み取りは前からあり、書き込みを足した（`add_filter(show_apply=)` /
+`TwbDashboardZone.update(show_apply=)` / `build_report(filter_apply_button=)`）。
 
 ### D9. `dashboard` セクションと `build_report()` の対応
 
@@ -159,5 +161,5 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 | 1 | `datasources.*.folders` の読み込み | — | **完了** |
 | 2 | `datasources.*.calculations` の適用 | — | **完了** |
 | 3 | `design.font` の適用 | — | **完了** |
-| 4 | `design` のその他 | **D7**。API 自体が無い | 未着手 |
-| 5 | `dashboard` の適用 | **K-1 / H-10 / H-1** | 未着手 |
+| 4 | `design` のその他 | 届け先は `dashboard` の適用と同じ | 5 に統合 |
+| 5 | `dashboard` の適用（色・余白・適用ボタンの流し込みを含む） | **K-1 / H-10 / H-1** | 未着手 |

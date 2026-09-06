@@ -56,6 +56,22 @@ def _is_container(zone_el: ET._Element) -> bool:
     return (zone_el.get("type-v2") or zone_el.get("type")) in _CONTAINER_TYPES
 
 
+def _set_show_apply(zone_el: ET._Element, show_apply: bool) -> None:
+    """フィルタ zone の「適用」ボタンを付け外しする。
+
+    Tableau は付けるときだけ `show-apply="true"` を書き、付けないときは属性ごと
+    書かない（実測: RETAIL - POS の .twb は 4 件すべて `"true"`、既定のフィルタには
+    属性が無い）。読み取り側も「属性なし = None」を前提にしているため、
+    `False` では属性を消す。
+    """
+    if not isinstance(show_apply, bool):
+        raise TypeError("show_apply must be bool")
+    if show_apply:
+        zone_el.set("show-apply", "true")
+    else:
+        zone_el.attrib.pop("show-apply", None)
+
+
 def _zone_kind(zone_el: ET._Element, worksheet_ids: set[str]) -> str:
     if _is_container(zone_el):
         return "container"
@@ -784,7 +800,10 @@ class TwbDashboard(ConnectedModel):
         header_height: int = 43,
         header_background_color: str = "#c0c0c0",
         header_font_color: str = "#333333",
+        filter_apply_button: bool = False,
     ) -> TwbDashboard:
+        if not isinstance(filter_apply_button, bool):
+            raise TypeError("filter_apply_button must be bool")
         container_sizes = dict(container_sizes or {})
         for container_name, size in container_sizes.items():
             if not isinstance(container_name, str) or not container_name.strip():
@@ -973,7 +992,9 @@ class TwbDashboard(ConnectedModel):
             for item in items:
                 assert isinstance(item, tuple)
                 worksheet, reference = filter_fields[item]
-                zone = container._add_filter_reference(worksheet, reference)
+                zone = container._add_filter_reference(
+                    worksheet, reference, show_apply=filter_apply_button
+                )
                 zone.update(
                     style={
                         "background_color": "#ffffff",
@@ -1343,6 +1364,7 @@ class TwbDashboardContainer(ConnectedModel):
         field: TwbWorksheetField,
         *,
         mode: str = "checkdropdown",
+        show_apply: bool = False,
         order: int | None = None,
         weight: float = 1,
     ) -> TwbDashboardZone:
@@ -1357,6 +1379,7 @@ class TwbDashboardContainer(ConnectedModel):
             TwbWorksheet(self._context, field._worksheet_id),
             reference,
             mode=mode,
+            show_apply=show_apply,
             order=order,
             weight=weight,
         )
@@ -1367,6 +1390,7 @@ class TwbDashboardContainer(ConnectedModel):
         reference: str,
         *,
         mode: str = "checkdropdown",
+        show_apply: bool = False,
         order: int | None = None,
         weight: float = 1,
     ) -> TwbDashboardZone:
@@ -1399,6 +1423,7 @@ class TwbDashboardContainer(ConnectedModel):
                 "mode": mode,
             },
         )
+        _set_show_apply(child, show_apply)
         _insert_zone(parent, child, order)
         weights = dict(self._context.layout_weights)
         weights[(self._dashboard_id, zone_id)] = weight
@@ -1734,6 +1759,7 @@ class TwbDashboardZone(ConnectedModel):
         width: float | _UnsetType = UNSET,
         height: float | _UnsetType = UNSET,
         show_title: bool | _UnsetType = UNSET,
+        show_apply: bool | _UnsetType = UNSET,
         fixed_size: int | None | _UnsetType = UNSET,
         friendly_name: str | None | _UnsetType = UNSET,
         hidden: bool | _UnsetType = UNSET,
@@ -1752,6 +1778,11 @@ class TwbDashboardZone(ConnectedModel):
             fixed_size = _validate_fixed_size(fixed_size)
         if show_title is not UNSET and not isinstance(show_title, bool):
             raise TypeError("show_title must be bool")
+        if show_apply is not UNSET:
+            if not isinstance(show_apply, bool):
+                raise TypeError("show_apply must be bool")
+            if self.kind != "filter":
+                raise ValueError("show_apply is only available on filter zones")
         if hidden is not UNSET and not isinstance(hidden, bool):
             raise TypeError("hidden must be bool")
 
@@ -1797,6 +1828,8 @@ class TwbDashboardZone(ConnectedModel):
                 zone.set("h", str(_px_to_raw(height, canvas_height or 1)))
         if show_title is not UNSET:
             zone.set("show-title", "true" if show_title else "false")
+        if show_apply is not UNSET:
+            _set_show_apply(zone, show_apply)
         if friendly_name is not UNSET:
             if friendly_name is None:
                 zone.attrib.pop("friendly-name", None)

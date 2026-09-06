@@ -318,7 +318,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `get_filter_controls` | `*, id=None, name=None` | `list[TwbFilterControl]` | 表示中のフィルタコントロール |
 | `create_container` | `*, direction="horizontal", friendly_name=None, distribute_evenly=False` | `TwbDashboardContainer` | 最上位コンテナを作成 |
 | `add_floating_worksheet` | `worksheet: TwbWorksheet, *, x=0, y=0, width=600, height=400, show_title=True` | `TwbDashboardZone` | 浮動配置。タイル配置とは明示的に別 API |
-| `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333"` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築 |
+| `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333", filter_apply_button=False` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築。`filter_apply_button=True` で置いたフィルタすべてに「適用」ボタンを付ける |
 | `update` | `*, name=UNSET, visible=UNSET` | `TwbDashboard` | 自身を更新 |
 | `delete` | — | `None` | 削除 |
 
@@ -348,7 +348,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `get_zones` | `*, id=None, name=None` | `list[TwbDashboardZone]` | 子ゾーン |
 | `create_container` | `*, direction="vertical", order=None, weight=1, fixed_size=None, friendly_name=None, hidden=False, distribute_evenly=False` | `TwbDashboardContainer` | 子コンテナを作成 |
 | `add_worksheet` | `worksheet: TwbWorksheet, *, order=None, weight=1, show_title=True, fixed_size=None, friendly_name=None` | `TwbDashboardZone` | ワークシートをタイル配置 |
-| `add_filter` | `field: TwbWorksheetField, *, mode="checkdropdown", order=None, weight=1` | `TwbDashboardZone` | フィルタコントロールを配置 |
+| `add_filter` | `field: TwbWorksheetField, *, mode="checkdropdown", show_apply=False, order=None, weight=1` | `TwbDashboardZone` | フィルタコントロールを配置。`show_apply=True` で「適用」ボタンを付ける |
 | `add_text` | `text: str, *, order=None, weight=1, fixed_size=None, friendly_name=None, font_size=12, font_color="#333333", bold=False, style=None` | `TwbDashboardZone` | テキストを配置 |
 | `add_image` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | 画像枠を配置 |
 | `add_spacer` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | 余白を配置 |
@@ -382,7 +382,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
-| `update` | `*, order=UNSET, weight=UNSET, x=UNSET, y=UNSET, width=UNSET, height=UNSET, show_title=UNSET, fixed_size=UNSET, friendly_name=UNSET, hidden=UNSET, style=UNSET` | `TwbDashboardZone` | 自身を更新。**旧 `update_style()` を統合**。タイル配置に `x`/`y`、浮動配置に `order`/`weight` を渡すと `ValueError` |
+| `update` | `*, order=UNSET, weight=UNSET, x=UNSET, y=UNSET, width=UNSET, height=UNSET, show_title=UNSET, show_apply=UNSET, fixed_size=UNSET, friendly_name=UNSET, hidden=UNSET, style=UNSET` | `TwbDashboardZone` | 自身を更新。**旧 `update_style()` を統合**。タイル配置に `x`/`y`、浮動配置に `order`/`weight` を渡すと `ValueError`。`show_apply` はフィルタ zone 専用で、`False` は属性を削除する（Tableau が既定で書かないため） |
 | `delete` | — | `None` | **配置だけ**を削除。ワークシート本体は削除しない |
 
 ### 3.11 `TwbDashboardAction`
