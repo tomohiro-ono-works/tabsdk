@@ -55,6 +55,7 @@ Worksheet のみ `id == name == XML @name`。
 | `get_unsupported_features` | — | `list[TwbUnsupportedFeature]` | SDK が未対応の Tableau 機能を列挙する |
 | `export_json` | — | `dict` | 公開値のみを組み立てて辞書化する。非公開コンテキストと `caption` は含めない |
 | `export_html` | `path: str \| Path, *, title: str = "twbpatch 設定", overwrite: bool = False` | `Path` | 設定画面の HTML を 1 ファイル出力する。外部参照なしで単体で開ける。仕様は `docs/html_screen_spec.md` |
+| `apply_config` | `config: str \| Path \| dict, *, field_grouping: str = "folder"` | `TwbWorkbook` | 設定画面が出力した YAML を適用する。`design.font` と `datasources` を適用し、受け手が無い節は警告ログを出して読み飛ばす |
 
 ### 2.3 リソース取得・作成
 
@@ -164,7 +165,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
-| `update` | `*, name=UNSET, role=UNSET, discrete=UNSET, hidden=UNSET, formula=UNSET, formula_ref="auto", strict=True, ref_map=None` | `TwbField` | 自身を更新。`formula` 未指定で formula 系オプションだけ渡すと例外 |
+| `update` | `*, name=UNSET, datatype=UNSET, role=UNSET, discrete=UNSET, hidden=UNSET, formula=UNSET, formula_ref="auto", strict=True, ref_map=None` | `TwbField` | 自身を更新。`formula` 未指定で formula 系オプションだけ渡すと例外。`datatype` は計算フィールドのみ（それ以外は `UnsupportedFeatureError`） |
 | `move_to_folder` | `folder: TwbFolder` | `TwbField` | フォルダへ移動。同一データソースのフォルダのみ |
 | `remove_from_folder` | — | `TwbField` | フォルダから外す |
 | `delete` | — | `None` | 削除。計算式・配置・フィルタ等から参照されていれば `ResourceInUseError` |

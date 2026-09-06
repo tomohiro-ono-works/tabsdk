@@ -109,25 +109,36 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 
 ---
 
-# 受け手（Python 側）— 未着手
+# 受け手（Python 側）— データソース側は完了 2026-09-07
 
-**ここからが次の作業。** 画面が吐く YAML の形は `docs/html_screen_spec.md` の
-「出力する設定ファイル」に確定している。
+`TwbWorkbook.apply_config()` を API 方式で新設した（`twbpatch/config_apply.py`）。
+**これで 2 周方式が回る。**
 
-## 決めるべきこと
+## 決着した設計判断
 
-### D4. 計算フィールドを含む設定ファイル形式（J-3）
+| # | 決めたこと | 結論 |
+|---|---|---|
+| D4 | 既存 YAML との後方互換 | **保たない。** 形が違うので別メソッドにし、見分け処理を持たない |
+| D6 | 受け手を 1 本にするか分けるか | **1 本**（`apply_config()`）。節ごとに分けない |
+| — | 同名の計算フィールド | **上書きする。** 2 度目にエラーで止まると往復が回らない |
+| — | `role` と連続 / 不連続 | `dimension` は不連続、`measure` は連続。画面では指定しない |
+| — | 受け手が無い節 | 警告ログを出して読み飛ばす。画面は常に全節を出すのでエラーにできない |
 
-- 既存の `ec_site_fields.yaml`（最上位がデータソース名）と後方互換を保つか
-- 保つ場合、新形式（最上位が `design` / `datasources` / `dashboard`）とどう見分けるか
-- 出力順を安定させる（現行は記述順に依存している）
+計算フィールドの上書きでデータ型を直せるように、`TwbField.update()` へ `datatype=` を
+足した（計算フィールド以外は `UnsupportedFeatureError`）。
 
-### D6. 受け手を 1 本にするか、セクションごとに分けるか
+## やったこと
 
-`apply_config(path)` 1 本で全部読むか、`apply_field_config()` の拡張と
-デザイン用・ダッシュボード用に分けるか。仕様 §2.0 の API 方式として置く。
+- [x] `apply_config()`（`design.font` / `datasources.*.folders` / `datasources.*.calculations`）
+- [x] 同名の計算フィールドの上書き（式・データ型・役割・フォルダ）
+- [x] `TwbField.update(datatype=)` の追加
+- [x] 受け手が無い節の読み飛ばしと警告
+- [x] テスト（`tests/test_apply_config.py`、14 件）
+- [x] 仕様 §6.14 / `api_reference.md` / `README.md` / `html_screen_spec.md` の更新
 
-### D7. ワークブック全体の書式を扱う API の形
+## 残っていること
+
+### D7. ワークブック全体の書式を扱う API の形（J-5）
 
 **今は存在しない。** `set_default_font()` は `font-family` しか書かない。
 色パレット・余白・フィルターの適用ボタンを扱う API を新設するか決める。
@@ -143,12 +154,10 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 
 ## 作業の順番
 
-| 順 | 対象 | 前提 |
-|---|---|---|
-| 1 | `datasources.*.folders` の読み込み | なし。`apply_field_config()` があるので変換だけ |
-| 2 | `datasources.*.calculations` の適用 | D4。`create_calculated_field()` を呼ぶだけ |
-| 3 | `design.font` の適用 | なし。`set_default_font()` がある |
-| 4 | `design` のその他 | **D7**。API 自体が無い |
-| 5 | `dashboard` の適用 | **K-1 / H-10 / H-1** |
-
-**1 と 2 が終われば 2 周方式が回る。** ダッシュボード側はその後でよい。
+| 順 | 対象 | 前提 | 状態 |
+|---|---|---|---|
+| 1 | `datasources.*.folders` の読み込み | — | **完了** |
+| 2 | `datasources.*.calculations` の適用 | — | **完了** |
+| 3 | `design.font` の適用 | — | **完了** |
+| 4 | `design` のその他 | **D7**。API 自体が無い | 未着手 |
+| 5 | `dashboard` の適用 | **K-1 / H-10 / H-1** | 未着手 |

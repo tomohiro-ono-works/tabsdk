@@ -818,6 +818,7 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 | `set_filter()` | 指定フィールドを全ワークシートのフィルタ対象にする |
 | `set_default_font()` | ワークブック全体の既定フォント |
 | `apply_field_config()` | YAML でフィールドの改名とフォルダ分類を一括適用 |
+| `apply_config()` | 設定画面が出力した YAML を適用する。受け手が無い節は読み飛ばす |
 | `export_json()` | ワークブックの内容を辞書で取り出す |
 | `export_html()` | 設定画面の HTML を 1 ファイル出力する（`docs/html_screen_spec.md`） |
 

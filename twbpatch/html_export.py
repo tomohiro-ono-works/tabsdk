@@ -590,8 +590,8 @@ function designYaml() {
 function buildYaml() {
   captureCurrent();
   let out = "# twbpatch 設定ファイル\n";
-  out += "# 受け手の実装状況: datasources.*.folders のみ実装済み。\n";
-  out += "# design / calculations / dashboard は案（Python 側は未実装）。\n";
+  out += "# 受け手: wb.apply_config() が design.font と datasources を適用する。\n";
+  out += "# design の色・余白・適用ボタンと dashboard は未実装（読み飛ばす）。\n";
   out += "# 集計方法は画面で指定しない。役割とデータ型から自動で決める。\n\n";
   out += designYaml();
   out += "\ndatasources:\n";

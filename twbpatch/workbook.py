@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from lxml import etree as ET
@@ -67,6 +67,7 @@ from .connected_parameter import (
 )
 from .context import WorkbookContext
 from .serialization import serialize_workbook
+from .config_apply import apply_workbook_config
 from .html_export import render_workbook_html
 
 if TYPE_CHECKING:
@@ -621,6 +622,19 @@ class TwbWorkbook:
                 field_grouping=field_grouping,
             )
         return self
+
+    def apply_config(
+        self,
+        config: str | Path | dict[str, Any],
+        *,
+        field_grouping: str = "folder",
+    ) -> TwbWorkbook:
+        """設定画面が出力した YAML を適用する。
+
+        受け手がある節だけを適用し、無い節は名前をログへ出して読み飛ばす。
+        形式は `docs/html_screen_spec.md`。
+        """
+        return apply_workbook_config(self, config, field_grouping=field_grouping)
 
     def get_datasource(self, datasource: str, *, by: str = "auto") -> TwbDatasource:
         ds_el = resolve_datasource_el(self.tree, datasource, by=by, include_parameters=False)

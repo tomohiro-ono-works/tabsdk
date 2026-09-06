@@ -1213,6 +1213,7 @@ class TwbField(ConnectedModel):
         self,
         *,
         name: str | None | _UnsetType = UNSET,
+        datatype: str | _UnsetType = UNSET,
         role: str | _UnsetType = UNSET,
         discrete: bool | None | _UnsetType = UNSET,
         hidden: bool | _UnsetType = UNSET,
@@ -1238,6 +1239,14 @@ class TwbField(ConnectedModel):
                 if _field_display_name(other) == resolved_name:
                     raise ValueError(f"field name already exists: {resolved_name}")
 
+        if datatype is not UNSET:
+            if not isinstance(datatype, str) or not datatype.strip():
+                raise ValueError("datatype must be a non-empty string")
+            datatype = datatype.strip()
+            if definition.column is None or definition.column.find("./calculation") is None:
+                raise UnsupportedFeatureError(
+                    "datatype can only be changed on calculated fields"
+                )
         if role is not UNSET and not isinstance(role, str):
             raise TypeError("role must be a string")
         if discrete is not UNSET and discrete is not None and not isinstance(discrete, bool):
@@ -1273,6 +1282,8 @@ class TwbField(ConnectedModel):
                 updated.attrib.pop("caption", None)
             else:
                 updated.set("caption", resolved_name)
+        if datatype is not UNSET:
+            updated.set("datatype", datatype)
         if role is not UNSET:
             updated.set("role", role)
         if discrete is not UNSET:

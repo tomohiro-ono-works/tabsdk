@@ -219,8 +219,8 @@ Tableau の関数を一通り実装することになるため、**画面で入�
 
 ```yaml
 # twbpatch 設定ファイル
-# 受け手の実装状況: datasources.*.folders のみ実装済み。
-# design / calculations / dashboard は案（Python 側は未実装）。
+# 受け手: wb.apply_config() が design.font と datasources を適用する。
+# design の色・余白・適用ボタンと dashboard は未実装（読み飛ばす）。
 # 集計方法は画面で指定しない。役割とデータ型から自動で決める。
 
 design:
@@ -281,15 +281,32 @@ dashboard:
 
 ## 実装済みと未実装の境界
 
-**この画面は HTML 側だけが完成している。** YAML を読む Python 側は `folders` 相当を除いて未実装。
+受け手は `TwbWorkbook.apply_config()`。**データソース側は通る。ダッシュボード側は未実装。**
 
 | 出力 | 受け手 |
 |---|---|
-| `datasources.*.folders` | `apply_field_config()`。**ただし最上位の形が違うので変換が要る** |
-| `datasources.*.calculations` | 未実装。`create_calculated_field()` を呼ぶだけ |
-| `design.font` | `set_default_font()` |
-| `design` のその他 | 未実装。**ワークブック全体の書式を扱う API 自体が無い** |
-| `dashboard` | 未実装。`build_report()` の `struct` 形式が未確定（K-1） |
+| `datasources.*.folders` | **実装済み**。`apply_field_config()` へ渡す |
+| `datasources.*.calculations` | **実装済み**。`create_calculated_field()`、同名があれば `update()` で上書き |
+| `design.font` | **実装済み**。`set_default_font()` |
+| `design` のその他 | 未実装（J-5）。**ワークブック全体の書式を扱う API 自体が無い**。読み飛ばす |
+| `dashboard` | 未実装。`build_report()` の `struct` 形式が未確定（K-1）。読み飛ばす |
+
+受け手が無い節はエラーにせず、名前を警告ログへ出して読み飛ばす。画面は常に全節を
+出力するため、エラーにすると出力した YAML がそのまま使えなくなる。
+
+### 2 周方式で同じ YAML を 2 度通すとき
+
+`calculations` は同名があれば式・データ型・役割・フォルダを上書きする。2 度目に
+「既に存在する」で止まると往復が回らないため。
+
+`folders` は「元カラム名 → 表示名」なので、**適用済みの `.twb` へ同じものをもう一度
+渡すと元カラム名が見つからず `NotFoundError` になる。** 2 周目は焼き直した `.twb` から
+画面を出し直し、YAML も作り直すのが正しい手順。
+
+### 役割から決まるもの
+
+`role: dimension` は不連続（`discrete=True`）、`role: measure` は連続として作る。
+画面では指定しない。
 
 ## 決めていないこと
 

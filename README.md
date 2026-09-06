@@ -40,8 +40,24 @@ wb.export_html("config.html", title="売上分析 設定", overwrite=True)
 画面はデータソース（表示名・フォルダ・計算フィールド）、全体の書式、ダッシュボードの構成の
 3 タブで、「設定 YAML をダウンロード」で 1 ファイルに落ちます。
 
-**落とした YAML を読み込む Python 側は、表示名とフォルダを除いてまだ実装していません。**
-詳細は [docs/html_screen_spec.md](docs/html_screen_spec.md)。
+### 設定画面が出した YAML を適用する
+
+```python
+wb = TwbWorkbook.open("template.twb")
+wb.apply_config("twbpatch_config.yaml")
+wb.save("output.twb", overwrite=True)
+```
+
+適用されるのは全体のフォント（`design.font`）と、データソースごとの表示名・フォルダ
+（`datasources.*.folders`）・計算フィールド（`datasources.*.calculations`）です。
+計算フィールドは同名があれば式・データ型・役割・フォルダを上書きします。
+
+**全体の色・余白とダッシュボードの構成はまだ適用しません。** 受け手が無いので、
+名前を警告ログへ出して読み飛ばします。詳細は
+[docs/html_screen_spec.md](docs/html_screen_spec.md)。
+
+計算フィールドを画面で定義した場合は、**一度 `.twb` へ焼き直してから画面を出し直します。**
+そうすると 2 周目にはグラフの項目候補として選べるようになります。
 
 ## `TwbWorkbook` API
 
