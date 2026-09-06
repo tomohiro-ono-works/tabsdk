@@ -134,7 +134,7 @@ def test_filter_control_is_a_dashboard_zone(tmp_path) -> None:
     dashboard = workbook.create_dashboard(name="ダッシュボード", width=800, height=600)
     container = dashboard.create_container(direction="vertical")
     container.add_worksheet(worksheet, show_title=False)
-    container.add_filter(placement)
+    container.add_filter(field=placement)
 
     controls = dashboard.get_filter_controls()
     assert [type(item) for item in controls] == [TwbFilterControl]

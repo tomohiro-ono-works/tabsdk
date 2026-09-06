@@ -44,7 +44,7 @@ def main() -> None:
     # 2. 計算フィールド -----------------------------------------------------
     # 辞書で一括作成する形。値は式だけ、または (式, datatype) のタプル。
     datasource.create_calculated_fields(
-        {
+        calculations={
             "利益率": "SUM([利益]) / SUM([売上])",
             "注文数": "COUNTD([注文ID])",
             "1顧客あたり売上": "SUM([売上]) / COUNTD([顧客ID])",

@@ -950,16 +950,29 @@ class TwbWorksheet(ConnectedModel):
 
     def add_reference_line(
         self,
-        field: TwbWorksheetField,
         *,
+        field: TwbWorksheetField,
+        pane: TwbPane | None = None,
         formula: str = "median",
         scope: str = "per-table",
         label_type: str = "value",
         probability: int = 95,
         z_order: int = 1,
     ) -> TwbReferenceLine:
+        """参照線を 1 本引く。
+
+        Pane が複数あるワークシート（二重軸など）では `pane=` が要る。
+        以前は先頭の Pane へ暗黙に引いていて、意図しない側に線が出ていた
+        （仕様 §6.7、2026-09-07 に修正）。Pane が 1 つなら省略できる。
+        """
         if not isinstance(field, TwbWorksheetField):
             raise TypeError("field must be TwbWorksheetField")
+        if pane is not None and not isinstance(pane, TwbPane):
+            raise TypeError("pane must be TwbPane or None")
+        if pane is not None and (
+            pane._context is not self._context or pane._worksheet_id != self._id
+        ):
+            raise ValueError("pane must belong to the worksheet")
         if field._context is not self._context or field._worksheet_id != self._id:
             raise ValueError("field must belong to the worksheet")
         if field.shelf not in {"rows", "columns"}:
@@ -973,6 +986,16 @@ class TwbWorksheet(ConnectedModel):
         panes = _pane_elements(updated)
         if not panes:
             raise UnsupportedFeatureError("worksheet has no pane")
+        if pane is not None:
+            pane_index = pane._pane_index
+        elif len(panes) == 1:
+            pane_index = 0
+        else:
+            raise ValueError(
+                "worksheet has more than one pane, pass pane= from get_panes()"
+            )
+        if pane_index >= len(panes):
+            raise DetachedModelError(f"pane is detached: {self._id}")
         reference = field._resolve_placement().reference
         line_id = f"refline{len(self.get_reference_lines())}"
         line = ET.Element(
@@ -989,7 +1012,7 @@ class TwbWorksheet(ConnectedModel):
                 "enable-instant-analytics": "true",
             },
         )
-        _insert_in_order(panes[0], line, _PANE_CHILD_ORDER)
+        _insert_in_order(panes[pane_index], line, _PANE_CHILD_ORDER)
         _replace_if_changed(worksheet_el, updated, self._context)
         return self.get_reference_lines(id=line_id)[0]
 
@@ -1312,8 +1335,8 @@ class TwbWorksheet(ConnectedModel):
 
     def set_axis_visibility(
         self,
-        field: TwbWorksheetField,
         *,
+        field: TwbWorksheetField,
         visible: bool,
     ) -> TwbWorksheet:
         if not isinstance(field, TwbWorksheetField):

@@ -70,7 +70,7 @@ def test_every_folder_argument_accepts_a_name(tmp_path) -> None:
         name="単数形", formula="SUM([売上])", folder="Measure"
     )
     plural = datasource.create_calculated_fields(
-        {"複数形": "COUNTD([注文ID])"}, folder="Measure"
+        calculations={"複数形": "COUNTD([注文ID])"}, folder="Measure"
     )
     yoy = datasource.create_yoy_calculated_fields(
         metric="売上", year_category="当年昨年区分", folder="Measure"

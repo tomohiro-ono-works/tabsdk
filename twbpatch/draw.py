@@ -251,8 +251,8 @@ def draw_yoy(
     if color is not None:
         pane.update(mark_color=color)
     if not show_axes:
-        worksheet.set_axis_visibility(item_placement, visible=False)
-        worksheet.set_axis_visibility(metric_placement, visible=False)
+        worksheet.set_axis_visibility(field=item_placement, visible=False)
+        worksheet.set_axis_visibility(field=metric_placement, visible=False)
     return worksheet
 
 
@@ -450,10 +450,10 @@ def draw_quadrant(
         color_placement,
         {str(index): color for index, color in enumerate(colors, start=1)},
     )
-    worksheet.add_reference_line(x_placement, formula="median")
-    worksheet.add_reference_line(y_placement, formula="median")
+    worksheet.add_reference_line(field=x_placement, formula="median")
+    worksheet.add_reference_line(field=y_placement, formula="median")
     worksheet.add_reference_line(
-        x_placement,
+        field=x_placement,
         formula="median",
         scope="per-pane",
         label_type="automatic",

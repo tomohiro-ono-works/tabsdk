@@ -40,7 +40,7 @@ def _dashboard_with_filter(workbook, **kwargs):
     dashboard = workbook.create_dashboard(name="ダッシュボード", width=800, height=600)
     container = dashboard.create_container(direction="vertical")
     container.add_worksheet(worksheet, show_title=False)
-    zone = container.add_filter(placement, **kwargs)
+    zone = container.add_filter(field=placement, **kwargs)
     return dashboard, zone
 
 

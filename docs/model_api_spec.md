@@ -840,7 +840,8 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 **`TwbPane` / `TwbWorksheet` の `set_*`**
 
 `set_customized_label()` / `set_axis_visibility()` / `set_categorical_colors()` /
-`set_continuous_colors()` / `add_sort()` / `set_subtotal_visibility()` は、複数の
+`set_continuous_colors()` / `add_sort()` / `set_subtotal_visibility()` /
+`add_reference_line()` は、複数の
 XML 箇所（`style-rule` と `format` の組など）をまとめて書く。**いずれも他モデルを
 引数に取る**ため §3.3 で `update()` へ統合しない側に当たる。
 
@@ -1134,7 +1135,7 @@ right.add_worksheet(kpi_sheet, order=0, weight=1)
 - `TwbWorksheet` に `create_field()` が存在せず、既存 `TwbField` を `add_field()` で配置できる。
 - Worksheetのシェルフ配置が `rows`、`columns`、`pages`、`filters` を検証する。
 - `TwbPane` が `mark_type` を更新し、対応エンコーディングへフィールドを配置できる。
-- 複数Paneでは対象Paneの明示的な選択が必要になる。
+- 複数Paneでは対象Paneの明示的な選択が必要になる。`TwbWorksheet.add_reference_line()` は `pane=` を受け取り、Paneが複数あるとき省略すると `ValueError` にする。Paneが1つのときは省略できる。
 - 総計が `worksheet.update(grand_totals=...)` と同名プロパティの対称形で読み書きできる。
 - 小計が `worksheet.set_subtotal_visibility()` で付け外しでき、`update()` に含まれない。
 - `TwbWorksheetField.delete()` が配置だけを解除し、Datasourceの `TwbField` を削除しない。

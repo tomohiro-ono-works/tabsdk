@@ -744,7 +744,7 @@ class TwbDatasource(ConnectedModel):
         original_revision = self._context.revision
         original_dirty = self._context.is_dirty
         try:
-            return self.create_calculated_fields(calculations, folder=folder)
+            return self.create_calculated_fields(calculations=calculations, folder=folder)
         except Exception:
             current_datasource_el = self._resolve_element()
             parent = current_datasource_el.getparent()

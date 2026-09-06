@@ -202,7 +202,7 @@ def test_datasource_creates_calculated_fields_in_one_call() -> None:
     datasource.create_folder(name="Measure")
 
     fields = datasource.create_calculated_fields(
-        {
+        calculations={
             "利益率": ("SUM([粗利]) / SUM([売上])", "real", "%"),
             "売上件数": ("COUNT([売上])", "integer"),
         },

@@ -3,8 +3,28 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from .context import ConnectedModel
+
+
+def _model_to_dict(model: ConnectedModel) -> dict[str, Any]:
+    """接続型モデルの公開プロパティだけを辞書にする。
+
+    投影モデル（`TwbReferenceLine` / `TwbWorksheetFilter` / `TwbFilterControl`）は
+    dataclass ではないので、`asdict()` では変換できずそのまま残っていた。
+    JSON へ落とすと `not JSON serializable` になり、非公開コンテキストごと
+    戻り値に混ざる恐れもあった（仕様 §10、2026-09-07 に修正）。
+    """
+    return {
+        name: getattr(model, name)
+        for klass in type(model).__mro__
+        for name, attribute in vars(klass).items()
+        if isinstance(attribute, property) and not name.startswith("_")
+    }
+
 
 def _normalize_projection(value: Any) -> Any:
+    if isinstance(value, ConnectedModel):
+        value = _model_to_dict(value)
     if is_dataclass(value):
         value = asdict(value)
     if isinstance(value, list):

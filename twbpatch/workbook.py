@@ -312,7 +312,7 @@ class TwbWorkbook:
         if len(fields) > 1:
             raise AmbiguousCaptionError(f"field name is ambiguous: {field_name}")
 
-        datasource.set_filter(fields[0])
+        datasource.set_filter(field=fields[0])
         for worksheet in self.get_worksheets():
             uses_datasource = worksheet._resolve_element().xpath(
                 ".//*[local-name()='datasource-dependencies'][@datasource=$id]"

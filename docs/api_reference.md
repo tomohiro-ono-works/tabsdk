@@ -131,9 +131,9 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `get_relationships` | `*, id=None, name=None` | `list[TwbRelationship]` | 論理リレーションシップ |
 | `create_folder` | `*, name: str` | `TwbFolder` | フォルダを作成 |
 | `create_calculated_field` | `*, name, formula, datatype="real", role="measure", discrete=False, folder=None, hidden=False, number_format=None, table_calculation=None, formula_ref="auto", strict=True, ref_map=None` | `TwbField` | 計算フィールドを1件作成。`formula` 内の表示名は保存前に `id` へ変換される |
-| `create_calculated_fields` | `calculations: dict, *, folder=None, role="measure", discrete=False, strict=True` | `list[TwbField]` | 計算フィールドを一括作成 |
+| `create_calculated_fields` | `*, calculations: dict, folder=None, role="measure", discrete=False, strict=True` | `list[TwbField]` | 計算フィールドを一括作成 |
 | `create_yoy_calculated_fields` | `*, metric, year_category, folder=None` | `list[TwbField]` | 前年比に必要な計算フィールド群をまとめて作成 |
-| `set_filter` | `field: TwbField` | `TwbDatasource` | データソースレベルのフィルタを設定 |
+| `set_filter` | `*, field: TwbField` | `TwbDatasource` | データソースレベルのフィルタを設定 |
 | `apply_field_config` | `config: str \| Path \| dict, *, field_grouping="folder"` | `TwbDatasource` | 設定に沿って表示名・フォルダを一括適用 |
 | `update` | `*, source=UNSET, name=UNSET, field_grouping=UNSET` | `TwbDatasource` | 自身を更新 |
 | `delete` | — | `None` | 削除。参照中なら `ResourceInUseError` |
@@ -227,8 +227,8 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `add_filter_slice` | `field: TwbField` | `TwbWorksheet` | スライス用フィルタを追加 |
 | `add_sort` | `field: TwbField, *, by: TwbField, direction="descending", aggregation="sum"` | `TwbWorksheet` | 指定フィールドで並べ替え |
 | `set_subtotal_visibility` | `*, field: TwbWorksheetField, visible=True` | `TwbWorksheet` | 行・列に配置したフィールドへ小計を付ける / 外す |
-| `add_reference_line` | `field: TwbWorksheetField, *, formula="median", scope="per-table", label_type="value", probability=95, z_order=1` | `TwbReferenceLine` | リファレンスラインを追加 |
-| `set_axis_visibility` | `field: TwbWorksheetField, *, visible: bool` | `TwbWorksheet` | 軸の表示 / 非表示 |
+| `add_reference_line` | `*, field: TwbWorksheetField, pane: TwbPane \| None = None, formula="median", scope="per-table", label_type="value", probability=95, z_order=1` | `TwbReferenceLine` | リファレンスラインを 1 本引く。**Pane が複数あるワークシートでは `pane=` が要る**（仕様 §6.7）。1 つなら省略できる |
+| `set_axis_visibility` | `*, field: TwbWorksheetField, visible: bool` | `TwbWorksheet` | 軸の表示 / 非表示 |
 | `update` | `*, name=UNSET, visible=UNSET, title=UNSET, table_style=UNSET, title_style=UNSET, grand_totals=UNSET` | `TwbWorksheet` | 自身を更新。**旧 `update_table_style()` / `update_title_style()` を統合** |
 | `delete` | — | `None` | 削除。ダッシュボードから参照されていれば `ResourceInUseError` |
 
@@ -392,7 +392,7 @@ struct={
 | `get_zones` | `*, id=None, name=None` | `list[TwbDashboardZone]` | 子ゾーン |
 | `create_container` | `*, direction="vertical", order=None, weight=1, fixed_size=None, friendly_name=None, hidden=False, distribute_evenly=False` | `TwbDashboardContainer` | 子コンテナを作成 |
 | `add_worksheet` | `worksheet: TwbWorksheet, *, order=None, weight=1, show_title=True, fixed_size=None, friendly_name=None` | `TwbDashboardZone` | ワークシートをタイル配置 |
-| `add_filter` | `field: TwbWorksheetField, *, mode="checkdropdown", show_apply=False, order=None, weight=1` | `TwbDashboardZone` | フィルタコントロールを配置。`show_apply=True` で「適用」ボタンを付ける |
+| `add_filter` | `*, field: TwbWorksheetField, mode="checkdropdown", show_apply=False, order=None, weight=1` | `TwbDashboardZone` | フィルタコントロールを配置。`show_apply=True` で「適用」ボタンを付ける |
 | `add_text` | `text: str, *, order=None, weight=1, fixed_size=None, friendly_name=None, font_size=12, font_color="#333333", bold=False, style=None` | `TwbDashboardZone` | テキストを配置 |
 | `add_image` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | 画像枠を配置 |
 | `add_spacer` | `*, order=None, weight=1, fixed_size=None, friendly_name=None, style=None` | `TwbDashboardZone` | 余白を配置 |
