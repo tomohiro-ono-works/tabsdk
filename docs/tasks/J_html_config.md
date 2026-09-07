@@ -104,7 +104,8 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 
 - [ ] **J5-1** 段の ↑↓ ボタンを残すか決める（ドラッグがあるので不要かもしれない）
 - [ ] **J5-2** `README.md` に `export_html()` の使い方を追記する
-- [ ] **J5-3** `docs/api_reference.md` に `export_html()` を追記する
+- [x] **J5-3** ~~`docs/api_reference.md` に `export_html()` を追記する~~ **完了。**
+      `README.md` §2 に載っている（`api_reference.md` は F-1 で README へ統合）
 - [ ] **J5-4** `examples/build_dashboard.py` に往復の例を足すか判断する
 
 ---
@@ -134,7 +135,7 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 - [x] `TwbField.update(datatype=)` の追加
 - [x] 受け手が無い節の読み飛ばしと警告
 - [x] テスト（`tests/test_apply_config.py`、14 件）
-- [x] 仕様 §6.14 / `api_reference.md` / `README.md` / `html_screen_spec.md` の更新
+- [x] 仕様 §6.14 / `README.md` / `html_screen_spec.md` の更新（`api_reference.md` は F-1 で README へ統合）
 
 ## 残っていること
 

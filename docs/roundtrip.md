@@ -4,7 +4,7 @@
 **計算フィールドを使う場合は 2 周する。**
 
 - 画面そのものの仕様は `docs/html_screen_spec.md`
-- 個々の API は `docs/api_reference.md`
+- 個々の API は `README.md` の §0 以降
 
 ## なぜ 2 周するのか
 
