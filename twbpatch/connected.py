@@ -391,6 +391,7 @@ class TwbDatasource(ConnectedModel):
         name: str,
         fields: list[FieldInput],
         folder: str | TwbFolder | None = None,
+        create_folder_if_missing: bool = False,
     ) -> TwbDrillPath:
         """階層を 1 つ作る。
 
@@ -407,7 +408,9 @@ class TwbDatasource(ConnectedModel):
         if find_drill_path_element(datasource_el, name) is not None:
             raise ValueError(f"drill path name already exists: {name}")
         field_ids = self._resolve_drill_path_fields(fields)
-        target_folder = self._resolve_folder(folder)
+        target_folder = self._resolve_folder(
+            folder, create_if_missing=create_folder_if_missing
+        )
 
         container = ensure_drill_paths_element(datasource_el)
         container.append(build_drill_path_element(name, field_ids))
@@ -434,6 +437,7 @@ class TwbDatasource(ConnectedModel):
         groups: dict[str, list[str]],
         name: str | None = None,
         folder: "str | TwbFolder | None" = None,
+        create_folder_if_missing: bool = False,
     ) -> TwbField:
         """元フィールドの値をまとめたグループフィールドを 1 つ作る。
 
@@ -466,7 +470,9 @@ class TwbDatasource(ConnectedModel):
             if not isinstance(name, str) or not name:
                 raise ValueError("name must be a non-empty string")
         field_id = f"[{name}]"
-        target_folder = self._resolve_folder(folder)
+        target_folder = self._resolve_folder(
+            folder, create_if_missing=create_folder_if_missing
+        )
 
         datasource_el = self._resolve_element()
         if datasource_el.xpath("./column[@name=$id]", id=field_id):
@@ -738,11 +744,20 @@ class TwbDatasource(ConnectedModel):
         self.update(field_grouping=field_grouping)
         return self
 
-    def _resolve_folder(self, folder: "str | TwbFolder | None") -> "TwbFolder | None":
+    def _resolve_folder(
+        self,
+        folder: "str | TwbFolder | None",
+        *,
+        create_if_missing: bool = False,
+    ) -> "TwbFolder | None":
         """`folder=` 引数を `TwbFolder` へ解決する。
 
         `folder=` を受け取るメソッドはすべてこれを通す。個々のメソッドで
         解決処理を書くと、今回のように片方だけ文字列を受け付けない不揃いが起きる。
+
+        名前で渡して見つからないときは `NotFoundError`。
+        `create_if_missing=True` のときだけ、その名前でフォルダを作って返す。
+        `TwbFolder` を渡す場合はすでに実在するのでフラグは効かない。
         """
         if folder is None:
             return None
@@ -751,9 +766,11 @@ class TwbDatasource(ConnectedModel):
             if not name:
                 raise ValueError("folder must not be empty")
             matches = self.get_folders(name=name)
-            if not matches:
-                raise NotFoundError(f"folder not found: {name}")
-            return matches[0]
+            if matches:
+                return matches[0]
+            if create_if_missing:
+                return self.create_folder(name=name)
+            raise NotFoundError(f"folder not found: {name}")
         if not isinstance(folder, TwbFolder):
             raise TypeError("folder must be a name, TwbFolder, or None")
         folder._ensure_attached()
@@ -789,12 +806,15 @@ class TwbDatasource(ConnectedModel):
         formula_ref: str = "auto",
         strict: bool = True,
         ref_map: dict[str, str] | None = None,
+        create_folder_if_missing: bool = False,
     ) -> TwbField:
         name = name.strip()
         if not name:
             raise ValueError("name must not be empty")
         datasource_el = self._resolve_element()
-        folder = self._resolve_folder(folder)
+        folder = self._resolve_folder(
+            folder, create_if_missing=create_folder_if_missing
+        )
         if table_calculation is not None:
             if not isinstance(table_calculation, str) or not table_calculation.strip():
                 raise ValueError("table_calculation must be a non-empty string or None")
@@ -861,6 +881,7 @@ class TwbDatasource(ConnectedModel):
         role: str = "measure",
         discrete: bool | None = False,
         strict: bool = True,
+        create_folder_if_missing: bool = False,
     ) -> list[TwbField]:
         if not isinstance(calculations, dict):
             raise TypeError("calculations must be a dict")
@@ -879,7 +900,9 @@ class TwbDatasource(ConnectedModel):
                     "or (formula, datatype, number_format)"
                 )
 
-        target_folder = self._resolve_folder(folder)
+        target_folder = self._resolve_folder(
+            folder, create_if_missing=create_folder_if_missing
+        )
 
         created: list[TwbField] = []
         for name, definition in calculations.items():
@@ -910,6 +933,7 @@ class TwbDatasource(ConnectedModel):
         metric: str,
         year_category: str,
         folder: str | TwbFolder | None = None,
+        create_folder_if_missing: bool = False,
     ) -> list[TwbField]:
         current = f"{metric}|当年"
         previous = f"{metric}|昨年"
@@ -941,7 +965,11 @@ class TwbDatasource(ConnectedModel):
         original_revision = self._context.revision
         original_dirty = self._context.is_dirty
         try:
-            return self.create_calculated_fields(calculations=calculations, folder=folder)
+            return self.create_calculated_fields(
+                calculations=calculations,
+                folder=folder,
+                create_folder_if_missing=create_folder_if_missing,
+            )
         except Exception:
             current_datasource_el = self._resolve_element()
             parent = current_datasource_el.getparent()
@@ -1505,15 +1533,23 @@ class TwbField(ConnectedModel):
             _replace_if_changed(field_el, updated, self._context)
         return self
 
-    def move_to_folder(self, folder: str | TwbFolder) -> TwbField:
+    def move_to_folder(
+        self,
+        folder: str | TwbFolder,
+        *,
+        create_folder_if_missing: bool = False,
+    ) -> TwbField:
         """フォルダへ移す。フォルダ名でも `TwbFolder` でも渡せる。
 
         `folder=` を受け取る他のメソッド（`create_calculated_field()` など）と
         揃えてある。以前はここだけ文字列を拒否していた（2026-09-07）。
-        名前で渡す場合、そのフォルダが無ければ `NotFoundError`。
+        名前で渡してそのフォルダが無ければ `NotFoundError`。
+        `create_folder_if_missing=True` のときだけ作って移す。
         """
         datasource = TwbDatasource(self._context, self._datasource_id)
-        resolved = datasource._resolve_folder(folder)
+        resolved = datasource._resolve_folder(
+            folder, create_if_missing=create_folder_if_missing
+        )
         if resolved is None:
             raise TypeError("folder must be a name or TwbFolder")
         folder = resolved

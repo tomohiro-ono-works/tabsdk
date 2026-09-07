@@ -540,9 +540,11 @@ field.remove_from_folder()
 field.delete()
 ```
 
-`folder` は同じ `TwbDatasource` のフォルダ名（文字列）か、そのデータソースに接続された `TwbFolder` とする。文字列で渡した場合、そのフォルダが無ければ `NotFoundError` にする。暗黙に作らない。フォルダの取得・作成は `datasource.get_folders()` / `datasource.create_folder()` が担当する。
+`folder` は同じ `TwbDatasource` のフォルダ名（文字列）か、そのデータソースに接続された `TwbFolder` とする。文字列で渡した場合、そのフォルダが無ければ `NotFoundError` にする。**暗黙には作らない。**
 
-**`folder=` を受け取るメソッドはすべて同じ規則に従う。** `create_calculated_field()`、`create_calculated_fields()`、`create_yoy_calculated_fields()`、`field.move_to_folder()`。解決は `TwbDatasource._resolve_folder()` に集約する（2026-09-07 に `move_to_folder()` も揃えた）。
+`create_folder_if_missing=True`（既定 `False`）を渡したときだけ、その名前でフォルダを作って割り当てる（2026-09-07 決定）。旧 `TwbWorkbook` の `folder=` は黙って作っていたが、打ち間違いに気づけないため**作るときは明示する**形にした。`TwbFolder` を渡す場合はすでに実在するのでフラグは効かない。
+
+**`folder=` と `create_folder_if_missing=` を受け取るメソッドはすべて同じ規則に従う。** `create_calculated_field()`、`create_calculated_fields()`、`create_yoy_calculated_fields()`、`create_drill_path()`、`create_group()`、`field.move_to_folder()` の 6 つ。解決は `TwbDatasource._resolve_folder()` に集約する（2026-09-07 に `move_to_folder()` も揃えた）。
 
 フォルダ所属は独立した関連操作とし、`field.update(folder=...)` には含めない。
 

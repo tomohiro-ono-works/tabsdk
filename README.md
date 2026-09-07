@@ -242,14 +242,14 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `get_fields` | `*, id=None, name=None` | `list[TwbField]` | 所有フィールド一覧 |
 | `get_folders` | `*, id=None, name=None` | `list[TwbFolder]` | フォルダ一覧 |
 | `get_drill_paths` | `*, id=None, name=None` | `list[TwbDrillPath]` | 階層（ドリルパス）一覧 |
-| `create_drill_path` | `*, name: str, fields: list[FieldInput], folder=None` | `TwbDrillPath` | 階層を1つ作成。`fields` の順がドリルの階層順。2つ以上が要る。`folder=` を渡すと `type="drillpath"` の項目として入れ、**階層に入れたフィールドの `folder-item` は取り除く** |
-| `create_group` | `*, field: FieldInput, groups: dict[str, list[str]], name=None, folder=None` | `TwbField` | 値をまとめたグループフィールドを1つ作成。`groups` は グループ名 → まとめる値。**まとめない値は書かなくてよい**（Tableau が単独扱いする）。`name` 既定は `<元フィールド名> (グループ)` で、**caption ではなく内部 ID になる**。元フィールドは文字列型のみ |
+| `create_drill_path` | `*, name: str, fields: list[FieldInput], folder=None, create_folder_if_missing=False` | `TwbDrillPath` | 階層を1つ作成。`fields` の順がドリルの階層順。2つ以上が要る。`folder=` を渡すと `type="drillpath"` の項目として入れ、**階層に入れたフィールドの `folder-item` は取り除く** |
+| `create_group` | `*, field: FieldInput, groups: dict[str, list[str]], name=None, folder=None, create_folder_if_missing=False` | `TwbField` | 値をまとめたグループフィールドを1つ作成。`groups` は グループ名 → まとめる値。**まとめない値は書かなくてよい**（Tableau が単独扱いする）。`name` 既定は `<元フィールド名> (グループ)` で、**caption ではなく内部 ID になる**。元フィールドは文字列型のみ |
 | `get_relations` | `*, id=None, name=None` | `list[TwbRelation]` | 物理テーブルの結合構造 |
 | `get_relationships` | `*, id=None, name=None` | `list[TwbRelationship]` | 論理リレーションシップ |
 | `create_folder` | `*, name: str` | `TwbFolder` | フォルダを作成 |
-| `create_calculated_field` | `*, name, formula, datatype="real", role="measure", discrete=False, folder=None, hidden=False, number_format=None, table_calculation=None, formula_ref="auto", strict=True, ref_map=None` | `TwbField` | 計算フィールドを1件作成。`formula` 内の表示名は保存前に `id` へ変換される |
-| `create_calculated_fields` | `*, calculations: dict, folder=None, role="measure", discrete=False, strict=True` | `list[TwbField]` | 計算フィールドを一括作成 |
-| `create_yoy_calculated_fields` | `*, metric, year_category, folder=None` | `list[TwbField]` | 前年比に必要な計算フィールド群をまとめて作成 |
+| `create_calculated_field` | `*, name, formula, datatype="real", role="measure", discrete=False, folder=None, hidden=False, number_format=None, table_calculation=None, formula_ref="auto", strict=True, ref_map=None, create_folder_if_missing=False` | `TwbField` | 計算フィールドを1件作成。`formula` 内の表示名は保存前に `id` へ変換される |
+| `create_calculated_fields` | `*, calculations: dict, folder=None, role="measure", discrete=False, strict=True, create_folder_if_missing=False` | `list[TwbField]` | 計算フィールドを一括作成 |
+| `create_yoy_calculated_fields` | `*, metric, year_category, folder=None, create_folder_if_missing=False` | `list[TwbField]` | 前年比に必要な計算フィールド群をまとめて作成 |
 | `set_filter` | `*, field: TwbField` | `TwbDatasource` | データソースレベルのフィルタを設定 |
 | `apply_field_config` | `config: str \| Path \| dict, *, field_grouping="folder"` | `TwbDatasource` | 設定に沿って表示名・フォルダを一括適用 |
 | `update` | `*, source=UNSET, name=UNSET, field_grouping=UNSET` | `TwbDatasource` | 自身を更新 |
@@ -283,9 +283,14 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
 | `update` | `*, name=UNSET, datatype=UNSET, role=UNSET, discrete=UNSET, hidden=UNSET, formula=UNSET, formula_ref="auto", strict=True, ref_map=None` | `TwbField` | 自身を更新。`formula` 未指定で formula 系オプションだけ渡すと例外。`datatype` は計算フィールドのみ（それ以外は `UnsupportedFeatureError`） |
-| `move_to_folder` | `folder: str \| TwbFolder` | `TwbField` | フォルダへ移動。フォルダ名でも `TwbFolder` でも渡せる。同一データソースのフォルダのみで、無ければ `NotFoundError` |
+| `move_to_folder` | `folder: str \| TwbFolder, *, create_folder_if_missing=False` | `TwbField` | フォルダへ移動。フォルダ名でも `TwbFolder` でも渡せる。同一データソースのフォルダのみ |
 | `remove_from_folder` | — | `TwbField` | フォルダから外す |
 | `delete` | — | `None` | 削除。計算式・配置・フィルタ等から参照されていれば `ResourceInUseError` |
+
+**`folder=` は無ければ `NotFoundError`。** 暗黙には作らない。`create_folder_if_missing=True`
+を渡したときだけ、その名前でフォルダを作って割り当てる。`folder=` を取る 6 メソッド
+（`create_calculated_field` / `create_calculated_fields` / `create_yoy_calculated_fields` /
+`create_drill_path` / `create_group` / `move_to_folder`）で規則は同じ。
 
 ### 3.3 `TwbFolder`
 

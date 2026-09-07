@@ -894,15 +894,16 @@ move_column_to_folder unsupported_features
 | # | 内容 | 状態 |
 |---|---|---|
 | 1 | `TwbWorkbook.set_filter()` は旧 API 扱いだが**新 API より仕事が多い**（データソースフィルター＋使用シート全部へのスライス追加）。`config_apply.py` と `examples/build_dashboard.py` が使っている | **解決済み。** `add_filter()` を新設し、両方の呼び出し元を移した |
-| 2 | `create_calculated_field` に挙動差が 2 つ。旧は `folder=` が無ければ**作る**（`create_if_missing=True`）／新は `NotFoundError`。旧 `strict=False` ／新 `strict=True` | 未決 |
-| 3 | `models.py` の 20 クラスは投影層 14 モジュールが返す型。**削除不可**。`__all__` から外して非公開にするのみ可能で、それも `from twbpatch import TwbColumn` を壊す | 未決 |
+| 2 | `create_calculated_field` に挙動差が 2 つ。旧は `folder=` が無ければ**作る**（`create_if_missing=True`）／新は `NotFoundError`。旧 `strict=False` ／新 `strict=True` | **解決済み。** 既定はエラーのまま、`create_folder_if_missing=True` で作れるようにした（`folder=` を取る 6 メソッド共通）。`strict` は新の `True` のまま |
+| 3 | `models.py` の 20 クラスは投影層 14 モジュールが返す型。**削除不可** | **解決済み。** `__all__` が公開する `models.py` のクラスは 7 個だけで、うち 6 個は新 API の戻り値なので残す。`TwbColumn` は**旧メソッドを消すと公開 API から到達不能**になるため、削除と同時に `__all__` から外す |
 | 4 | テスト 8 ファイル / 22 関数が旧 API を直接呼ぶ。`test_old_new_api_equivalence.py`（B-3 #41）は**存在意義ごと消える** | 書き直しが要る |
 | 5 | 内部の自己参照 2 箇所（`workbook.py:641` / `:853`）| まとめて消せば解決 |
 
 `export_json()` / `export_html()` / `serialize_workbook()` は新 API だけで組まれていて
 影響しない（実測）。
 
-> **次のアクション**: 2 と 3 を決めてから A を一括で消す。4 のテスト書き直しが最大の作業量。
+> **次のアクション**: 決定は 3 件とも済んだ。A の 27 件を一括で消す。
+> 4 のテスト書き直し（8 ファイル / 22 関数）が最大の作業量。
 
 ---
 
