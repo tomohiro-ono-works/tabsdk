@@ -469,6 +469,138 @@ struct={
 | `update` | `*, name=UNSET, activation=UNSET, clear_selection=UNSET, url=UNSET` | `TwbDashboardAction` | 自身のスカラー値を更新。`clear_selection` は `filter`、`url` は `url` の種別でのみ有効 |
 | `delete` | — | `None` | 削除。他のアクションには触れない |
 
+### 3.12 `TwbRelation`
+
+データソースの物理テーブルと結合。`TwbDatasource.get_relations()` が返す。
+入れ子は `get_children()` で辿る（返るのはルートだけ）。
+
+**変数**
+
+| 変数 | 型 | 説明 |
+|---|---|---|
+| `id` | `str \| None` | `@id` → `@name` → 論理テーブルの `id` の順で決まる |
+| `name` | `str \| None` | XML の `@name`。無いこともある |
+| `datasource_id` | `str` | 所属データソースの `id` |
+| `type` | `str \| None` | `<relation type>`。`text` はカスタム SQL |
+| `table` | `str \| None` | 物理テーブル名 |
+| `connection` | `str \| None` | 接続の内部 ID |
+| `join` | `str \| None` | 結合種別（`inner` / `left` など） |
+| `custom_sql` | `str \| None` | カスタム SQL の本文 |
+| `scope` | `str \| None` | どちらの層から採ったか。物理側は `connection`、論理側は `object-graph` |
+| `logical_table` / `logical_table_id` | `str \| None` | 属する論理テーブル |
+| `clauses` | `list[dict[str, object]]` | `<relation>` 以外の子要素をそのまま記録したもの（結合条件など） |
+| `attrs` | `dict[str, str]` | 上に出ていない XML 属性 |
+
+**メソッド**
+
+| メソッド | 引数 | 戻り値 | 説明 |
+|---|---|---|---|
+| `get_children` | — | `list[TwbRelation]` | 直下の子。結合は木になる |
+
+### 3.13 `TwbRelationship`
+
+論理テーブル間のリレーションシップ。`TwbDatasource.get_relationships()` が返す。
+物理結合（`TwbRelation`）とは別の層で、Tableau 2020.2 以降のデータモデルにあたる。
+
+**変数**
+
+| 変数 | 型 | 説明 |
+|---|---|---|
+| `id` / `name` | `str \| None` | XML の `@name` |
+| `datasource_id` | `str` | 所属データソースの `id` |
+| `left_object` / `right_object` | `str \| None` | つながる論理テーブルの表示名。`<object-graph>` の `caption` から引く |
+| `left_object_id` / `right_object_id` | `str \| None` | 同じものの内部 ID |
+| `expression` | `dict[str, object] \| None` | 結合条件の式。入れ子の辞書 |
+| `attrs` | `dict[str, str]` | 上に出ていない XML 属性 |
+
+### 3.14 `TwbReferenceLine`
+
+ワークシートのリファレンスライン。`TwbWorksheet.get_reference_lines()` が返す。
+作成は `TwbWorksheet.add_reference_line()`。
+
+**変数**
+
+| 変数 | 型 | 説明 |
+|---|---|---|
+| `id` / `name` | `str` | `<reference-line>` の識別子。`@name` を持たないため同じ値 |
+| `worksheet_id` | `str` | 所属ワークシートの `id` |
+| `axis_field_id` | `str \| None` | 軸のフィールドの XML 内部参照（`[ds1].[none:Sales:qk]` の形） |
+| `axis_name` | `str \| None` | 軸のフィールドの表示名 |
+| `axis_role` | `str \| None` | 軸の役割（`measure` など） |
+| `value_field_id` / `value_name` / `value_role` | `str \| None` | 値のフィールドについて同じもの |
+| `formula` | `str \| None` | 集計方法。`add_reference_line()` が受けるのは `average` / `median` / `minimum` / `maximum` |
+| `scope` | `str \| None` | 適用範囲。`add_reference_line()` の既定は `per-table` |
+| `label_type` | `str \| None` | ラベルの出し方。既定は `value` |
+| `tooltip_type` | `str \| None` | ツールチップの出し方 |
+| `attrs` | `dict[str, str]` | 上に出ていない XML 属性 |
+
+**メソッド**
+
+| メソッド | 引数 | 戻り値 | 説明 |
+|---|---|---|---|
+| `update` | `*, formula=UNSET, scope=UNSET, label_type=UNSET` | `TwbReferenceLine` | `add_reference_line()` で指定できる値を後から変える |
+| `delete` | — | `None` | 削除 |
+
+`*_caption` は `*_name` へ、`*_column` は `*_field_id` へ改名済み（A-10、2026-09-07）。
+`models.py` の旧 dataclass は §11 の移行規約により古い名前のまま残る。
+
+### 3.15 `TwbWorksheetFilter`
+
+ワークシートに掛かっているフィルタ。`TwbWorksheet.get_filters()` が返す。
+作成は `TwbWorksheet.add_field(shelf="filters")`。
+
+**変数**
+
+| 変数 | 型 | 説明 |
+|---|---|---|
+| `id` / `name` | `str` | フィルタの識別子 |
+| `worksheet_id` | `str` | 所属ワークシートの `id` |
+| `field` | `str \| None` | フィルタ対象の解決済みフィールド名 |
+| `role` | `str \| None` | `dimension` / `measure` |
+| `filter_class` | `str \| None` | `<filter class>` の値。実測した .twb では `categorical` |
+| `filter_group` | `str \| None` | フィルタグループ |
+| `domain` | `str \| None` | 値の母集合を表す XML 属性 |
+| `enumeration` | `str \| None` | 列挙の仕方 |
+| `value_scope` / `value_scope_label` | `str \| None` | 値の範囲と、その表示用ラベル |
+| `apply_scope` / `apply_scope_label` | `str \| None` | 適用範囲と、その表示用ラベル |
+| `selection_type` | `str \| None` | 選択の仕方（単一 / 複数） |
+| `values` | `list[str]` | 選択されている値 |
+| `functions` | `list[str]` | `<groupfilter function>` の値。実測した .twb では `level-members` |
+| `attrs` | `dict[str, str]` | 上に出ていない XML 属性 |
+
+**メソッド**
+
+| メソッド | 引数 | 戻り値 | 説明 |
+|---|---|---|---|
+| `update` | `*, values=UNSET` | `TwbWorksheetFilter` | 選択値を差し替える |
+| `delete` | — | `None` | フィルタを外す |
+
+### 3.16 `TwbFilterControl`
+
+ダッシュボードに置かれたフィルタカード。`TwbDashboard.get_filter_controls()` が返す。
+**`TwbDashboardZone` を継承する**ので、§3.10 のゾーン変数（`x` / `y` / `width` /
+`height` / `order` / `weight` / `style` など）と `update()` / `delete()` をそのまま持つ。
+ここに挙げるのは、フィルタとして足されている分だけ。
+
+**変数**
+
+| 変数 | 型 | 説明 |
+|---|---|---|
+| `column` | `str \| None` | フィルタ対象の XML 内部参照 |
+| `field` | `str \| None` | フィルタ対象の解決済みフィールド名 |
+| `worksheet` / `worksheet_id` | `str \| None` | フィルタの出どころのワークシート |
+| `role` | `str \| None` | `dimension` / `measure` |
+| `mode` | `str \| None` | 表示形式（`checkdropdown` など） |
+| `filter_class` / `domain` / `enumeration` | `str \| None` | §3.15 と同じ意味 |
+| `value_scope` / `value_scope_label` | `str \| None` | 同上 |
+| `apply_scope` / `apply_scope_label` | `str \| None` | 同上 |
+| `selection_type` | `str \| None` | 同上 |
+| `values` | `list[str]` | 選択されている値 |
+| `show_apply` | `bool \| None` | 「適用」ボタンを出すか。`update(show_apply=)` で変える |
+| `show_caption` | `bool \| None` | フィルタカードの見出しを出すか。**ゾーンの `show_title` とは別の属性**（§3.2） |
+
+---
+
 ---
 
 ## 4. モジュール関数

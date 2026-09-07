@@ -60,7 +60,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | E-2 | 低 | 旧 API の削除 | 保留 | 移行完了後に判断 |
 | F-1 | 中 | README のドリフト | **要** | 未 |
 | F-2 | 低 | `docs/` の文書体系が不明瞭 | 不要 | — |
-| F-3 | 中 | `api_reference.md` に投影モデル 5 クラスの節が無い | 不要 | — |
+| F-3 | **完了** | `api_reference.md` に投影モデル 5 クラスの節が無い | 不要 | §3.12〜3.16（2026-09-07） |
 | G-1 | **完了** | 未使用ファイルの削除（`.twb` / `.py` / `.md`） | 済 | 完了（2026-09-05） |
 | G-2 | **完了** | サンプルスクリプトの削除 | 済 | `docs/tasks/G2_sample_inventory.md` |
 | G-3 | **完了** | 展開用サンプルの作成 | 済 | `examples/build_dashboard.py` |
@@ -100,13 +100,13 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | L-4 | 低 | ペインを削除できない | 不要 | 未（H-13 の採否待ち） |
 | L-5 | **完了** | グループを作れない | 不要 | `create_group()`（2026-09-07）。セット・ビンは対象外 |
 
-**残り 21 件**（要分解 9 / そのまま着手可 12）。
-完了 33 件 / 保留 2 件 / 不採用 5 件 / 他課題へ統合 2 件。全 63 件（2026-09-07 実測）。
+**残り 20 件**（要分解 9 / そのまま着手可 11）。
+完了 34 件 / 保留 2 件 / 不採用 5 件 / 他課題へ統合 2 件。全 63 件（2026-09-07 実測）。
 
 | 優先度 | 残り |
 |---|---|
-| 高 | 1 件（I-2 KPI ツリーダッシュボードの生成） |
-| 中 | 15 件 |
+| 高 | 1 件（I-2 KPI ツリー。**次回リリースへ送付済み**） |
+| 中 | 14 件 |
 | 低 | 5 件 |
 
 **うち 3 件は次回リリースへ送った**（L-3 ナビゲーションアクション、I-3 ヘッダーメニュー、
@@ -882,7 +882,7 @@ A-6 の改名対象は README に 1 件も出てこないため、A-6 起因の�
 > 「API 方式」（`draw_*` / `set_*` / `apply_config()`）の 2 章立てにし、
 > 現在の `list_*` / `by=` の表は「移行期の旧 API」節へ落として §11 の対応表を引く。
 
-### F-3 【中】`docs/api_reference.md` に投影モデル 5 クラスの節が無い
+### F-3 【完了】`docs/api_reference.md` に投影モデル 5 クラスの節が無い
 
 `__all__` の 35 シンボルのうち、次の 5 クラスだけプロパティの節が無い。
 §3 は `TwbDashboardAction` で終わっている。
@@ -895,8 +895,14 @@ A-6 の改名対象は README に 1 件も出てこないため、A-6 起因の�
 | `TwbWorksheetFilter` | `attrs` / `apply_scope` / `apply_scope_label` / `enumeration` / `filter_class` / `filter_group` / `functions` / `selection_type` / `value_scope` / `value_scope_label` |
 | `TwbFilterControl` | `apply_scope` / `apply_scope_label` / `enumeration` / `filter_class` / `selection_type` / `show_caption` / `value_scope` / `value_scope_label` |
 
-> **次のアクション**: 分解不要。プロパティ表は README の「返却モデルの変数」の内容が
-> そのまま使える。A-10（`*_caption` の扱い）が決まってから書く。
+**完了（2026-09-07）。** §3.12〜3.16 として書いた。**`__all__` の 36 シンボルは
+これで全部が `api_reference.md` に載った**（実測）。
+
+- `TwbFilterControl` は `TwbDashboardZone` を継承するので、ゾーン側の変数と
+  `update()` / `delete()` は §3.10 を参照し、フィルタとして足された分だけ書いた
+- 値の候補は**実装と実測した .twb から採った**。`add_reference_line()` が受ける
+  `formula` は `average` / `median` / `minimum` / `maximum` の 4 つ、`scope` の既定は
+  `per-table`。`filter_class` と `functions` は実物にあった値を例示に留めた
 
 ### F-2 【低】`docs/` の文書体系が不明瞭
 
