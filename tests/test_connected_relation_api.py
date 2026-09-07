@@ -194,15 +194,3 @@ def test_export_json_keeps_its_shape(tmp_path) -> None:
         "Returns",
     ]
     assert exported["relationships"][0]["id"] == "orders_returns"
-
-
-def test_list_methods_still_return_old_dataclasses(tmp_path) -> None:
-    from twbpatch import models
-
-    workbook = _relation_workbook(tmp_path)
-    assert isinstance(workbook.list_relations("Source")[0], models.TwbRelation)
-    assert isinstance(workbook.list_relationships("Source")[0], models.TwbRelationship)
-
-    line_workbook = _reference_line_workbook(tmp_path)
-    _worksheet_with_reference_line(line_workbook)
-    assert isinstance(line_workbook.list_reference_lines()[0], models.TwbReferenceLine)

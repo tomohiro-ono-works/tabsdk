@@ -133,26 +133,6 @@ def test_a_datasource_filter_adds_a_slice_to_each_sheet(tmp_path) -> None:
     assert _slices(workbook, "地域シート") == ["[ds1].[none:Region:nk]"]
 
 
-def test_a_datasource_filter_matches_the_old_entry_point(tmp_path) -> None:
-    """旧 `workbook.set_filter()` と同じ XML になること。
-
-    シート作成時の `simple-id` は毎回変わるので、一度保存したものを 2 回開く。
-    """
-    from lxml import etree as ET
-
-    built = _workbook(tmp_path, sheets=("売上シート", "地域シート"))
-    source = tmp_path / "built.twb"
-    built.save(str(source))
-
-    old = TwbWorkbook.open(str(source))
-    new = TwbWorkbook.open(str(source))
-
-    old.set_filter(("売上データ", "地域"))
-    new.add_filter(("売上データ", "地域"), scope="datasource")
-
-    assert ET.tostring(old.tree.getroot()) == ET.tostring(new.tree.getroot())
-
-
 def test_a_datasource_filter_is_written_even_without_sheets(tmp_path) -> None:
     workbook = _workbook(tmp_path, sheets=())
 

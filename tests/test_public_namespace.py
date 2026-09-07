@@ -28,10 +28,12 @@ DUPLICATED = [
 
 # 接続型モデルを持たない値オブジェクト
 MODELS_ONLY = [
-    "TwbColumn",
     "TwbValidationMessage",
     "TwbUnsupportedFeature",
 ]
+
+# E-2（2026-09-07）で公開をやめたもの。`models.py` には残るが `twbpatch` からは出さない
+UNEXPORTED = ["TwbColumn"]
 
 
 def test_duplicated_names_resolve_to_connected_models() -> None:
@@ -54,13 +56,11 @@ def test_models_only_classes_come_from_models() -> None:
         assert getattr(twbpatch, name) is getattr(models, name)
 
 
-def test_list_methods_still_return_old_dataclasses(tmp_path) -> None:
-    """移行期のあいだ list_*() の戻り値は変えない（仕様 §11）。"""
+def test_the_old_list_methods_are_gone(tmp_path) -> None:
+    """E-2（2026-09-07）で旧 API を削除した。"""
     workbook = twbpatch.TwbWorkbook.open("tests/sample_minimal.twb")
-    datasources = workbook.list_datasources()
-    assert isinstance(datasources[0], models.TwbDatasource)
-    assert not isinstance(datasources[0], twbpatch.TwbDatasource)
 
+    assert not hasattr(workbook, "list_datasources")
     assert isinstance(workbook.get_datasources()[0], twbpatch.TwbDatasource)
 
 
@@ -93,3 +93,12 @@ def test_draw_module_remains_the_implementation() -> None:
 
     for name in DRAW_METHODS:
         assert callable(getattr(draw, name))
+
+
+def test_unexported_models_are_not_public() -> None:
+    """旧 API の戻り値だったクラスは公開しない（E-2、2026-09-07）。"""
+    for name in UNEXPORTED:
+        assert name not in twbpatch.__all__
+        assert not hasattr(twbpatch, name)
+        # 投影層が返す型なので models.py には残る
+        assert hasattr(models, name)

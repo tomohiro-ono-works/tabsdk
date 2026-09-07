@@ -122,8 +122,9 @@ def test_workbook_set_filter_applies_to_all_worksheets_using_datasource(tmp_path
     )
     unrelated = workbook.create_worksheet(name="Unrelated")
 
-    assert workbook.set_filter(("売上データ", "地域")) is workbook
-    assert workbook.set_filter(("売上データ", "地域")) is workbook
+    # 2 回呼んでも重複しない
+    assert workbook.add_filter(("売上データ", "地域"), scope="datasource") == []
+    assert workbook.add_filter(("売上データ", "地域"), scope="datasource") == []
 
     shared_filters = workbook.tree.xpath(
         "/workbook/shared-views/shared-view[@name='ds1']/filter"

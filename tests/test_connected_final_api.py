@@ -236,8 +236,17 @@ def test_new_api_signatures_and_models_follow_final_contract(tmp_path) -> None:
             if name.startswith("update_") and name not in allowed_updates
         }
 
-    assert hasattr(workbook, "list_datasources")
-    assert hasattr(workbook, "get_datasource")
+    # E-2（2026-09-07）で旧 API を削除した。残しているのは新 API に代替が無い
+    # ダッシュボード読み取り系 4 件だけ（docs/backlog.md E-2）。
+    for removed in ("list_datasources", "get_datasource", "set_filter"):
+        assert not hasattr(workbook, removed), removed
+    for kept in (
+        "list_dashboard_zones",
+        "list_dashboard_actions",
+        "list_dashboard_fields",
+        "list_worksheet_fields",
+    ):
+        assert hasattr(workbook, kept), kept
 
 
 def test_connected_edits_round_trip_through_save_and_reopen(tmp_path) -> None:

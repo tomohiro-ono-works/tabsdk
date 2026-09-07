@@ -167,16 +167,3 @@ def test_filter_control_rejects_a_non_filter_zone(tmp_path) -> None:
     control = TwbFilterControl(workbook._context, dashboard.id, sheet_zone.id)
     with pytest.raises(DetachedModelError, match="not a filter"):
         control.column
-
-
-def test_list_filters_still_returns_old_dataclasses(tmp_path) -> None:
-    """移行期のあいだ list_*() の戻り値は変えない（仕様 §11）。"""
-    from twbpatch import models
-
-    workbook = _workbook(tmp_path)
-    _worksheet_with_filter(workbook)
-
-    assert isinstance(workbook.list_filters()[0], models.TwbWorksheetFilter)
-    dashboard = workbook.create_dashboard(name="ダッシュボード")
-    assert dashboard.get_filter_controls() == []
-    assert workbook.list_dashboard_filter_controls() == []

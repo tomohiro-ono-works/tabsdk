@@ -41,12 +41,15 @@ from .connected_dashboard import (
     TwbFilterControl,
 )
 # 接続型モデルがまだ無いもの（A-2 の対象）と、値オブジェクト
+# `models.py` の dataclass は投影層の戻り値として内部で使い続けるが、
+# 公開するのは新 API のメソッドが返すものだけにする（E-2、2026-09-07）。
+# `TwbColumn` は旧 `TwbWorkbook.list_columns()` などの戻り値で、
+# それらを消したことで公開 API から到達しなくなったため外した。
 from .models import (
     BigQuerySource,
     ExcelSource,
     CsvSource,
     UnknownSource,
-    TwbColumn,
     TwbValidationMessage,
     TwbUnsupportedFeature,
 )
@@ -70,7 +73,6 @@ __all__ = [
     "ExcelSource",
     "CsvSource",
     "UnknownSource",
-    "TwbColumn",
     "TwbField",
     "TwbPane",
     "TwbDashboardContainer",

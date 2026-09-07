@@ -82,7 +82,6 @@ def test_list_dashboard_zones_returns_raw_and_pixel_coordinates(tmp_path):
 
     text = next(zone for zone in zones if zone.id == "3")
     assert text.text == "Hello dashboard"
-    assert wb.get_dashboard("Overview").zones == zones
 
 
 def test_list_dashboard_zones_handles_device_and_responsive_layouts(tmp_path):
@@ -123,4 +122,3 @@ def test_list_dashboard_actions_resolves_source_target_and_command(tmp_path):
     assert action.links == [{"expression": "[ds1].[Region]"}]
     assert action.params == {"selection": "all"}
     assert action.details["tag"] == "action"
-    assert wb.get_dashboard("Overview").actions == actions

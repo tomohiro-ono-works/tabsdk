@@ -214,6 +214,18 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `set_default_font` | `font: str` | `TwbWorkbook` | ワークブック既定フォントを設定 |
 | `apply_field_config` | `yaml_path: str \| Path, *, field_grouping: str = "folder"` | `TwbWorkbook` | YAML の定義に沿ってフィールド名・フォルダを一括適用 |
 
+### 2.6 メタデータの一括読み取り（旧 API の残り 4 件）
+
+**接続型モデルではなく `models.py` の投影 dataclass を返す。** 新 API に同じ情報を
+取る手段が無いため残している（§9、`docs/backlog.md` L-6）。穴が埋まったら消す。
+
+| メソッド | 引数 | 戻り値 | 新 API に無いもの |
+|---|---|---|---|
+| `list_dashboard_zones` | `dashboard=None, *, by="auto", width_px=None, height_px=None, include_device_layouts=False` | `list[TwbDashboardZone]` | デバイスレイアウト、raw 座標、任意サイズでの px 換算、`parent_id` / `depth` |
+| `list_dashboard_actions` | `dashboard=None, *, by="auto"` | `list[TwbDashboardAction]` | `excluded_source_worksheets` / `excluded_target_worksheets` / `details` |
+| `list_dashboard_fields` | `dashboard=None, *, by="auto", max_filter_value_chars=40` | `list[TwbWorksheetField]` | `max_filter_value_chars` |
+| `list_worksheet_fields` | `worksheet=None, *, by="auto", max_filter_value_chars=40` | `list[TwbWorksheetField]` | `values` / `mark_type` / `category` / `type` |
+
 ---
 
 ## 3. 接続型モデル
@@ -819,32 +831,43 @@ struct={
 
 ---
 
-## 9. 旧 API（移行期のみ存続）
+## 9. 旧 API の削除（E-2・完了）
 
-仕様 §11 により削除・改名しない。新規コードでは使用しない。
+**2026-09-07 に `TwbWorkbook` の旧メソッド 25 件を削除した。** 新 API に完全な代替が
+あるものだけを対象にし、代替の無い 4 件は残している。
 
-**`TwbWorkbook` の旧メソッド**
+**削除したもの**
 
 ```
-list_dashboards, list_dashboard_fields, list_dashboard_zones, list_dashboard_actions,
-list_dashboard_filter_controls, list_worksheets, list_worksheet_fields, list_reference_lines,
-list_filters, list_datasources, list_relations, list_relationships, list_parameters, list_columns,
-get_dashboard, get_worksheet, get_datasource, get_column,
-update_source, update_column, update_formula,
-rename_field, reset_field_caption, create_calculated_field(位置引数版),
+list_dashboards, list_dashboard_filter_controls, list_worksheets, list_reference_lines,
+list_filters, list_datasources, list_relations, list_relationships, list_parameters,
+list_columns, get_dashboard, get_worksheet, get_datasource, get_column,
+update_source, update_column, update_formula, rename_field, reset_field_caption,
 move_field_to_folder, remove_field_from_folder, move_column_to_folder,
-unsupported_features, set_filter
+unsupported_features, set_filter, create_calculated_field（位置引数版）
 ```
 
-いずれも検索方法として `by="auto"` を取る。新 API では `id=` / `name=` に統一されている。
+検索方法の `by="auto"` も一緒に消えた。新 API は `id=` / `name=` に統一されている。
+移行先の対応は仕様 `docs/model_api_spec.md` §12 を見る。
 
-**`models.py` の投影 dataclass**
+**残しているもの（4 件）**
 
-```
-TwbColumn, TwbFolder, TwbParameter, TwbRelation, TwbRelationship, TwbDatasource,
-TwbReferenceLine, TwbWorksheetFilter, TwbFilterControl, TwbDashboardZone,
-TwbDashboardAction, TwbWorksheet, TwbDashboard, TwbWorksheetField
-```
+| メソッド | なぜ残すか |
+|---|---|
+| `list_dashboard_zones()` | デバイスレイアウトの読み取り、raw 座標、`width_px=` / `height_px=` を渡した px 換算、`parent_id` / `depth` が新 API に無い |
+| `list_dashboard_actions()` | `excluded_source_worksheets` / `excluded_target_worksheets` / `details` が新 API に無い。Tableau は対象シートを除外形式で書く |
+| `list_dashboard_fields()` | `max_filter_value_chars=` が新 API に無い |
+| `list_worksheet_fields()` | フィールドの `values` / `mark_type` / `category` / `type` が新 API に無い |
 
-接続型モデルと同名のものがあるため、参照時は import 元に注意する。
-`TwbColumn` は `TwbField`、`caption` は `name` へ移行する。
+**これらは新 API に穴埋めしてから消す**（`docs/backlog.md` L-6）。
+戻り値は `models.py` の投影 dataclass のままで、接続型モデルではない。
+
+**`models.py` の dataclass**
+
+投影層（`column.py` / `worksheet.py` / `filter.py` など 14 モジュール）が返す型として
+残る。**削除できない。** 接続型モデルの `_snapshot()` がこれを読んでいる。
+
+公開しているのは新 API の戻り値になるものだけ。`TwbValidationMessage`（`validate()`）、
+`TwbUnsupportedFeature`（`get_unsupported_features()`）、接続先の 4 クラス
+（`datasource.source`）。`TwbColumn` は旧メソッドの戻り値だったので、削除に合わせて
+`__all__` から外した。

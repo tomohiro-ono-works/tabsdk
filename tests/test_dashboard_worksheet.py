@@ -34,15 +34,15 @@ def test_list_dashboards_includes_caption_and_worksheets(tmp_path):
     )
 
     wb = TwbWorkbook.open(str(twb))
-    dashboards = wb.list_dashboards()
+    dashboards = wb.get_dashboards()
 
     assert len(dashboards) == 1
-    assert dashboards[0].caption == "Executive Dashboard"
+    assert dashboards[0].name == "Executive Dashboard"
     assert dashboards[0].visible is True
-    assert [worksheet.caption for worksheet in dashboards[0].worksheets] == ["Sales Sheet"]
-    assert dashboards[0].worksheets[0].visible is False
+    assert [w.name for w in dashboards[0].get_worksheets()] == ["Sheet 1"]
+    assert dashboards[0].get_worksheets()[0].visible is False
 
-    worksheets = wb.list_worksheets()
+    worksheets = wb.get_worksheets()
     assert worksheets[0].visible is False
 
 
@@ -80,16 +80,17 @@ def test_list_reference_lines_returns_worksheet_lines(tmp_path):
     )
 
     wb = TwbWorkbook.open(str(twb))
-    lines = wb.list_reference_lines("Sales Sheet")
+    # ワークシートは caption を表示名に使わない。`@name` が id と name を兼ねる（§3.2）
+    worksheet = wb.get_worksheets(id="Sheet 1")[0]
+    lines = worksheet.get_reference_lines()
 
     assert len(lines) == 1
-    assert lines[0].worksheet == "Sales Sheet"
+    assert lines[0].worksheet_id == worksheet.id
     assert lines[0].id == "refline0"
-    assert lines[0].axis_caption == "Order Date"
-    assert lines[0].value_caption == "Sales Amount"
+    assert lines[0].axis_name == "Order Date"
+    assert lines[0].value_name == "Sales Amount"
     assert lines[0].formula == "average"
     assert lines[0].scope == "per-table"
-    assert wb.get_worksheet("Sales Sheet").reference_lines[0].value_caption == "Sales Amount"
 
 
 def test_list_filters_and_dashboard_filter_controls_include_ui_metadata(tmp_path):
@@ -133,10 +134,11 @@ def test_list_filters_and_dashboard_filter_controls_include_ui_metadata(tmp_path
     )
 
     wb = TwbWorkbook.open(str(twb))
-    filters = wb.list_filters("Filter Sheet")
+    worksheet = wb.get_worksheets(id="Sheet 1")[0]
+    filters = worksheet.get_filters()
 
     assert len(filters) == 1
-    assert filters[0].worksheet == "Filter Sheet"
+    assert filters[0].worksheet_id == worksheet.id
     assert filters[0].field == "Sales Region"
     assert filters[0].domain == "relevant"
     assert filters[0].value_scope == "relevant"
@@ -147,9 +149,9 @@ def test_list_filters_and_dashboard_filter_controls_include_ui_metadata(tmp_path
     assert filters[0].selection_type == "single"
     assert filters[0].values == ["North"]
 
-    controls = wb.list_dashboard_filter_controls("Sales Dashboard")
+    dashboard = wb.get_dashboards(name="Sales Dashboard")[0]
+    controls = dashboard.get_filter_controls()
     assert [c.mode for c in controls] == ["dropdown", "checkdropdown"]
-    assert controls[0].dashboard == "Sales Dashboard"
     assert controls[0].worksheet == "Filter Sheet"
     assert controls[0].field == "Sales Region"
     assert controls[0].domain == "relevant"
@@ -160,7 +162,9 @@ def test_list_filters_and_dashboard_filter_controls_include_ui_metadata(tmp_path
     assert controls[0].selection_type == "single"
     assert controls[0].values == ["North"]
     assert controls[0].show_apply is True
-    assert controls[0].width == "3"
+    # 新 API の width はダッシュボードのサイズから px に換算する。
+    # このワークブックは <size> を持たないので None になる（旧は生の属性値）
+    assert controls[0].width is None
 
 
 def test_list_dashboard_fields_resolves_caption_and_role(tmp_path):
@@ -258,8 +262,18 @@ def test_list_dashboard_fields_resolves_caption_and_role(tmp_path):
         (f.worksheet, f.category, f.type, f.role, f.caption) for f in fields
     ]
 
-    sales = next(col for ds in wb.list_datasources() for col in ds.columns if col.caption == "Sales Amount")
-    assert {"attr": "text-format", "value": "n#,##0", "element": "cell", "worksheet": "Sheet 1"} in sales.format
+    sales = next(
+        field
+        for datasource in wb.get_datasources()
+        for field in datasource.get_fields()
+        if field.name == "Sales Amount"
+    )
+    assert {
+        "attr": "text-format",
+        "value": "n#,##0",
+        "element": "cell",
+        "worksheet": "Sheet 1",
+    } in sales.formats
 
     short_fields = wb.list_dashboard_fields("Dashboard 1", max_filter_value_chars=10)
     assert next(f for f in short_fields if f.type == "フィルタ").values == "North, ..."
@@ -293,17 +307,24 @@ def test_list_datasources_adds_display_formula(tmp_path):
     )
 
     wb = TwbWorkbook.open(str(twb))
-    datasources = wb.list_datasources()
-    calc = next(col for ds in datasources if ds.name == "ds1" for col in ds.columns if col.caption == "Calc Field")
-    parameters = wb.list_parameters()
+    datasources = wb.get_datasources()
+    calc = next(
+        field
+        for datasource in datasources
+        if datasource.id == "ds1"
+        for field in datasource.get_fields()
+        if field.name == "Calc Field"
+    )
+    parameters = wb.get_parameters()
 
-    assert [ds.name for ds in datasources] == ["ds1"]
+    assert [ds.name for ds in datasources] == ["Source"]
     assert len(parameters) == 1
-    assert parameters[0].caption == "Current Year"
+    assert parameters[0].name == "Current Year"
     assert parameters[0].value == "2026"
     assert parameters[0].value_display == "FY2026"
     assert parameters[0].allowable_values == [{"value": "2025", "alias": "FY2025"}, {"value": "2026", "alias": "FY2026"}]
-    assert len(wb.list_parameters(include_hidden=True)) == 2
+    assert len(wb.get_parameters(include_hidden=True)) == 2
     assert calc.formula == "[Sales Amount] + [Parameters].[Current Year]"
     assert calc.raw_formula == "[Sales] + [Parameters].[Current Year]"
-    assert calc.referenced_columns == ["Sales Amount", "Parameters.Current Year"]
+    # 新 API の referenced_fields は内部 ID を返す（旧 referenced_columns は表示名だった）
+    assert calc.referenced_fields == ["[Sales]", "Parameters.[Current Year]"]

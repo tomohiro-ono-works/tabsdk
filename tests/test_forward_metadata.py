@@ -103,35 +103,33 @@ def test_list_worksheet_fields_returns_shelves_marks_filters_and_identity(tmp_pa
 
     filter_field = next(field for field in fields if field.type == "フィルタ")
     assert filter_field.values == "East"
-    assert wb.get_worksheet("Sales Sheet").fields == fields
 
 
 def test_list_relations_returns_nested_physical_structure(tmp_path):
     wb = TwbWorkbook.open(str(_write_forward_metadata_workbook(tmp_path)))
 
-    relations = wb.list_relations("Source")
+    relations = wb.get_datasources(name="Source")[0].get_relations()
 
     assert len(relations) == 1
     root = relations[0]
-    assert root.datasource == "Source"
     assert root.datasource_id == "ds1"
     assert root.type == "join"
     assert root.join == "inner"
     assert root.scope == "connection"
     assert root.clauses[0]["tag"] == "clause"
     assert root.clauses[0]["children"][0]["attrs"] == {"op": "="}
-    assert [(child.type, child.name, child.table) for child in root.children] == [
+    children = root.get_children()
+    assert [(child.type, child.name, child.table) for child in children] == [
         ("table", "Orders", "[Orders$]"),
         ("text", "Custom Orders", None),
     ]
-    assert root.children[1].custom_sql == "SELECT * FROM Orders"
-    assert wb.get_datasource("Source").relations == relations
+    assert children[1].custom_sql == "SELECT * FROM Orders"
 
 
 def test_list_relationships_returns_logical_endpoints_and_expression(tmp_path):
     wb = TwbWorkbook.open(str(_write_forward_metadata_workbook(tmp_path)))
 
-    relationships = wb.list_relationships("Source")
+    relationships = wb.get_datasources(name="Source")[0].get_relationships()
 
     assert len(relationships) == 1
     relationship = relationships[0]
@@ -141,7 +139,6 @@ def test_list_relationships_returns_logical_endpoints_and_expression(tmp_path):
     assert relationship.right_object == "Returns"
     assert relationship.right_object_id == "Returns"
     assert relationship.expression["attrs"] == {"op": "="}
-    assert wb.get_datasource("Source").relationships == relationships
 
     exported = wb.export_json()["datasources"][0]
     assert exported["relations"][0]["type"] == "join"
@@ -169,7 +166,8 @@ def test_list_relations_falls_back_to_object_graph(tmp_path):
         encoding="utf-8",
     )
 
-    relation = TwbWorkbook.open(str(twb)).list_relations("Source")[0]
+    workbook = TwbWorkbook.open(str(twb))
+    relation = workbook.get_datasources(name="Source")[0].get_relations()[0]
 
     assert relation.scope == "object-graph"
     assert relation.logical_table == "Orders Logical"

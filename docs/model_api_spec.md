@@ -1000,6 +1000,27 @@ workbook.is_dirty: bool
 
 初期Phaseは、既存の編集機能を利用できる `TwbWorkbook → TwbDatasource → TwbField / TwbFolder` の接続型モデル、メモリ更新、保存、再読込を対象とする。Worksheet、Pane、Dashboardコンテナの編集は後続Phaseで実装する。
 
+### 11.3 削除の実施（2026-09-07・完了）
+
+**A-1 / A-2 / A-6 の完了をもって併存期間を終え、`TwbWorkbook` の旧メソッド 25 件を削除した。**
+下の対応表は移行の記録として残す。
+
+判断の基準は「新 API に**同じ情報を取る手段があるか**」の一点。あるものだけを消し、
+無いものは残した。**残したのは 4 件。**
+
+| 残したメソッド | 新 API に無いもの |
+|---|---|
+| `list_dashboard_zones()` | デバイスレイアウト、raw 座標、任意サイズでの px 換算、`parent_id` / `depth` |
+| `list_dashboard_actions()` | `excluded_source_worksheets` / `excluded_target_worksheets` / `details` |
+| `list_dashboard_fields()` | `max_filter_value_chars=` |
+| `list_worksheet_fields()` | フィールドの `values` / `mark_type` / `category` / `type` |
+
+穴を埋めてから消す（`docs/backlog.md` L-6）。
+
+`models.py` の dataclass は**削除しない**。投影層 14 モジュールの戻り値であり、
+接続型モデルの `_snapshot()` がこれを読んでいる。公開するのは新 API の戻り値に
+なるものだけとし、`TwbColumn` は旧メソッドと一緒に `__all__` から外した。
+
 | 旧 API | 新 API |
 |---|---|
 | `wb.list_datasources()` | `wb.get_datasources()` |

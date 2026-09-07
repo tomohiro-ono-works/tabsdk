@@ -39,7 +39,7 @@ def _workbook(tmp_path):
         encoding="utf-8",
     )
     workbook = TwbWorkbook.open(str(path))
-    workbook.set_filter(("売上データ", "地域"))
+    workbook.add_filter(("売上データ", "地域"), scope="datasource")
     return workbook
 
 

@@ -57,7 +57,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | D-3 | **完了** | `.pytest_cache` が権限エラーを出し続けている | 不要 | `cache_dir` で迂回 |
 | D-4 | 中 | 改修完了後にリポジトリを作り直す | 不要 | 未（改修完了後に着手） |
 | E-1 | 中 | 巨大モジュール 3 件 | **要** | 未 |
-| E-2 | 中 | 旧 API の削除 | **要** | **保留解除 2026-09-07**（A-1 / A-2 / A-6 完了）。調査済み |
+| E-2 | **完了** | 旧 API の削除 | **要** | 25 件削除（2026-09-07）。**残り 4 件は L-6 待ち** |
 | F-1 | **完了** | README のドリフト | **要** | `api_reference.md` を統合（2026-09-07） |
 | F-2 | 低 | `docs/` の文書体系が不明瞭 | 不要 | — |
 | F-3 | **完了** | `api_reference.md` に投影モデル 5 クラスの節が無い | 不要 | §3.12〜3.16（2026-09-07） |
@@ -99,9 +99,10 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | L-3 | 中 | ナビゲーションアクションを作れない | 不要 | **次回リリース**（2026-09-07 決定） |
 | L-4 | 低 | ペインを削除できない | 不要 | 未（H-13 の採否待ち） |
 | L-5 | **完了** | グループを作れない | 不要 | `create_group()`（2026-09-07）。セット・ビンは対象外 |
+| L-6 | 中 | ダッシュボード読み取りの穴 4 件 | **要** | 未（**E-2 の残り 4 件の前提**） |
 
 **残り 19 件**（要分解 8 / そのまま着手可 11）。
-完了 36 件 / 保留 1 件 / 不採用 5 件 / 他課題へ統合 2 件。全 63 件（2026-09-07 実測）。
+完了 37 件 / 保留 1 件 / 不採用 5 件 / 他課題へ統合 2 件。全 64 件（2026-09-07 実測）。
 
 | 優先度 | 残り |
 |---|---|
@@ -109,8 +110,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | 中 | 13 件 |
 | 低 | 5 件 |
 
-**E-2（旧 API の削除）を保留解除して着手中。** 調査は完了し、前提だった
-`add_filter()` も入った。
+**E-2（旧 API の削除）は完了。** 25 件を消し、代替の無い 4 件は L-6 として起票した。
 
 **今回のリリース分は片づいた。** 残り 18 件は次回以降で、うち 3 件は
 次回リリースへ送付済み（L-3 / I-3 / I-2）。
@@ -142,6 +142,7 @@ L-1 は H-3 を、L-2 と L-5 は H-4 を解決した。
 | ~~L-2~~ | ~~階層（`drill-paths`）のモデル~~ | **完了 2026-09-07**。`TwbDrillPath` | H-4 |
 | L-3 | ナビゲーションアクション | 読み取りは種別を返す（`dashboard_action.py:54`）が、`create_action()` は `filter` / `url` の 2 種のみ | I-3 |
 | L-4 | `TwbPane.delete()` | ペインを消せない | H-13（未判定） |
+| L-6 | ダッシュボード読み取りの 4 項目 | 旧 `list_dashboard_*()` にしかない。**新 API に手段が無い** | E-2 の残り |
 | ~~L-5~~ | ~~グループのモデル~~ | **完了 2026-09-07**。`create_group()` | H-4 |
 
 **この 5 件はいずれも「読めるが書けない」か「読み書きどちらも無い」。**
@@ -286,6 +287,34 @@ folder-item を `type` で区別していなかった。
 
 > **残り**: 更新と削除は未対応。削除は `field.delete()`（普通の `<column>` なので通る）。
 > メンバーの入れ替えは作り直しになる。要望が出るまで足さない。
+
+### L-6 【中】ダッシュボード読み取りの穴 4 件
+
+**E-2 で旧 API を消したとき、これだけ消せなかった。** 新 API に同じ情報を取る手段が
+無く、消すと読み取り能力が減るため。**穴を埋めてから旧メソッドを消す。**
+
+| 残っている旧メソッド | 新 API に無いもの |
+|---|---|
+| `list_dashboard_zones()` | デバイスレイアウト（`include_device_layouts=True`）、raw 座標（`x_raw` など）、任意サイズでの px 換算（`width_px=` / `height_px=`）、`parent_id` / `depth` / `layout` / `sizing_mode` / `is_fixed` / `is_scaled` |
+| `list_dashboard_actions()` | `excluded_source_worksheets` / `excluded_target_worksheets` / `details` / `source_dashboard` |
+| `list_dashboard_fields()` | `max_filter_value_chars=`（長いフィルタ値の丸め） |
+| `list_worksheet_fields()` | フィールドの `values` / `mark_type` / `category` / `type` / `attrs` |
+
+**いちばん重いのはデバイスレイアウト。** `get_zones()` は既定レイアウトしか返さず、
+`devicelayouts` を読むモデルが無い（`connected_dashboard.py:234` は挿入位置の計算に
+使っているだけ）。仕様 §6.13 は「デバイスレイアウトを暗黙に変更しない」と書いているが、
+**読む手段は用意していない。**
+
+除外リストは Tableau の書き方そのものなので、読めないと「どのシートが対象か」を
+生の XML から判断することになる（`create_action()` は書ける）。
+
+> **次のアクション**: **個別タスクに分解する。** 4 項目は持ち主が違う。
+>
+> 1. `TwbDashboardZone` に raw 座標と `parent_id` / `depth` を足す（既存の投影に値はある）
+> 2. デバイスレイアウトのモデルを新設する。`dashboard.get_device_layouts()` か
+>    `get_zones(layout=...)` かを先に決める
+> 3. `TwbDashboardAction` に `excluded_*` を足す（`dashboard_action.py:185` に値はある）
+> 4. `values` の丸めは表示の都合なので、モデルに持たせず呼び出し側で切る案もある
 
 ---
 
@@ -862,7 +891,7 @@ GitHub は force-push 後も古いコミットを一定期間参照でき、API 
 > ファイル 3 件それぞれで分割単位が異なるため、1 ファイル 1 タスク。
 > 分割は import の循環を生みやすいので、依存関係の調査を Phase 0 に置くこと。
 
-### E-2 【中】旧 API の削除
+### E-2 【完了】旧 API の削除
 
 **保留解除（2026-09-07）。** A-1 / A-2 / A-6 がすべて完了し、条件を満たした。
 まだ push しておらず（未 push 77 コミット）**外部利用者がいない**ため、
@@ -902,8 +931,44 @@ move_column_to_folder unsupported_features
 `export_json()` / `export_html()` / `serialize_workbook()` は新 API だけで組まれていて
 影響しない（実測）。
 
-> **次のアクション**: 決定は 3 件とも済んだ。A の 27 件を一括で消す。
-> 4 のテスト書き直し（8 ファイル / 22 関数）が最大の作業量。
+#### 実施結果（2026-09-07）
+
+**25 件を削除した。** 新 API に完全な代替があるものだけを対象にした。
+
+```
+list_dashboards list_dashboard_filter_controls list_worksheets list_reference_lines
+list_filters list_datasources list_relations list_relationships list_parameters
+list_columns get_dashboard get_worksheet get_datasource get_column
+update_source update_column update_formula rename_field reset_field_caption
+move_field_to_folder remove_field_from_folder move_column_to_folder
+unsupported_features set_filter create_calculated_field（位置引数版）
+```
+
+`TwbWorkbook` の公開メソッドは 54 → 30 件、`workbook.py` は 932 → 683 行になった。
+`by="auto"` も一緒に消えた。`TwbColumn` は到達不能になったので `__all__` から外した
+（`models.py` には投影層の戻り値として残る）。
+
+**残した 4 件は L-6 へ。** `list_dashboard_zones()` / `list_dashboard_actions()` /
+`list_dashboard_fields()` / `list_worksheet_fields()` は、新 API に同じ情報を取る
+手段が無い。消すと読み取り能力が減るため、穴を埋めてから消す。
+
+**テストの整理**
+
+| 対象 | 扱い |
+|---|---|
+| `test_old_new_api_equivalence.py` | 削除。旧 API が消えて役目が終わった（B-3 #41） |
+| 「旧 `list_*()` は旧 dataclass を返す」を確かめる 3 件 | 削除。§11 の併存規約そのものが終わった |
+| `test_smoke.py` | 新 API へ全面書き直し |
+| `test_dashboard_worksheet.py` / `test_forward_metadata.py` / `test_dashboard_zone_action.py` | 新 API へ書き直し。残した 4 件を使う箇所はそのまま |
+| `test_public_namespace.py` / `test_connected_final_api.py` | 「消えたこと」を確かめる形へ反転 |
+
+書き直しで分かった差も記録しておく。
+
+- 新 `referenced_fields` は内部 ID を返す（旧 `referenced_columns` は表示名）
+- 新 `TwbFilterControl.width` はダッシュボードのサイズから px 換算するので、
+  `<size>` の無いワークブックでは `None`（旧は生の属性値）
+- ワークシートは `caption` を表示名に使わない。`get_worksheets(name=)` ではなく
+  `id=` で引く（仕様 §3.2）
 
 ---
 

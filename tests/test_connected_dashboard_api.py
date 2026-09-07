@@ -231,7 +231,7 @@ def test_build_report_places_filters_registered_by_workbook_set_filter(tmp_path)
         encoding="utf-8",
     )
     workbook = TwbWorkbook.open(str(source))
-    workbook.set_filter(("売上データ", "地域"))
+    workbook.add_filter(("売上データ", "地域"), scope="datasource")
     dashboard = workbook.create_dashboard(name="ダッシュボード")
 
     dashboard.build_report(
