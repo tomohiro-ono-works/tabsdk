@@ -616,10 +616,11 @@ def _sync_dashboard_window(context: WorkbookContext, dashboard_id: str) -> None:
         root.insert(0, windows_el)
     current = windows[0] if windows else None
     simple_id = None if current is None else _direct_child(current, "simple-id")
-    window = ET.Element(
-        "window",
-        attrib={"class": "dashboard", "maximized": "true", "name": dashboard_id},
-    )
+    attrib = {"class": "dashboard", "maximized": "true", "name": dashboard_id}
+    # 表示・非表示は window にしか無い。作り直しで消さないよう引き継ぐ。
+    if current is not None and current.get("hidden") is not None:
+        attrib["hidden"] = current.get("hidden")
+    window = ET.Element("window", attrib=attrib)
     viewpoints = ET.SubElement(window, "viewpoints")
     seen: set[str] = set()
     for zone in worksheet_zones:
@@ -1397,7 +1398,7 @@ class TwbDashboard(ConnectedModel):
         if name is not UNSET:
             if name is None:
                 updated_dashboard.attrib.pop("caption", None)
-            else:
+            elif name != get_display_name(updated_dashboard):
                 updated_dashboard.set("caption", name)
         if visible is not UNSET:
             windows = updated_root.xpath(
@@ -1407,14 +1408,13 @@ class TwbDashboard(ConnectedModel):
             if windows:
                 windows[0].set("hidden", "false" if visible else "true")
             elif not visible:
-                windows_el = _direct_child(updated_root, "windows")
-                if windows_el is None:
-                    windows_el = ET.Element("windows")
-                    updated_root.insert(0, windows_el)
-                ET.SubElement(
-                    windows_el,
-                    "window",
-                    attrib={"class": "dashboard", "name": self._id, "hidden": "true"},
+                # window は `<viewpoints>` `<active>` `<simple-id>` を持たないと
+                # Tableau の構造として成立しない（validator の
+                # dashboard_window_structure）。中身は載っているワークシートから
+                # 作るので、シートが 1 枚も無いダッシュボードは隠せない。
+                raise UnsupportedFeatureError(
+                    "dashboard needs at least one worksheet before it can be hidden:"
+                    f" {self._id}"
                 )
         if not xml_equal(root, updated_root):
             self._context.tree._setroot(updated_root)

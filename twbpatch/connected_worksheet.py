@@ -2634,7 +2634,13 @@ class TwbPane(ConnectedModel):
     ) -> TwbPane:
         if not isinstance(field, TwbWorksheetField):
             raise TypeError("field must be TwbWorksheetField")
-        if field._context is not self._context or field.pane_id != self._id:
+        if (
+            field._context is not self._context
+            or field._worksheet_id != self._worksheet_id
+            or field.pane_id != self._id
+        ):
+            # Pane の id はワークシート内での連番なので、別シートの Pane と
+            # 同じ値になる。シートも見ないと他シートの配置を通してしまう。
             raise ValueError("field must belong to the pane")
         if field.encoding != "color":
             raise ValueError("field must use the color encoding")
@@ -2694,7 +2700,13 @@ class TwbPane(ConnectedModel):
     ) -> TwbPane:
         if not isinstance(field, TwbWorksheetField):
             raise TypeError("field must be TwbWorksheetField")
-        if field._context is not self._context or field.pane_id != self._id:
+        if (
+            field._context is not self._context
+            or field._worksheet_id != self._worksheet_id
+            or field.pane_id != self._id
+        ):
+            # Pane の id はワークシート内での連番なので、別シートの Pane と
+            # 同じ値になる。シートも見ないと他シートの配置を通してしまう。
             raise ValueError("field must belong to the pane")
         if field.encoding != "color":
             raise ValueError("field must use the color encoding")

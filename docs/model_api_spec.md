@@ -29,7 +29,7 @@
 ```python
 # クラス方式
 worksheet = workbook.get_worksheets(name="帳票")[0]
-worksheet.add_field(field, shelf="rows")
+worksheet.add_field(field=field, shelf="rows")
 worksheet.get_panes()[0].update(mark_type="bar")
 
 # API 方式（上と同じことを 1 行で）
@@ -1081,12 +1081,12 @@ region = datasource.get_fields(name="地域")[0]
 sales = datasource.get_fields(name="売上")[0]
 
 column_placement = worksheet.add_field(
-    region,
+    field=region,
     shelf="columns",
     discrete=True,
 )
 row_placement = worksheet.add_field(
-    sales,
+    field=sales,
     shelf="rows",
     aggregation="sum",
 )
@@ -1097,8 +1097,8 @@ if len(panes) != 1:
 
 pane = panes[0]
 pane.update(mark_type="bar")
-pane.add_field(region, encoding="color")
-pane.add_field(sales, encoding="label", aggregation="sum")
+pane.add_field(field=region, encoding="color")
+pane.add_field(field=sales, encoding="label", aggregation="sum")
 ```
 
 行・列・ページ・フィルタは `worksheet.add_field(..., shelf=...)`、色・ラベルなどのマーク表現は `pane.add_field(..., encoding=...)` で設定する。
