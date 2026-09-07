@@ -351,7 +351,7 @@ def _apply_dashboard(
         struct[row_name] = item_spec
 
     for field in filter_fields:
-        workbook.set_filter(field)
+        workbook.add_filter(field, scope="datasource")
 
     # 2 周目: ダッシュボードを作って並べる。
     header = dashboard.get("header") or {}

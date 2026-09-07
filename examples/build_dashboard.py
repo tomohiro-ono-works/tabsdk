@@ -168,7 +168,7 @@ def main() -> None:
 
     # 6-a. build_report() によるダッシュボード ------------------------------
     # struct の値がそのまま配置になる。ネストした配列は横並びの行を作る。
-    workbook.set_filter((DATASOURCE, "カテゴリ"))
+    workbook.add_filter((DATASOURCE, "カテゴリ"), scope="datasource")
     dashboard = workbook.create_dashboard(name=DASHBOARD, width=1169, height=1654)
     dashboard.build_report(
         dashboard_name=DASHBOARD,

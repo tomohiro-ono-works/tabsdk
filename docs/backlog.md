@@ -57,7 +57,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | D-3 | **完了** | `.pytest_cache` が権限エラーを出し続けている | 不要 | `cache_dir` で迂回 |
 | D-4 | 中 | 改修完了後にリポジトリを作り直す | 不要 | 未（改修完了後に着手） |
 | E-1 | 中 | 巨大モジュール 3 件 | **要** | 未 |
-| E-2 | 低 | 旧 API の削除 | 保留 | 移行完了後に判断 |
+| E-2 | 中 | 旧 API の削除 | **要** | **保留解除 2026-09-07**（A-1 / A-2 / A-6 完了）。調査済み |
 | F-1 | **完了** | README のドリフト | **要** | `api_reference.md` を統合（2026-09-07） |
 | F-2 | 低 | `docs/` の文書体系が不明瞭 | 不要 | — |
 | F-3 | **完了** | `api_reference.md` に投影モデル 5 クラスの節が無い | 不要 | §3.12〜3.16（2026-09-07） |
@@ -100,14 +100,17 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | L-4 | 低 | ペインを削除できない | 不要 | 未（H-13 の採否待ち） |
 | L-5 | **完了** | グループを作れない | 不要 | `create_group()`（2026-09-07）。セット・ビンは対象外 |
 
-**残り 18 件**（要分解 7 / そのまま着手可 11）。
-完了 36 件 / 保留 2 件 / 不採用 5 件 / 他課題へ統合 2 件。全 63 件（2026-09-07 実測）。
+**残り 19 件**（要分解 8 / そのまま着手可 11）。
+完了 36 件 / 保留 1 件 / 不採用 5 件 / 他課題へ統合 2 件。全 63 件（2026-09-07 実測）。
 
 | 優先度 | 残り |
 |---|---|
 | 高 | 1 件（I-2 KPI ツリー。**次回リリースへ送付済み**） |
-| 中 | 12 件 |
+| 中 | 13 件 |
 | 低 | 5 件 |
+
+**E-2（旧 API の削除）を保留解除して着手中。** 調査は完了し、前提だった
+`add_filter()` も入った。
 
 **今回のリリース分は片づいた。** 残り 18 件は次回以降で、うち 3 件は
 次回リリースへ送付済み（L-3 / I-3 / I-2）。
@@ -859,13 +862,47 @@ GitHub は force-push 後も古いコミットを一定期間参照でき、API 
 > ファイル 3 件それぞれで分割単位が異なるため、1 ファイル 1 タスク。
 > 分割は import の循環を生みやすいので、依存関係の調査を Phase 0 に置くこと。
 
-### E-2 【低】旧 API の削除
+### E-2 【中】旧 API の削除
 
-仕様 §11 により、新 API の全 Phase 完了後にまとめて判断する。対象は
-`TwbWorkbook` の旧メソッド 29 件と `models.py` の投影 dataclass 14 件。
-**現時点では着手しない。** 完了条件を明確にするための記録として置く。
+**保留解除（2026-09-07）。** A-1 / A-2 / A-6 がすべて完了し、条件を満たした。
+まだ push しておらず（未 push 77 コミット）**外部利用者がいない**ため、
+破壊的変更のコストはほぼゼロ。
 
-> **次のアクション**: 保留。A-1 / A-2 / A-6 がすべて完了した時点で、分解要否を再判断する。
+#### 対象（2026-09-07 実測）
+
+| 層 | 中身 | 件数 | 消せるか |
+|---|---|---|---|
+| A | `TwbWorkbook` の旧メソッド | 27 | 消せる |
+| B | A に付いている `by=` 引数 | A に同梱 | A と同時 |
+| C | `models.py` の dataclass | 20 | **消せない。** 公開停止のみ |
+
+A の 27 件は `list_*` 14 / `get_<単数形>` 4 / `update_*` 3 / その他 6。
+これとは別に `set_filter` と `create_calculated_field` が新旧同名で並存する。
+
+```
+list_dashboards list_dashboard_fields list_dashboard_zones list_dashboard_actions
+list_dashboard_filter_controls list_worksheets list_worksheet_fields list_reference_lines
+list_filters list_datasources list_relations list_relationships list_parameters list_columns
+get_dashboard get_worksheet get_datasource get_column
+update_source update_column update_formula
+rename_field reset_field_caption move_field_to_folder remove_field_from_folder
+move_column_to_folder unsupported_features
+```
+
+#### 消すと起きること
+
+| # | 内容 | 状態 |
+|---|---|---|
+| 1 | `TwbWorkbook.set_filter()` は旧 API 扱いだが**新 API より仕事が多い**（データソースフィルター＋使用シート全部へのスライス追加）。`config_apply.py` と `examples/build_dashboard.py` が使っている | **解決済み。** `add_filter()` を新設し、両方の呼び出し元を移した |
+| 2 | `create_calculated_field` に挙動差が 2 つ。旧は `folder=` が無ければ**作る**（`create_if_missing=True`）／新は `NotFoundError`。旧 `strict=False` ／新 `strict=True` | 未決 |
+| 3 | `models.py` の 20 クラスは投影層 14 モジュールが返す型。**削除不可**。`__all__` から外して非公開にするのみ可能で、それも `from twbpatch import TwbColumn` を壊す | 未決 |
+| 4 | テスト 8 ファイル / 22 関数が旧 API を直接呼ぶ。`test_old_new_api_equivalence.py`（B-3 #41）は**存在意義ごと消える** | 書き直しが要る |
+| 5 | 内部の自己参照 2 箇所（`workbook.py:641` / `:853`）| まとめて消せば解決 |
+
+`export_json()` / `export_html()` / `serialize_workbook()` は新 API だけで組まれていて
+影響しない（実測）。
+
+> **次のアクション**: 2 と 3 を決めてから A を一括で消す。4 のテスト書き直しが最大の作業量。
 
 ---
 

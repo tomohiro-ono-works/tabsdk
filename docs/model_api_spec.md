@@ -47,7 +47,7 @@ workbook.draw_bar(name="帳票", item=(...), metric=(...))
 命名規則（§3.3）と取得の契約（§4）は**クラス方式に適用する**。API 方式は動作を表す動詞名を持ち、
 `get_*` / `create_*` / `update` / `delete` の枠には収めない。
 
-現在の API 方式（`TwbWorkbook.draw_*()` / `set_filter()` / `set_default_font()` /
+現在の API 方式（`TwbWorkbook.draw_*()` / `add_filter()` / `set_default_font()` /
 `apply_field_config()` / `TwbDashboard.build_report()`）は §6.14 に一覧する。
 
 ### 2.1 メモリ上の XML を唯一の正とする
@@ -825,12 +825,35 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 | `draw_quadrant()` | 散布図の四象限 |
 | `draw_crosstab()` | ヒートマップ付きクロス集計 |
 | `draw_colored_yoy_sheet()` | 前年差を色分けした帳票 |
-| `set_filter()` | 指定フィールドを全ワークシートのフィルタ対象にする |
+| `add_filter()` | フィルターの入口。`scope="worksheet"` / `"datasource"` を引数で選ぶ |
 | `set_default_font()` | ワークブック全体の既定フォント |
 | `apply_field_config()` | YAML でフィールドの改名とフォルダ分類を一括適用 |
 | `apply_config()` | 設定画面が出力した YAML を適用する。受け手が無い節は読み飛ばす |
 | `export_json()` | ワークブックの内容を辞書で取り出す |
 | `export_html()` | 設定画面の HTML を 1 ファイル出力する（`docs/html_screen_spec.md`） |
+
+#### フィルターの入口は `add_filter()` 1 つ
+
+Tableau のフィルターは XML 上 3 か所に分かれて書かれる。クラス方式ではそれぞれの
+持ち主が書くが、**使う側の入口は 1 つにして種別を引数で選ぶ**（2026-09-07 決定）。
+
+| 書く場所 | クラス方式 |
+|---|---|
+| `shared-views` のデータソースフィルター | `TwbDatasource.set_filter()` |
+| ワークシートの `<slices>` | `TwbWorksheet.add_filter_slice()` |
+| ワークシートの filters シェルフ | `TwbWorksheet.add_filter()` |
+
+`TwbWorkbook.add_filter(field, *, scope, worksheets)` はこの 3 つを組み合わせる。
+`scope="datasource"` は 1 番目と 2 番目、`scope="worksheet"` は 3 番目を使う。
+
+**ダッシュボードのフィルターカードは含めない。** カードは
+`TwbDashboardContainer.add_filter()` が置く。「どのコンテナのどこに」はコンテナ側の
+情報であり、`add_filter()` に持たせると持ち主がずれる。代わりに `add_filter()` は
+作ったシェルフ上の配置（`TwbWorksheetField`）を返し、それをそのままカードへ渡す。
+
+`scope="datasource"` の戻り値は空リストになる。データソースフィルターはシェルフ上の
+配置を持たず、カードの `<zone>` は「ワークシート＋そのフィルター参照」を指す作りなので、
+構造としてカードにできない。
 
 **`TwbDashboard`**
 

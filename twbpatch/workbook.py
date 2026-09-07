@@ -52,6 +52,7 @@ from .errors import AmbiguousCaptionError, NotFoundError, SaveError, ValidationE
 from .connected import TwbDatasource as ConnectedDatasource, get_datasources as get_connected_datasources
 from .connected_worksheet import (
     TwbWorksheet as ConnectedWorksheet,
+    TwbWorksheetField as ConnectedWorksheetField,
     create_worksheet as create_connected_worksheet,
     get_worksheets as get_connected_worksheets,
 )
@@ -322,6 +323,76 @@ class TwbWorkbook:
             if uses_datasource:
                 worksheet.add_filter_slice(field=fields[0])
         return self
+
+    def add_filter(
+        self,
+        field: "FieldInput",
+        *,
+        scope: str = "worksheet",
+        worksheets: "list[ConnectedWorksheet | str] | None" = None,
+    ) -> list[ConnectedWorksheetField]:
+        """フィルターを効かせる。フィルターの入口はこの 1 つ。
+
+        `scope="worksheet"` は各シートの filters シェルフへ置く。
+        `scope="datasource"` はデータソースフィルター（`shared-views`）を作り、
+        各シートにスライスを足す。
+
+        `worksheets=None` は、そのフィールドのデータソースを使う全シートが対象。
+
+        戻り値は作ったシェルフ上の配置で、`container.add_filter()` にそのまま渡せる。
+        **`scope="datasource"` では空リストが返る。** データソースフィルターは
+        シェルフ上の配置を持たず、カードの `<zone>` は「ワークシート＋その
+        フィルター参照」を指す作りなので、構造としてカードにできない。
+        """
+        from .field_input import resolve_field_input
+
+        scopes = ("worksheet", "datasource")
+        if scope not in scopes:
+            raise ValueError(f"scope must be one of {scopes}")
+        target_field = resolve_field_input(self._context, field)
+        datasource = self.get_datasources(id=target_field.datasource_id)[0]
+        targets = self._resolve_filter_worksheets(worksheets, datasource)
+
+        if scope == "datasource":
+            datasource.set_filter(field=target_field)
+            for worksheet in targets:
+                worksheet.add_filter_slice(field=target_field)
+            return []
+        return [worksheet.add_filter(field=target_field) for worksheet in targets]
+
+    def _resolve_filter_worksheets(
+        self,
+        worksheets: "list[ConnectedWorksheet | str] | None",
+        datasource: ConnectedDatasource,
+    ) -> list[ConnectedWorksheet]:
+        """対象シートを解決する。`None` はデータソースを使う全シート。"""
+        if worksheets is None:
+            return [
+                worksheet
+                for worksheet in self.get_worksheets()
+                if worksheet._resolve_element().xpath(
+                    ".//*[local-name()='datasource-dependencies'][@datasource=$id]"
+                    " | .//*[local-name()='datasource'][@name=$id]",
+                    id=datasource.id,
+                )
+            ]
+        if not isinstance(worksheets, list):
+            raise TypeError("worksheets must be a list or None")
+        resolved: list[ConnectedWorksheet] = []
+        for worksheet in worksheets:
+            if isinstance(worksheet, str):
+                matches = self.get_worksheets(name=worksheet)
+                if not matches:
+                    raise NotFoundError(f"worksheet not found: {worksheet}")
+                resolved.append(matches[0])
+                continue
+            if not isinstance(worksheet, ConnectedWorksheet):
+                raise TypeError("worksheets must hold names or TwbWorksheet")
+            if worksheet._context is not self._context:
+                raise ValueError("worksheet must belong to the same workbook")
+            worksheet._ensure_attached()
+            resolved.append(worksheet)
+        return resolved
 
     def draw_sheet(
         self,

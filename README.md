@@ -181,6 +181,7 @@ Worksheet のみ `id == name == XML @name`。
 | `create_worksheet` | `*, name: str, visible: bool = True` | `TwbWorksheet` | 空のワークシートを作成 |
 | `create_dashboard` | `*, name: str, width: int = 1200, height: int = 800, sizing_mode: str = "fixed"` | `TwbDashboard` | ダッシュボードを作成 |
 | `create_parameter` | `*, name: str, value: object, datatype: str = "string", domain_type: str = "any", allowable_values=None, min_value=None, max_value=None, step_size=None, hidden: bool = False` | `TwbParameter` | パラメータを作成。`domain_type` は `any` / `list` / `range` |
+| `add_filter` | `field: FieldInput, *, scope="worksheet", worksheets=None` | `list[TwbWorksheetField]` | **フィルターの入口。** `scope="worksheet"` は各シートの filters シェルフへ、`scope="datasource"` はデータソースフィルター（`shared-views`）を作って各シートにスライスを足す。`worksheets=None` はそのデータソースを使う全シート。戻り値は `container.add_filter()` へそのまま渡せる（`scope="datasource"` では空リスト） |
 
 ### 2.4 ワークシート生成（`draw_*`）
 
@@ -463,7 +464,7 @@ struct={
 |---|---|---|
 | `kind="worksheet"` | `sheet` | ワークシート 1 枚をそのまま段へ置く |
 | | `sheets` + `fixed_size` | ワークシートを縦に積んだ列にする（1 枚でも列になる）。`fixed_size` は列の幅 |
-| `kind="filter"` | `field` | `("データソース名", "フィールド名")`。事前に `workbook.set_filter()` が要る |
+| `kind="filter"` | `field` | `("データソース名", "フィールド名")`。事前に `workbook.add_filter()` が要る |
 
 段の高さは `height` → `container_sizes[段の名前]` → 既定 300 の順。均等配分は
 「並べたワークシートが 2 つ以上あり、フィルタが無い」ときだけ行う。
