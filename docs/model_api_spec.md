@@ -478,6 +478,27 @@ workbook.create_dashboard(
 - Parameters Datasource が存在しない場合は遅延作成する。
 - 同じ `id` または公開 `name` が存在する場合は `ValueError` とする。
 
+**Datasource の作成は Tableau 抽出（.hyper）に限る**（2026-09-13）。CSV / Excel / BigQuery などの
+一般的な作成（backlog H-2）は不採用のままとし、KPI ツリーのエッジ用に .hyper だけを足す。
+
+```python
+workbook.create_hyper_datasource(
+    name=name,
+    path="edge.hyper",
+    fields=[{"name": "edge", "datatype": "string", "role": "dimension"}, ...],
+)
+```
+
+- **.hyper の中身はライブラリで読めないため、列は呼び出し側が `fields` で宣言する。** ファイルとは突き合わせない
+- `fields` の各要素は `name`（.hyper の表の列名）/ `datatype` / `role` の 3 キー。`datatype` は実測した
+  `"string"` / `"integer"` だけを受け付け、他の型は Tableau の保存形を見てから足す
+- XML は Tableau が「テキストファイルに接続して抽出を作った」ときの保存形に合わせる。抽出の `dbname` に `path` を、
+  テキスト側には同じフォルダの `<ファイル名>.txt` を書く。テキストは抽出を開くときに参照されない前提
+- 抽出の表は Tableau の既定の `[Extract].[Extract]` とする
+- 内部 `id` は `federated.` ＋ 28 文字の英小文字・数字。公開 `name` は `caption` に保存する
+- 同じ公開 `name` の Datasource がある、`path` が `.hyper` でない、`fields` が空・重複・未対応の型や役割の場合は
+  `ValueError` とし、XML を変更しない
+
 WorksheetとParameterの作成は、既存の `.twb` / `.twbx` を開いたWorkbookへの追加を対象とする。0からWorkbook全体を生成する機能は初期対象外とする。
 
 - 対象Tableauバージョンを利用者が引数で指定するAPIは設けない。
@@ -827,12 +848,67 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 | `draw_quadrant()` | 散布図の四象限 |
 | `draw_crosstab()` | ヒートマップ付きクロス集計 |
 | `draw_colored_yoy_sheet()` | 前年差を色分けした帳票 |
+| `build_kpi_tree()` | 既にあるシートを指標の親子関係のツリーとして左から右へ並べた Dashboard を作る |
 | `add_filter()` | フィルターの入口。`scope="worksheet"` / `"datasource"` を引数で選ぶ |
 | `set_default_font()` | ワークブック全体の既定フォント |
 | `apply_field_config()` | YAML でフィールドの改名とフォルダ分類を一括適用 |
 | `apply_config()` | 設定画面が出力した YAML を適用する。受け手が無い節は読み飛ばす |
 | `export_json()` | ワークブックの内容を辞書で取り出す |
 | `export_html()` | 設定画面の HTML を 1 ファイル出力する（`docs/html_screen_spec.md`） |
+
+#### `build_kpi_tree()` はシートを作らず並べるだけ
+
+既にあるシート（通常は `draw_card()` の KPI カード）を、指標の親子関係のツリーとして左から右へ
+並べた Dashboard を作る。**KPI ツリー専用のグラフは作らない**（2026-09-13 決定）。
+`build_report()` が既存シートを並べるだけなのと同じ分担にする。
+
+```python
+card = workbook.draw_card(datasource, name="売上", main_metric="売上")
+workbook.build_kpi_tree(dashboard_name="KPIツリー", root=KpiNode(card, [...]), align="top")
+```
+
+入力は値オブジェクト `KpiNode(worksheet, children=[])` で、`twbpatch` から公開する。
+`children` が空のノードがツリーの末端になる。**Tableau の階層（`TwbDrillPath`）とは別物**で、
+こちらは指標同士の親子関係を表す。
+
+- **`draw_` を付けない。** `draw_*()` はグラフ生成で、設定画面がグラフ種類の一覧を作る対象になる
+- **`TwbDashboard` ではなく `TwbWorkbook` に置く。** 大きさはツリーから決まるが、
+  `TwbDashboard.update()` は大きさを変えられないため、計算してから Dashboard ごと作る
+- ノードの大きさは 横 200 × 縦 150 に固定し（2026-09-14 に 400 × 300 から半分へ）、引数に出さない。ノードごとに変えると、兄弟でカードの
+  高さがばらついて揃わなくなる
+- Dashboard の大きさは 幅 = 階層の深さ × 200、高さ = 末端ノードの数 × 150 に、台紙の余白（上下左右 8）を足す（固定サイズ）
+- **見た目は `build_report()` の KPI カードに揃える**（2026-09-14）。ツリー全体のコンテナを灰色の台紙
+  （背景 #f5f5f5・枠線なし・外側の余白 8）にし、カードのゾーンを白（背景 #ffffff・枠線なし・外側の余白 4・内側の余白 16）にする。
+  カードのタイトルは `build_report()` と同じく、シートにタイトルがあるときだけ出す。枠線は引かず、台紙との余白で区切って見せる
+- `align="center"` は親カードを子の範囲の縦中央に、`"top"` は上端に置く
+- **タイル配置で組む。** ノード列とカードを `fixed_size` で固定し、余りを `add_spacer()` で埋める。
+  コンテナの最後の子は固定サイズでも残りいっぱいに伸びるため、空白が無いとカードが広がる
+- XML を変える前にツリー全体を検証する。同じシートが 2 回出る・別ワークブックのシート・
+  `KpiNode` 以外のノードは例外になり、Dashboard は作られない
+
+**エッジ（線）は `edge_hyper=` にエッジの座標の .hyper のパスを渡したときだけ描く**（2026-09-13）。
+Tableau のダッシュボードには線のオブジェクトが無いため、座標だけを持つ表から親ノードごとに
+折れ線のシートを作る。
+
+- **エッジ用データソース「KPIツリーのエッジ」はライブラリが足す。** ワークブックに無ければ
+  §6.1 の `create_hyper_datasource()` で列 `edge` / `point`（string・dimension）/ `x` / `y`（integer・measure）を宣言して作り、
+  あれば使い回す。既にあるものの抽出のパスが `edge_hyper` と違えば例外にする。.hyper ファイル自体はコピーしない
+- 線 `E-k` は O(0,0) → P-k(1,k) → P2-k(2,k) の 3 点で、k は親の中心から子の中心までの縦位置（ノードの高さの半分、75px 単位）。
+  表（`examples/edge.hyper`）の k の上限は 13 で、1 つの親の下の末端は 7 つまで
+- **上端揃え（`align="top"`）のときだけ描ける。** 中央揃えでは子が親より上に来て k が負になり、表に無い
+- 親ノードとその子の列のあいだに幅 60px のエッジ列を挟む。Dashboard の幅は
+  「深さ × 200 +（深さ − 1）× 60 + 台紙の余白 16」になる。線の端とカードのあいだには、カードの外側の余白 4 の灰色の隙間が出る
+- エッジ用シートの背景は、ワークシートとペインの両方を台紙と同じ色で塗る。既定の白のままだと台紙の上で帯になり、
+  透明（`#00000000`）を書いても Tableau Public では背景が残った（2026-09-14）
+- エッジ用シートは `build_kpi_tree()` の中で作る。名前は `エッジ|<親のシート名>`、シートのタブには出さない（`visible=False`）。
+  Tableau で手作りしたシートと同じ設定にする: 線マーク・階段補間・詳細に edge と point・edge を値で絞るフィルター・
+  y 軸の反転・軸の非表示・線の書式なし
+- 軸の範囲は固定する。自動だと余白が入り、線の端がカードとずれる。y は −1〜2 × 末端数 − 1、x は 0〜2
+- 次は XML を変える前に例外にする: 中央揃えでの `edge_hyper=`、`.hyper` でないパス、抽出のパスが違う既存のエッジ用データソース、
+  k が上限を超えるツリー、同名のエッジ用シートが既にある、同名の Dashboard が既にある。
+  **エッジ用データソースを作るのが最初の変更になるため、Dashboard 名の重複もその前に検証する**
+- **既存 Dashboard の作り直しではない**（§6.13）。新しい Dashboard を 1 つ作るだけで、
+  同名の Dashboard が既にあれば `create_dashboard()` と同じく `ValueError` になる
 
 #### フィルターの入口は `add_filter()` 1 つ
 
@@ -872,15 +948,23 @@ Tableau のフィルターは XML 上 3 か所に分かれて書かれる。ク�
 
 **`TwbPane` / `TwbWorksheet` の `set_*`**
 
-`set_customized_label()` / `set_axis_visibility()` / `set_categorical_colors()` /
+`set_customized_label()` / `set_axis_visibility()` / `set_axis_range()` / `set_categorical_colors()` /
 `set_continuous_colors()` / `add_sort()` / `set_subtotal_visibility()` /
 `add_reference_line()` は、複数の
 XML 箇所（`style-rule` と `format` の組など）をまとめて書く。**いずれも他モデルを
 引数に取る**ため §3.3 で `update()` へ統合しない側に当たる。
 
 自分のスカラー値だけを変えるものは `update()` のキーワード引数へ統合済み（A-9）。
-`worksheet.update(title=...)`、`pane.update(mark_color=, mark_size=, mark_opacity=,
-mark_scaling=, label_style=)`。
+`worksheet.update(title=, lines_visible=)`、`pane.update(mark_color=, mark_size=, mark_opacity=,
+mark_scaling=, label_style=, line_interpolation=)`。
+
+**KPI ツリーのエッジ用に足した書式**（2026-09-13）。XML の形は Tableau で手作りしたシートの実測に合わせる。
+
+| 公開形 | XML | 補足 |
+|---|---|---|
+| `worksheet.set_axis_range(field=, min_value=, max_value=, reverse=)` | `style-rule[@element='axis']/encoding[@attr='space']` の `min` / `max` / `range-type="fixed"` / `reverse="true"` | 範囲の固定と反転は Tableau が同じ要素に書くので 1 つのメソッドにする。すべて省略すると要素を消し、自動の範囲に戻す |
+| `worksheet.update(lines_visible=False)` | `axis` / `dropline` / `refline` / `gridline` / `zeroline` の `stroke-size=0` と `line-visibility=off`、`axis` の `tick-color=#00000000` | Tableau で書式の線をすべて「なし」にしたときの XML。個別には切り替えない。プロパティ `lines_visible` と対になる |
+| `pane.update(line_interpolation="step")` | `style-rule[@element='mark']/format[@attr='line-interpolation']` | `"linear"` は Tableau の既定なので要素を書かない。実測したのは `step` だけのため、他の値（ジャンプ）は受け付けない |
 
 ## 7. コレクション属性の扱い
 

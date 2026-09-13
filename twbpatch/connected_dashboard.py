@@ -423,12 +423,16 @@ def _content_rect(
 
     styles = _zone_style_values(container_el)
 
-    def padding(side: str) -> float:
-        value = styles.get(f"padding_{side}", styles.get("padding", "0"))
+    def inset(kind: str, side: str) -> float:
+        value = styles.get(f"{kind}_{side}", styles.get(kind, "0"))
         try:
             return max(0.0, float(value))
         except (TypeError, ValueError):
             return 0.0
+
+    # Tableau が保存した .twb では、子の位置は外側（margin）と内側（padding）の両方の分だけ内へ寄る。
+    def padding(side: str) -> float:
+        return inset("margin", side) + inset("padding", side)
 
     left = _px_to_raw(padding("left"), canvas_width)
     right = _px_to_raw(padding("right"), canvas_width)

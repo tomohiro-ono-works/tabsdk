@@ -295,6 +295,11 @@ def test_create_worksheet_builds_standard_empty_structure(tmp_path) -> None:
     assert workbook.tree.getroot().xpath(
         "string(/workbook/windows/window[@name='新規シート']/@hidden)"
     ) == "true"
+    # Tableau は cards と simple-id の無い window を読み込めない（2026-09-13）
+    window = workbook.tree.getroot().xpath("/workbook/windows/window[@name='新規シート']")[0]
+    assert [child.tag for child in window] == ["cards", "simple-id"]
+    assert window.xpath("./cards/edge[@name='left']/strip/card/@type") == ["pages", "filters", "marks"]
+    assert window.xpath("./cards/edge[@name='top']/strip/card/@type") == ["columns", "rows", "title"]
 
     before_duplicate = ET.tostring(workbook.tree.getroot())
     with pytest.raises(ValueError, match="already exists"):
@@ -412,3 +417,24 @@ def test_set_subtotal_visibility_rejects_unusable_fields(tmp_path) -> None:
     with pytest.raises(ValueError):
         worksheet.set_subtotal_visibility(field=filtered)
     assert workbook.tree.xpath("/workbook/worksheets/worksheet/table/subtotals") == []
+
+
+def test_hidden_worksheet_window_is_placed_after_worksheets_when_windows_is_missing(tmp_path) -> None:
+    path = tmp_path / "no_windows.twb"
+    path.write_text(
+        """<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources />
+  <worksheets />
+  <thumbnails />
+</workbook>
+""",
+        encoding="utf-8",
+    )
+    workbook = TwbWorkbook.open(str(path))
+
+    workbook.create_worksheet(name="非表示", visible=False)
+
+    assert [child.tag for child in workbook.tree.getroot()] == [
+        "datasources", "worksheets", "windows", "thumbnails",
+    ]

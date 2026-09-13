@@ -26,6 +26,7 @@ from .connected import (
     TwbRelationship,
 )
 from .connected_parameter import TwbParameter
+from .kpi_tree import KpiNode
 from .connected_worksheet import (
     TwbPane,
     TwbReferenceLine,
@@ -74,6 +75,7 @@ __all__ = [
     "CsvSource",
     "UnknownSource",
     "TwbField",
+    "KpiNode",
     "TwbPane",
     "TwbDashboardContainer",
     "TwbDatasource",

@@ -72,15 +72,20 @@ def test_filter_update_replaces_selected_values(tmp_path) -> None:
     assert filter_.update(values=["東日本", "西日本"]) is filter_
     assert worksheet.get_filters()[0].values == ["東日本", "西日本"]
 
-    members = worksheet._resolve_element().xpath(
-        ".//*[local-name()='filter']/*[local-name()='groupfilter'][@function='member']"
-    )
+    # filter の直下に置ける groupfilter は 1 つだけ。複数の値は union で包む（Tableau の保存形。
+    # 直下に並べると Tableau が読み込みを拒否する、2026-09-13）
+    filter_el = worksheet._resolve_element().xpath(".//*[local-name()='filter']")[0]
+    assert [child.get("function") for child in filter_el] == ["union"]
+    assert filter_el[0].get("{http://www.tableausoftware.com/xml/user}ui-enumeration") == "inclusive"
+    members = filter_el[0].xpath("./*[local-name()='groupfilter'][@function='member']")
     assert [item.get("member") for item in members] == ['"東日本"', '"西日本"']
     assert {item.get("level") for item in members} == {"[none:Region:nk]"}
 
-    # 入れ替えであって追加ではない
+    # 入れ替えであって追加ではない。1 つなら union で包まない
     filter_.update(values=["東日本"])
     assert worksheet.get_filters()[0].values == ["東日本"]
+    filter_el = worksheet._resolve_element().xpath(".//*[local-name()='filter']")[0]
+    assert [child.get("function") for child in filter_el] == ["member"]
 
     # 空リストは「すべての値」へ戻す
     filter_.update(values=[])

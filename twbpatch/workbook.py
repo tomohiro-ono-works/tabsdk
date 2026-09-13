@@ -47,6 +47,7 @@ from .html_export import render_workbook_html
 
 if TYPE_CHECKING:
     from .draw import FieldInput
+    from .kpi_tree import KpiNode
 
 
 class TwbWorkbook:
@@ -184,6 +185,17 @@ class TwbWorkbook:
             height=height,
             sizing_mode=sizing_mode,
         )
+
+    def create_hyper_datasource(
+        self,
+        *,
+        name: str,
+        path: str,
+        fields: list[dict[str, str]],
+    ) -> ConnectedDatasource:
+        from .hyper_datasource import create_hyper_datasource
+
+        return create_hyper_datasource(self._context, name=name, path=path, fields=fields)
 
 
     def list_dashboard_fields(
@@ -478,6 +490,24 @@ class TwbWorkbook:
             main_aggregation=main_aggregation,
             sub_aggregation=sub_aggregation,
             visible=visible,
+        )
+
+    def build_kpi_tree(
+        self,
+        *,
+        dashboard_name: str,
+        root: "KpiNode",
+        align: str = "center",
+        edge_hyper: str | None = None,
+    ) -> ConnectedDashboard:
+        from .kpi_tree import build_kpi_tree
+
+        return build_kpi_tree(
+            self,
+            dashboard_name=dashboard_name,
+            root=root,
+            align=align,
+            edge_hyper=edge_hyper,
         )
 
     def draw_quadrant(

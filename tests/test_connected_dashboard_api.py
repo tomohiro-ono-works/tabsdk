@@ -191,19 +191,20 @@ def test_build_report_places_vertical_worksheet_groups_in_columns(tmp_path) -> N
     assert columns[0].get_zones()[0].style["margin_bottom"] == "0"
     assert columns[0].get_zones()[1].style["margin_top"] == "0"
 
+    # 中身のコンテナは既定の外側の余白 8 と内側の余白 16（上は 4）の両方の分だけ内へ寄る。
     row_el = row._resolve_element()
     assert tuple(int(row_el.get(attr) or 0) for attr in ("x", "y", "w", "h")) == (
-        1333,
-        5875,
-        97334,
+        2000,
+        6875,
+        96000,
         25750,
     )
     assert [
         tuple(int(zone.get(attr) or 0) for attr in ("x", "y", "w", "h"))
         for zone in row_el.xpath("./zone")
     ] == [
-        (1333, 5875, 48667, 25750),
-        (50000, 5875, 48667, 25750),
+        (2000, 6875, 48000, 25750),
+        (50000, 6875, 48000, 25750),
     ]
 
 

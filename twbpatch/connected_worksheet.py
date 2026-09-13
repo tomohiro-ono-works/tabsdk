@@ -155,9 +155,18 @@ _DATASOURCE_CHILD_ORDER = (
     "datasource-dependencies", "explainability", "filter", "object-graph",
 )
 _STYLE_RULE_ORDER = (
-    "axis", "title", "header", "field-labels", "field-labels-decoration", "pane", "table"
+    "axis", "dropline", "refline", "gridline", "zeroline",
+    "title", "header", "field-labels", "field-labels-decoration", "pane", "table"
 )
 _TRANSPARENT = "#00000000"
+_LINE_RULES = ("dropline", "refline", "gridline", "zeroline")
+_USER_NAMESPACE = "http://www.tableausoftware.com/xml/user"
+_MULTI_VALUE_UI_ATTRS = {
+    f"{{{_USER_NAMESPACE}}}ui-domain": "database",
+    f"{{{_USER_NAMESPACE}}}ui-enumeration": "inclusive",
+    f"{{{_USER_NAMESPACE}}}ui-marker": "enumerate",
+}
+_LINE_INTERPOLATIONS = {"linear", "step"}
 
 
 def _local_name(element: ET._Element) -> str:
@@ -1366,6 +1375,106 @@ class TwbWorksheet(ConnectedModel):
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
 
+    def set_axis_range(
+        self,
+        *,
+        field: TwbWorksheetField,
+        min_value: float | None = None,
+        max_value: float | None = None,
+        reverse: bool = False,
+    ) -> TwbWorksheet:
+        """軸の範囲の固定と反転。Tableau は両方を同じ `encoding attr="space"` に書く。"""
+        if not isinstance(field, TwbWorksheetField):
+            raise TypeError("field must be TwbWorksheetField")
+        if (min_value is None) != (max_value is None):
+            raise ValueError("min_value and max_value must be given together")
+        for name, value in {"min_value": min_value, "max_value": max_value}.items():
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+                raise TypeError(f"{name} must be a number or None")
+        if min_value is not None and min_value >= max_value:
+            raise ValueError("min_value must be less than max_value")
+        if not isinstance(reverse, bool):
+            raise TypeError("reverse must be bool")
+        if field._context is not self._context or field._worksheet_id != self._id:
+            raise ValueError("field must belong to the worksheet")
+        placement = field._resolve_placement()
+        if placement.shelf not in {"rows", "columns"}:
+            raise ValueError("field must be placed on rows or columns")
+
+        def format_number(value: float) -> str:
+            numeric = float(value)
+            return str(int(numeric)) if numeric.is_integer() else str(numeric)
+
+        scope = "rows" if placement.shelf == "rows" else "cols"
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        table = _ensure_table(updated)
+        had_style = _direct_child(table, "style") is not None
+        style = _ensure_table_style(table)
+        rule = _style_rule(style, "axis", create=True)
+        assert rule is not None
+        for existing in list(rule):
+            if (
+                _local_name(existing) == "encoding"
+                and existing.get("attr") == "space"
+                and existing.get("field") == placement.reference
+                and existing.get("scope") == scope
+            ):
+                rule.remove(existing)
+        if min_value is not None or reverse:
+            attrib = {
+                "attr": "space",
+                "class": "0",
+                "field": placement.reference,
+                "field-type": "quantitative",
+            }
+            if min_value is not None:
+                attrib.update(
+                    {"max": format_number(max_value), "min": format_number(min_value), "range-type": "fixed"}
+                )
+            if reverse:
+                attrib["reverse"] = "true"
+            attrib.update({"scope": scope, "type": "space"})
+            encoding = ET.Element("encoding", attrib=attrib)
+            first_format = next((item for item in rule if _local_name(item) == "format"), None)
+            if first_format is None:
+                rule.append(encoding)
+            else:
+                first_format.addprevious(encoding)
+        if not len(rule):
+            style.remove(rule)
+        if not len(style) and not had_style:
+            table.remove(style)
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    @property
+    def lines_visible(self) -> bool:
+        """`update(lines_visible=False)` で消した線の書式が 1 つでも残っていれば False。"""
+        table = _direct_child(self._resolve_element(), "table")
+        style = None if table is None else _direct_child(table, "style")
+        if style is None:
+            return True
+        return all(
+            _style_value(style, element, "line-visibility") != "off"
+            for element in ("axis", *_LINE_RULES)
+        )
+
+    def _apply_lines_visible(self, visible: bool) -> TwbWorksheet:
+        """書式の「線」をまとめて切り替える。Tableau で全部「なし」にしたときの XML に合わせる。"""
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        table = _ensure_table(updated)
+        if visible and _direct_child(table, "style") is None:
+            return self
+        style = _ensure_table_style(table)
+        for element in ("axis", *_LINE_RULES):
+            _set_style_value(style, element, "stroke-size", None if visible else "0")
+            _set_style_value(style, element, "line-visibility", None if visible else "off")
+        _set_style_value(style, "axis", "tick-color", None if visible else _TRANSPARENT)
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
     def _resolve_field(self, value: FieldInput, *, argument: str = "field") -> TwbField:
         """`field=` を `TwbField` へ解決する。素の文字列はこのシートの依存から探す。"""
         return resolve_field_input(
@@ -1841,8 +1950,11 @@ class TwbWorksheet(ConnectedModel):
         table_style: TableStyle | _UnsetType = UNSET,
         title_style: TitleStyle | _UnsetType = UNSET,
         grand_totals: GrandTotals | _UnsetType = UNSET,
+        lines_visible: bool | _UnsetType = UNSET,
     ) -> TwbWorksheet:
         worksheet_el = self._resolve_element()
+        if lines_visible is not UNSET and not isinstance(lines_visible, bool):
+            raise TypeError("lines_visible must be bool")
         table_style = _validate_style_group(
             "table_style", table_style, _TABLE_STYLE_KEYS
         )
@@ -1872,6 +1984,8 @@ class TwbWorksheet(ConnectedModel):
             self._apply_title_style(**title_style)
         if grand_totals is not UNSET:
             self._apply_grand_totals(grand_totals)
+        if lines_visible is not UNSET:
+            self._apply_lines_visible(lines_visible)
 
         root = self._context.tree.getroot()
         updated_root = copy.deepcopy(root)
@@ -1893,15 +2007,7 @@ class TwbWorksheet(ConnectedModel):
             if windows:
                 windows[0].set("hidden", "false" if visible else "true")
             elif not visible:
-                windows_container = _direct_child(updated_root, "windows")
-                if windows_container is None:
-                    windows_container = ET.Element("windows")
-                    updated_root.insert(0, windows_container)
-                ET.SubElement(
-                    windows_container,
-                    "window",
-                    attrib={"class": "worksheet", "name": target_id, "hidden": "true"},
-                )
+                _ensure_windows(updated_root).append(_hidden_worksheet_window(target_id))
 
         if not xml_equal(root, updated_root):
             self._context.tree._setroot(updated_root)
@@ -2230,6 +2336,18 @@ class TwbWorksheetFilter(ConnectedModel):
                 "groupfilter",
                 attrib={"function": "level-members", "level": level},
             )
+        elif len(values) > 1:
+            # filter の直下に置ける groupfilter は 1 つだけ。複数の値は union で包む
+            # （Tableau が保存した形。直下に並べると読み込みを拒否される、2026-09-13）。
+            union = ET.SubElement(filter_el, "groupfilter", attrib={"function": "union"})
+            for key, value in _MULTI_VALUE_UI_ATTRS.items():
+                union.set(key, value)
+            for value in values:
+                ET.SubElement(
+                    union,
+                    "groupfilter",
+                    attrib={"function": "member", "level": level, "member": f'"{value}"'},
+                )
         else:
             for value in values:
                 if template is not None:
@@ -2508,6 +2626,31 @@ class TwbPane(ConnectedModel):
             _insert_in_order(updated, style, _PANE_CHILD_ORDER)
         value = str(int(size)) if size.is_integer() else str(size)
         _set_style_value(style, "mark", "size", value)
+        _replace_if_changed(pane_el, updated, self._context)
+        return self
+
+    @property
+    def line_interpolation(self) -> str:
+        """線マークの補間。書式が無ければ Tableau の既定の `"linear"`。"""
+        style = _direct_child(self._resolve_element(), "style")
+        value = None if style is None else _style_value(style, "mark", "line-interpolation")
+        return value or "linear"
+
+    def _apply_line_interpolation(self, interpolation: str) -> TwbPane:
+        pane_el = self._resolve_element()
+        updated = copy.deepcopy(pane_el)
+        style = _direct_child(updated, "style")
+        if style is None:
+            if interpolation == "linear":
+                return self
+            style = ET.Element("style")
+            _insert_in_order(updated, style, _PANE_CHILD_ORDER)
+        _set_style_value(
+            style,
+            "mark",
+            "line-interpolation",
+            None if interpolation == "linear" else interpolation,
+        )
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
@@ -2793,10 +2936,13 @@ class TwbPane(ConnectedModel):
         mark_opacity: float | _UnsetType = UNSET,
         mark_scaling: bool | _UnsetType = UNSET,
         label_style: LabelStyle | _UnsetType = UNSET,
+        line_interpolation: str | _UnsetType = UNSET,
     ) -> TwbPane:
         label_style = _validate_style_group(
             "label_style", label_style, _LABEL_STYLE_KEYS
         )
+        if line_interpolation is not UNSET and line_interpolation not in _LINE_INTERPOLATIONS:
+            raise ValueError("line_interpolation must be linear or step")
         if mark_color is not UNSET:
             self._apply_mark_color(mark_color)
         if mark_size is not UNSET:
@@ -2807,6 +2953,8 @@ class TwbPane(ConnectedModel):
             self._apply_mark_sizing(scaling=mark_scaling)
         if label_style is not UNSET:
             self._apply_label_style(**label_style)
+        if line_interpolation is not UNSET:
+            self._apply_line_interpolation(line_interpolation)
 
         if mark_type is UNSET:
             return self
@@ -3091,16 +3239,43 @@ def create_worksheet(
     )
 
     if not visible:
-        windows_el = _direct_child(updated_root, "windows")
-        if windows_el is None:
-            windows_el = ET.Element("windows")
-            updated_root.insert(0, windows_el)
-        ET.SubElement(
-            windows_el,
-            "window",
-            attrib={"class": "worksheet", "name": name, "hidden": "true"},
-        )
+        _ensure_windows(updated_root).append(_hidden_worksheet_window(name))
 
     context.tree._setroot(updated_root)
     context.mark_dirty()
     return TwbWorksheet(context, name)
+
+
+def _ensure_windows(root: ET._Element) -> ET._Element:
+    """`<windows>` は Tableau の並びでダッシュボード（無ければワークシート）の直後に置く。"""
+    windows = _direct_child(root, "windows")
+    if windows is not None:
+        return windows
+    windows = ET.Element("windows")
+    anchor = _direct_child(root, "dashboards")
+    if anchor is None:
+        anchor = _direct_child(root, "worksheets")
+    if anchor is None:
+        root.append(windows)
+    else:
+        anchor.addnext(windows)
+    return windows
+
+
+def _hidden_worksheet_window(name: str) -> ET._Element:
+    """非表示ワークシートのウィンドウ。
+
+    Tableau は `window` に `cards` と `simple-id` を必須とし、空の `window` は読み込みを拒否する
+    （2026-09-13、Error: element 'window' is not allowed for content model）。中身は Tableau が
+    保存した通常のワークシートのウィンドウに合わせ、`hidden="true"` だけを足す。
+    """
+    window = ET.Element("window", attrib={"class": "worksheet", "hidden": "true", "name": name})
+    cards = ET.SubElement(window, "cards")
+    left = ET.SubElement(ET.SubElement(cards, "edge", attrib={"name": "left"}), "strip", attrib={"size": "160"})
+    for card in ("pages", "filters", "marks"):
+        ET.SubElement(left, "card", attrib={"type": card})
+    top = ET.SubElement(cards, "edge", attrib={"name": "top"})
+    for size, card in (("2147483647", "columns"), ("2147483647", "rows"), ("31", "title")):
+        ET.SubElement(ET.SubElement(top, "strip", attrib={"size": size}), "card", attrib={"type": card})
+    ET.SubElement(window, "simple-id", attrib={"uuid": f"{{{str(uuid.uuid4()).upper()}}}"})
+    return window

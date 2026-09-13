@@ -180,6 +180,7 @@ Worksheet のみ `id == name == XML @name`。
 | `get_parameters` | `*, id=None, name=None, include_hidden: bool = False` | `list[TwbParameter]` | パラメータ一覧。内部用の hidden は既定で除外 |
 | `create_worksheet` | `*, name: str, visible: bool = True` | `TwbWorksheet` | 空のワークシートを作成 |
 | `create_dashboard` | `*, name: str, width: int = 1200, height: int = 800, sizing_mode: str = "fixed"` | `TwbDashboard` | ダッシュボードを作成 |
+| `create_hyper_datasource` | `*, name: str, path: str, fields: list[dict]` | `TwbDatasource` | **Tableau 抽出（.hyper）専用**のデータソースを作成。.hyper の中身は読めないので列は `fields=[{"name", "datatype", "role"}, ...]` で宣言する。`datatype` は `string` / `integer` のみ。CSV / Excel などは作れない |
 | `create_parameter` | `*, name: str, value: object, datatype: str = "string", domain_type: str = "any", allowable_values=None, min_value=None, max_value=None, step_size=None, hidden: bool = False` | `TwbParameter` | パラメータを作成。`domain_type` は `any` / `list` / `range` |
 | `add_filter` | `field: FieldInput, *, scope="worksheet", worksheets=None` | `list[TwbWorksheetField]` | **フィルターの入口。** `scope="worksheet"` は各シートの filters シェルフへ、`scope="datasource"` はデータソースフィルター（`shared-views`）を作って各シートにスライスを足す。`worksheets=None` はそのデータソースを使う全シート。戻り値は `container.add_filter()` へそのまま渡せる（`scope="datasource"` では空リスト） |
 
@@ -206,6 +207,40 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `draw_quadrant` | `*, name, item, x_metric, y_metric, size_metric, colors=(4色), x/y/size_aggregation="auto", opacity=0.6, title=None` | 散布図の四象限。中央値で区切り4色に塗り分ける |
 | `draw_crosstab` | `*, name, x_item, y_item, color_metric, label_metric, color/label_aggregation="auto", min_color=None, mid_color=None, max_color=None, title=None` | ヒートマップ付きクロス集計 |
 | `draw_colored_yoy_sheet` | `*, name, items, metrics, negative_color="#ff007f", positive_color="#602fff", ratio_color="#555555", mark_type="bar", bar_color=None, axis_min=0, axis_max=1, show_axes=False, bar_opacity=1.0, index_partition_by=None` | 前年差を色分けした帳票。指標ごとに固定軸の棒を並べる |
+
+### 2.4.1 KPI ツリーの配置（`build_kpi_tree`）
+
+既にあるシート（通常は `draw_card` の KPI カード）を、指標の親子関係のツリーとして
+左から右へ並べたダッシュボードを作る。**シートは作らない。** 戻り値は `TwbDashboard`。
+
+| メソッド | 引数 | 説明 |
+|---|---|---|
+| `build_kpi_tree` | `*, dashboard_name, root: KpiNode, align="center", edge_hyper: str \| None = None` | `align` は親カードの位置で `"center"`（子の範囲の縦中央）/ `"top"`（上端）。`edge_hyper` にエッジの座標の .hyper のパスを渡すと線を描く（`align="top"` のときだけ） |
+
+`KpiNode(worksheet, children=[])` は `twbpatch` から import する値オブジェクト。
+`children` が空のノードがツリーの末端になる。
+
+- ノードは 横 200 × 縦 150 固定。ダッシュボードの大きさは ツリーの深さ × 200、末端ノードの数 × 150 に、周りの余白 8 ずつを足したものになる
+- 見た目はダッシュボードの `build_report` と同じ。灰色の台紙に白いカードを余白付きで置き、カードのタイトルはシートにタイトルがあるときだけ出す
+- 同じシートを 2 つのノードに置く、別ワークブックのシートを渡すと例外。このときダッシュボードは作られない
+- **エッジ（線）**: `edge_hyper="edge.hyper"` のように座標の .hyper（`examples/edge.hyper`）のパスを渡す。
+  データソース「KPIツリーのエッジ」が無ければ作り、あれば使い回す。.hyper ファイルはコピーしないので、.twb から
+  そのパスで見える場所に置く。親ノードごとに `エッジ|<親のシート名>` という非表示のシートを作り、
+  カードと子の列のあいだに幅 60px で置く。ダッシュボードの幅は その分だけ広がる。1 つの親の下の末端は 7 つまで
+
+```python
+from twbpatch import KpiNode
+
+card = lambda name, metric: workbook.draw_card(datasource, name=name, main_metric=metric)
+workbook.build_kpi_tree(
+    dashboard_name="KPIツリー",
+    root=KpiNode(card("売上", "Sales"), [
+        KpiNode(card("利益", "Profit"), [KpiNode(card("数量", "Quantity"))]),
+        KpiNode(card("値引率", "Discount")),
+    ]),
+    align="top",
+)
+```
 
 ### 2.5 その他
 
@@ -348,6 +383,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `table_style` | `dict[str, Any]` | 表スタイル |
 | `title_style` | `dict[str, Any]` | タイトルスタイル |
 | `grand_totals` | `dict[str, str \| None]` | 総計の位置。`{"row": "top"\|"bottom"\|None, "column": "left"\|"right"\|None}` |
+| `lines_visible` | `bool` | 書式の「線」（グリッド線・ゼロ線・ドロップライン・参照線・軸の線と目盛）が消されていなければ `True` |
 
 **メソッド**
 
@@ -364,7 +400,8 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `set_subtotal_visibility` | `*, field: TwbWorksheetField, visible=True` | `TwbWorksheet` | 行・列に配置したフィールドへ小計を付ける / 外す |
 | `add_reference_line` | `*, field: TwbWorksheetField, pane: TwbPane \| None = None, formula="median", scope="per-table", label_type="value", probability=95, z_order=1` | `TwbReferenceLine` | リファレンスラインを 1 本引く。**Pane が複数あるワークシートでは `pane=` が要る**（仕様 §6.7）。1 つなら省略できる |
 | `set_axis_visibility` | `*, field: TwbWorksheetField, visible: bool` | `TwbWorksheet` | 軸の表示 / 非表示 |
-| `update` | `*, name=UNSET, visible=UNSET, title=UNSET, table_style=UNSET, title_style=UNSET, grand_totals=UNSET` | `TwbWorksheet` | 自身を更新。**旧 `update_table_style()` / `update_title_style()` を統合** |
+| `set_axis_range` | `*, field: TwbWorksheetField, min_value=None, max_value=None, reverse=False` | `TwbWorksheet` | 軸の範囲の固定と反転。`min_value` と `max_value` は両方指定か両方省略。すべて省略すると自動の範囲に戻す |
+| `update` | `*, name=UNSET, visible=UNSET, title=UNSET, table_style=UNSET, title_style=UNSET, grand_totals=UNSET, lines_visible=UNSET` | `TwbWorksheet` | 自身を更新。**旧 `update_table_style()` / `update_title_style()` を統合**。`lines_visible=False` で書式の「線」をまとめて消す |
 | `delete` | — | `None` | 削除。ダッシュボードから参照されていれば `ResourceInUseError` |
 
 `table_style` に渡す辞書（`TypedDict`、すべて任意）:
@@ -395,6 +432,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `name` | `str` | 表示名。無ければ Pane ID |
 | `mark_type` | `str` | `bar` / `line` / `circle` / `square` / `text` など |
 | `mark_opacity` | `float \| None` | 不透明度 |
+| `line_interpolation` | `str` | 線マークの補間。`"linear"`（既定）/ `"step"`（階段） |
 | `customized_label` | `dict \| None` | カスタムラベル構成 |
 
 **メソッド**
@@ -407,7 +445,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | `get_categorical_colors` | `field: TwbWorksheetField` | `dict[str, str]` | カテゴリ別の色割り当てを取得 |
 | `set_categorical_colors` | `field: TwbWorksheetField, colors: dict[str, str]` | `TwbPane` | カテゴリ別の色を設定 |
 | `set_continuous_colors` | `field: TwbWorksheetField, *, min_color, mid_color, max_color` | `TwbPane` | 連続値の3色グラデーションを設定 |
-| `update` | `*, mark_type=UNSET, mark_color=UNSET, mark_size=UNSET, mark_opacity=UNSET, mark_scaling=UNSET, label_style=UNSET` | `TwbPane` | 自身の値を更新。**旧 `set_mark_color()` / `set_mark_size()` / `set_mark_opacity()` / `set_mark_sizing()` / `set_label_style()` を統合済み（A-9）** |
+| `update` | `*, mark_type=UNSET, mark_color=UNSET, mark_size=UNSET, mark_opacity=UNSET, mark_scaling=UNSET, label_style=UNSET, line_interpolation=UNSET` | `TwbPane` | 自身の値を更新。**旧 `set_mark_color()` / `set_mark_size()` / `set_mark_opacity()` / `set_mark_sizing()` / `set_label_style()` を統合済み（A-9）** |
 
 ### 3.7 `TwbWorksheetField`
 
