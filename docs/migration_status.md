@@ -1,164 +1,111 @@
 # 移行状況
 
 **このファイルは `/spec-conformance` が生成する。手で編集しない。**
-生成日: 2026-09-07 / 正典: `docs/model_api_spec.md`
+生成日: 2026-09-13 / 正典: `docs/model_api_spec.md`
 
 ## テスト結果
 
 ```
-244 passed, 0 skipped
+397 passed, 0 skipped
 ```
 
-`uv run --no-sync pytest -q --basetemp=tmp/pytest`（3.18s、exit 0）。
-`CLAUDE.md` の期待値 172 は古い。244 が現在の実測値。
+`uv run --no-sync pytest -q --basetemp=tmp/pytest`（6.39s、exit 0）。
+
+> 注: 同じコマンドを 1 回目に実行したときは
+> `tests/test_export_html.py::test_export_html_table_columns_are_resizable` が
+> `assert 5 == 6` で落ちた。実行中に別セッションが `tests/test_export_html.py` を
+> 編集していたための競合で、再実行では解消している（作業ツリーに未コミットの
+> 変更が 18 ファイルある状態での計測）。
 
 ## §13 受け入れ条件の判定
 
 判定は `connected*.py` と新規追加コードだけを対象にする。`models.py` の dataclass と
-`TwbWorkbook.list_*()` / `get_<単数形>()` / `update_*()` / `by=` の併存は §11 により違反としない。
+`TwbWorkbook.list_*()` 4 件（`by=` 引数を含む）の併存は §11.3 により違反としない。
 
 | 条件 | 判定 | 根拠 |
 |---|---|---|
-| 公開 API に `list_*()` が存在しない | PASS | `connected*.py` に `def list_` は 0 件 |
-| 公開の単数取得 `get_<単数形>()` が存在しない | PASS | `connected*.py` の `get_*` は全て複数形 |
-| 公開の `update_*()` が存在しない | PASS | `connected*.py` に `def update_` は 0 件 |
-| 親モデルに `update_<リソース>()` / `delete_<リソース>()` が無い | PASS | 同上、`def delete_` も 0 件 |
-| すべての `get_*()` が `list` を返す | PASS | 14 メソッドすべて `-> list[...]`。`TwbPane.get_categorical_colors(field)` は引数を取る属性取得で §4.1 の対象外 |
-| 公開取得 API に `identifier` と `by` が存在しない | PASS | `connected*.py` の `by="name"` は全て旧ヘルパー呼び出し側の実引数（`connected.py:640` ほか） |
-| 検索条件がキーワード専用の `id=` / `name=` | PASS | `get_children()` を除く全 `get_*` が `*,` 付き |
-| `id` と `name` の同時指定が `ValueError` | PASS | `connected.py:60` `_validate_get_args()` を全 14 箇所が呼ぶ |
-| `TwbWorksheet` に `create_field()` が無い | PASS | リポジトリ全体に `def create_field` は 0 件 |
-| シェルフが `rows`/`columns`/`pages`/`filters` を検証 | PASS | `connected_worksheet.py:1395` |
-| `TwbPane` が `mark_type` 更新とエンコーディング配置に対応 | PASS | `connected_worksheet.py:2800`、`_MARK_TYPES`（100 行目） |
-| 複数 Pane で `add_reference_line(pane=)` が必須 | PASS | `connected_worksheet.py:951`、`tests/test_reference_line_pane.py` |
-| 総計が `update(grand_totals=)` とプロパティの対称形 | PASS | `connected_worksheet.py:1040` / `1843` |
-| 小計が `set_subtotal_visibility()`、`update()` に含まれない | PASS | `connected_worksheet.py:1295` |
-| `TwbWorksheetField.delete()` が配置だけを解除 | PASS | `tests/test_connected_worksheet_api.py` |
-| `folder=` の解決規則が全メソッドで同じ | PASS | `TwbDatasource._resolve_folder()`（`connected.py:544`）へ集約、呼び出しは 600 / 685 / 1319 |
-| Dashboard 標準配置がタイルコンテナ | PASS | `connected_dashboard.py:1290` `create_container()` |
-| タイル API が `direction`/`order`/`weight` を取り `x`/`y` を取らない | PASS | `connected_dashboard.py:1557` / `1600` のシグネチャ |
-| SDK が階層・順序・比率から座標を計算 | PASS | `test_nested_tiled_containers_compute_coordinates_from_order_and_weight` |
-| `TwbDashboardZone.delete()` が Worksheet を消さない | PASS | `test_tiled_zone_update_and_delete_preserve_worksheet` |
-| 浮動配置が `add_floating_worksheet()` として分離 | PASS | `connected_dashboard.py:1331` |
-| タイル／浮動 Zone の無効引数が `ValueError` | PASS | `connected_dashboard.py:2051` / `2053` |
-| 参照中リソースの `delete()` が `ResourceInUseError` | PASS | `connected*.py` に 11 箇所、`test_container_delete_blocks_children_with_structured_references` ほか |
-| `ResourceInUseError.references` から種類・ID・場所を確認できる | PASS | `tests/test_connected_delete_parameter_api.py:77-104` |
-| 連鎖削除が公開 API に無い | PASS | リポジトリ全体に `cascade` は 0 件 |
-| `TwbColumn` / 公開 `column` が `TwbField` / `field` へ移行 | **FAIL** | `TwbReferenceLine.axis_column` / `value_column`（`connected_worksheet.py:1990` / `2002`）が残っている |
-| XML 固有の `column` と `TwbWorksheet.columns` は維持 | PASS | `_SHELVES` の `columns` は維持 |
-| 公開 `id` = `@name`、公開 `name` = `@caption`（Worksheet は両方 `@name`） | PASS | `get_xml_id()` / `get_display_name()` へ集約 |
-| caption 欠落時に `@name` 由来の既定表示名 | PASS | `test_field_update_is_live_and_caption_falls_back_to_xml_id` |
-| 公開モデルと JSON 出力に `caption` が存在しない | **FAIL** | `TwbReferenceLine.axis_caption` / `value_caption`（`connected_worksheet.py:1994` / `2006`）、`TwbFilterControl.show_caption`（`connected_dashboard.py:2193`） |
-| XML 内の参照と計算式保存が `id` を使用 | PASS | `test_add_field_places_id_references_on_all_worksheet_shelves` |
-| 解決不能・複数候補の `name` を暗黙に選択しない | PASS | `AmbiguousCaptionError`、`tests/test_field_argument.py` |
-| 接続型モデルが更新後の XML を再取得なしで参照できる | PASS | `test_field_update_is_live_and_caption_falls_back_to_xml_id` |
-| CRUD だけではファイルが変更されない | PASS | `test_updates_stay_in_memory_until_save` |
-| `save()` 成功時だけファイルへ反映 | PASS | `test_connected_edits_round_trip_through_save_and_reopen` |
-| `reload()` が未保存変更を破棄し既存モデルを無効化 | PASS | `test_reload_discards_memory_changes_and_detaches_old_models` |
-| 削除・無効化後の操作が `DetachedModelError` | PASS | `connected*.py` に 47 箇所 |
-| 非公開コンテキストが JSON 出力へ含まれない | **FAIL** | `export_json()` が接続型モデルをそのまま返す（下記） |
-| 既存 Dashboard の編集が対象コンテナ配下だけを変更 | 要目視 | `connected_dashboard.py:1618` は `deepcopy` → 部分編集 → 差し替え。全体再構築ではないが、対象外の兄弟を保持することを直接検査するテストが無い |
-| 未対応属性・対象外 Zone・デバイスレイアウトが暗黙に変更されない | 要目視 | 読み取り側の `test_list_dashboard_zones_handles_device_and_responsive_layouts` のみ。編集後の保持を検査するテストが無い |
-| 旧 API と同等の XML 編集結果を得られる | 要目視 | 新旧の出力 XML を突き合わせるパリティテストが存在しない |
+| 公開 API に `list_*()` が存在しない | PASS | `grep "    def list_" twbpatch/connected*.py` が 0 件。`workbook.py` に残る 4 件は §11.3 が明示的に残した旧 API |
+| 公開の単数取得 `get_<単数形>()` が存在しない | PASS | 公開 `get_*` の戻り値注釈を全件確認。単数を返すのは `create_*` のみ |
+| 公開の `update_*()` が存在しない | PASS | `grep "    def update_" twbpatch/connected*.py` が 0 件 |
+| 親モデルに `update_<リソース>()` / `delete_<リソース>()` が無い | PASS | 同上。削除は個体モデルの `delete()` のみ |
+| すべての `get_*()` が `list` を返す | PASS | 23 個の公開 `get_*` の戻り値注釈がすべて `list[...]`。例外は `TwbPane.get_categorical_colors()` → `dict[str, str]` だが、引数を取る属性取得なので §4.1 で対象外 |
+| 公開取得 API に `identifier` と `by` が無い | PASS | `connected*.py` に `by:` 引数なし。`by="name"` の出現は投影層関数への内部呼び出し。`workbook.py:194/208/233/588` の `by: str = "auto"` は旧 `list_*()` 4 件（§11.3） |
+| 検索条件がキーワード専用の `id=` / `name=` | PASS | 全 `get_*` が `*, id=None, name=None`。`twbpatch/connected.py:76` の `_validate_get_args` を 27 か所で呼ぶ |
+| `id` と `name` の同時指定で `ValueError` | PASS | `twbpatch/connected.py:76-78` |
+| `TwbWorksheet.create_field()` が無く `add_field()` で配置 | PASS | `grep "def create_field"` が 0 件。`connected_worksheet.py:1378` |
+| シェルフが rows / columns / pages / filters を検証 | PASS | `connected_worksheet.py:1395`（`_SHELVES` + `"filters"`、不正値は `ValueError`） |
+| `TwbPane` が `mark_type` 更新とエンコーディング配置 | PASS | `connected_worksheet.py:2787`（`update`）、`2538`（`add_field`）、`tests/test_connected_worksheet_api.py:179` |
+| 複数 Pane で `add_reference_line(pane=)` が必要 | PASS | `connected_worksheet.py:951-975`、`tests/test_reference_line_pane.py` |
+| 総計が `update(grand_totals=)` とプロパティの対称形 | PASS | `connected_worksheet.py:1040`（プロパティ）/ `1843`（`update` 引数）、`tests/test_connected_worksheet_api.py:330` |
+| 小計が `set_subtotal_visibility()` で `update()` に含まれない | PASS | `connected_worksheet.py:1295`。`update()` の引数に小計なし |
+| `TwbWorksheetField.delete()` が配置だけを外す | PASS | `connected_worksheet.py:3013`、`tests/test_connected_worksheet_api.py:210` |
+| `folder=` の規則が全メソッドで同じ | PASS | `create_folder_if_missing: bool = False` が 6 か所。解決は `TwbDatasource._resolve_folder()`（`connected.py:735`）へ集約、`move_to_folder` も `connected.py:1538` で同じ入口を使う。`tests/test_folder_argument.py` / `test_folder_if_missing.py` |
+| Dashboard の標準配置がタイル（`TwbDashboardContainer`） | PASS | `connected_dashboard.py:1337`（`TwbDashboard.create_container`）、`1603`/`1646`（入れ子と配置） |
+| タイル API が `direction` / `order` / `weight` を取り `x` / `y` を取らない | PASS | `connected_dashboard.py:1603-1612`、`1646-1655` に座標引数なし |
+| SDK がタイルの階層・順序・比率から座標を計算 | PASS | `tests/test_connected_dashboard_api.py:72` |
+| 既存 Dashboard の編集が対象コンテナ配下だけ | PASS | `tests/test_dashboard_edit_locality.py:88,98` |
+| 未対応属性・対象外 Zone・デバイスレイアウトを暗黙に変えない | PASS | `tests/test_dashboard_edit_locality.py:108,121,132,149` |
+| `TwbDashboardZone.delete()` が配置だけを削除 | PASS | `connected_dashboard.py:2285`、`tests/test_connected_dashboard_api.py:299` |
+| 浮動配置が `add_floating_worksheet()` という別 API | PASS | `connected_dashboard.py:1378` |
+| タイル / 浮動で無効な更新引数は `ValueError` | PASS | `connected_dashboard.py:2208-2211` |
+| 参照中リソースの `delete()` が `ResourceInUseError`、XML と `is_dirty` が不変 | PASS | 7 か所で送出（`connected.py:1033,1581,1806` ほか）。`tests/test_connected_delete_parameter_api.py:67`、`test_connected_final_api.py:53,117` |
+| `ResourceInUseError.references` から参照元を確認できる | PASS | `twbpatch/errors.py:43`、`tests/test_connected_dashboard_api.py:399` |
+| 連鎖削除が公開 API に無い | PASS | `grep -rn "cascade" twbpatch/` が 0 件 |
+| `TwbColumn` / `column` が `TwbField` / `field` へ移行 | PASS | `twbpatch/__init__.py` の `__all__` に `TwbColumn` なし。`TwbColumn` の参照は `models.py` / `column.py` / `calculation.py` の投影層内部のみ |
+| XML 固有の `column` と `TwbWorksheet.columns` は維持 | PASS | `models.py:115` に `columns`。新 API 側の公開 `column` は `TwbFilterControl.column`（`connected_dashboard.py:2322`）だけで、XML の `@param` 内部参照を返す用途 |
+| 公開 `id` = `@name`、公開 `name` = caption（Worksheet は両方 `@name`） | PASS | `tests/test_connected_api.py:148`、`test_connected_worksheet_api.py:229` |
+| caption が無いとき `name` が `@name` 由来の既定名 | PASS | `tests/test_connected_api.py:148` |
+| 公開モデルと JSON に `caption` が無い | PASS | `grep "    def caption" twbpatch/connected*.py` が 0 件。`serialization.py:40` で `caption` → `name` へ正規化。`tests/test_export_json_projection.py:46` |
+| XML の参照と計算式が `id` を使う | PASS | `tests/test_connected_api.py:164` |
+| 参照が一意に決まらないとき暗黙に選ばない | PASS | `AmbiguousCaptionError` / `AmbiguousFormulaReferenceError`。`tests/test_add_filter.py:160`、`test_field_argument.py:134` |
+| 接続型モデルが更新後の XML を再取得なしで参照 | PASS | `tests/test_connected_api.py:148` |
+| CRUD だけではファイルが変わらない | PASS | `tests/test_connected_api.py:392`、`test_apply_config.py:237` |
+| `save()` 成功時だけファイルへ反映 | PASS | `tests/test_connected_final_api.py:252` |
+| `reload()` が未保存変更を破棄しモデルを無効化 | PASS | `tests/test_connected_api.py:409` |
+| 削除・無効化後の操作が `DetachedModelError` | PASS | `twbpatch/context.py` ほか 4 モジュール。`tests/test_connected_filter_api.py:114` |
+| 非公開コンテキストが JSON へ出ない | PASS | `tests/test_connected_final_api.py:161` |
+| 既存機能で旧 API と同等の XML 編集結果を得られる | 要目視 | 旧 API 25 件は削除済み（§11.3）で、同一入力を旧新で流して XML を突き合わせる比較テストが無い。`tests/test_smoke.py` が新 API 側の結果だけを固定している |
 
-## FAIL の詳細
-
-### 1. `export_json()` が接続型モデルを素通しする（§10 / §13）
-
-`serialization.py:7` の `_normalize_projection()` は `is_dataclass` / `dict` / `list` / `tuple`
-だけを変換し、それ以外はそのまま返す。ところが次の 3 箇所は接続型モデル（dataclass ではない）を
-渡している。
-
-- `serialization.py:197` `worksheet.get_reference_lines()` → `TwbReferenceLine`
-- `serialization.py:198` `worksheet.get_filters()` → `TwbWorksheetFilter`
-- `serialization.py:236` `dashboard.get_filter_controls()` → `TwbFilterControl`
-
-実測（参照線を 1 本引いたワークブック）:
-
-```
-type: <class 'twbpatch.connected_worksheet.TwbReferenceLine'>
-json.dumps FAILED: Object of type TwbReferenceLine is not JSON serializable
-```
-
-参照線・ワークシートフィルタ・フィルタコントロールのいずれかを持つワークブックでは、
-`export_json()` の戻り値に `_context` を抱えたモデルが混ざり、`json.dumps()` が失敗する。
-`tests/sample_minimal.twb` にワークシートが無いため既存テストが素通りしている。
-
-**直し方**: 3 モデルへ公開値だけを返す辞書化を用意し、`serialization.py` の 3 箇所で
-それを渡す。あわせて `tests/test_export.py` に参照線・フィルタを持つ `tmp_path`
-ワークブックのケースを足す。
-
-### 2. 公開モデルに `caption` が残っている（§3.2 / §13）
-
-- `TwbReferenceLine.axis_caption` → `axis_name` へ改名（`connected_worksheet.py:1994`）
-- `TwbReferenceLine.value_caption` → `value_name` へ改名（`connected_worksheet.py:2006`）
-- `TwbFilterControl.show_caption`（`connected_dashboard.py:2193`）は XML の `show-caption`
-  （ゾーンのタイトル表示）であって表示名ではない。`show_title` への改名か、§3.2 の
-  例外として仕様へ明記するかの判断が要る。
-
-### 3. 公開モデルに `column` が残っている（§3.1 / §13）
-
-- `TwbReferenceLine.axis_column` → `axis_field_id` へ改名（`connected_worksheet.py:1990`）
-- `TwbReferenceLine.value_column` → `value_field_id` へ改名（`connected_worksheet.py:2002`）
-
-いずれも参照先フィールドの内部 ID を返すため、§3.2 の `id` 規則に合わせる。
-
-## 仕様に記載の無い公開メソッド
-
-`connected*.py` の公開メソッドのうち、`docs/model_api_spec.md` に一度も現れないもの。
-読み取り専用プロパティは §4.1 で許容されるため除外し、動作を持つものだけを挙げる。
-
-| メソッド | 場所 | 対応 |
-|---|---|---|
-| `TwbWorksheet.add_filter_slice(field=)` | `connected_worksheet.py:1772` | §6.14 の API 方式一覧へ追記する。テストは `tests/test_unverified_api.py` にある |
+**FAIL は 0 件。`要目視` は 1 件。**
 
 ## README のドリフト
 
-`README.md`（566 行）は**旧 API だけを説明している**。新 API の公開シンボルは
-`export_json` / `export_html` / `apply_config` / `get_unsupported_features` /
-`create_calculated_field`（旧シグネチャ）の 5 つしか現れない。
+`twbpatch/__init__.py` の `__all__`（37 シンボル）はすべて `README.md` に記載がある。
+実装にあって README に無い公開メンバは次のとおり。いずれも
+`tests/test_zone_action_reads.py`（未コミット）で追加された読み取り系プロパティで、
+README §3.10 / §3.11 / §3.7 の変数表が追いついていない。
 
-### README に記載が無い公開シンボル
+| クラス | README に無い公開メンバ |
+|---|---|
+| `TwbDashboardZone`（README §3.10） | `x_raw` / `y_raw` / `width_raw` / `height_raw` / `to_px` / `dashboard_width_px` / `dashboard_height_px` / `sizing_mode` / `parent_id` / `depth` / `dashboard_id` / `attrs` / `type` / `mode` / `param` / `url` / `show_caption` / `is_fixed` / `is_scaled` |
+| `TwbDashboardAction`（README §3.11） | `excluded_source_worksheet_ids` / `excluded_target_worksheet_ids` / `details` / `source_type` / `target_type` / `source_dashboard_id` / `target_dashboard_id` / `dashboard_id` / `command` / `activation` / `links` / `params` / `attrs` |
+| `TwbWorksheetField`（README §3.7） | `worksheet_id` / `role` / `attrs` |
 
-- 取得: `get_datasources` / `get_worksheets` / `get_dashboards` / `get_parameters` /
-  `get_fields` / `get_folders` / `get_panes` / `get_zones` / `get_containers`
-- 作成: `create_worksheet` / `create_parameter` / `create_dashboard` / `create_folder` /
-  `create_container` / `create_action`
-- 編集: `add_field` / `add_worksheet` / `add_floating_worksheet` / `move_to_folder` /
-  `remove_from_folder` / `set_subtotal_visibility` / `grand_totals` / `build_report`
-- API 方式: `draw_sheet` / `draw_bar` / `draw_yoy` / `draw_card` / `draw_quadrant` /
-  `draw_crosstab` / `draw_colored_yoy_sheet` / `set_filter` / `set_default_font` /
-  `apply_field_config`
-- 状態: `is_dirty` / `reload`
-- クラス: `TwbField` / `TwbPane` / `TwbDashboardContainer`
-- 例外: `DetachedModelError` / `ResourceInUseError` / `ResourceReference` /
-  `AmbiguousFormulaReferenceError`
-- その他: `write_dicts_csv`
+README にあって実装に無いシンボル・引数、および仕様と矛盾する記述（旧名称・廃止引数）は
+検出されなかった。README §8 / §9 に出る `update_style()` / `set_mark_color()` などは
+改名・削除の記録として書かれているもので、現行 API としては記載されていない。
 
-### 仕様と矛盾する記述
+## 次にやるべきこと
 
-README が使う `list_*()` / `get_<単数形>()` / `by=` / `.caption` / `.columns` / `TwbColumn` は
-すべて実装に存在するため、**壊れた例は無い**。ただし §3 の公開用語（`field` / `id` / `name`）と
-逆の語彙を教えており、利用者は新 API へ到達できない。
+FAIL が無いため、仕様違反の修正は無い。次の 3 点が残っている。
 
-- `README.md:19-23` 冒頭の「基本的な使い方」が `list_datasources()` / `.columns` / `.caption`
-- `README.md:99-100` `by="auto"` / `by="caption"` の説明表
-- `README.md:109-148` 取得 API 一覧が全て旧 API
-- `README.md:215-499` モデル属性表が `caption` / `columns` / `TwbColumn` 基準
-- `README.md:546-566` 例外と編集の例が `get_worksheet(..., by="name")` /
-  `create_calculated_field(datasource=, caption=)`
+1. **README §3.10 / §3.11 / §3.7 の変数表を更新する。**
+   上表の公開メンバを追記する。`CLAUDE.md` の「実装を変えたら README も更新する」に該当する。
 
-README に**存在しないシンボル・引数は無い**（`wb.*` の全参照を実装と突き合わせ済み）。
+2. **`TwbWorkbook.list_dashboard_actions()` の削除を検討する（旧 API の残り 4 件）。**
+   §11.3 はこれを残す理由を「`excluded_source_worksheets` /
+   `excluded_target_worksheets` / `details` が新 API に無いから」としていたが、
+   `TwbDashboardAction` に `excluded_source_worksheet_ids` /
+   `excluded_target_worksheet_ids` / `details`（`connected_dashboard.py:761,766,795`）が
+   実装され、穴が埋まっている。`docs/backlog.md` L-6 の「穴を埋めてから消す」が満たされた。
+   `list_dashboard_zones()` は `x_raw` / `parent_id` / `depth` / `to_px` の穴は埋まったが、
+   `include_device_layouts=` に相当する新 API がまだ無いので残す
+   （`tests/test_dashboard_edit_locality.py:149` が `get_zones()` は
+   デバイスレイアウトを返さないことを固定している）。
+   `list_dashboard_fields()` の `max_filter_value_chars=` と
+   `list_worksheet_fields()` の `values` / `mark_type` / `category` / `type` は未実装のまま。
 
-## 次にやること
-
-1. `serialization.py` の 3 箇所を辞書化する（FAIL 1）。`export_json()` が
-   参照線・フィルタを持つワークブックで例外になる、実害のある不具合。
-2. `TwbReferenceLine` の 4 プロパティを改名する（FAIL 2・3）。
-   `axis_column`→`axis_field_id`、`value_column`→`value_field_id`、
-   `axis_caption`→`axis_name`、`value_caption`→`value_name`。
-3. `TwbFilterControl.show_caption` の扱いを決める（FAIL 2）。改名か仕様への明記か。
-4. `add_filter_slice()` を `docs/model_api_spec.md` §6.14 へ追記する。
-5. README を新 API 基準へ書き直す。旧 API は §11 の移行表として残す。
-6. 要目視 3 件のテストを足す。Dashboard 編集時の兄弟・デバイスレイアウト保持と、
-   旧 API との XML パリティ。
+3. **要目視 1 件: 旧 API との XML 同等性。**
+   旧 API 25 件は削除済みで比較対象が無い。仕様 §13 最終行の条件を
+   「削除前のコミットで生成した XML を固定データとして突き合わせる」形へ
+   読み替えるか、条件自体を §11.3 完了に合わせて書き換えるかの判断が要る。
