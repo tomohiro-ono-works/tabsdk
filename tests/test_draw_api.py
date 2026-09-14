@@ -343,6 +343,24 @@ def test_draw_colored_yoy_sheet_builds_fixed_hidden_bar_axes_per_metric(tmp_path
     assert not [message for message in workbook.validate() if message.severity == "error"]
 
 
+def test_draw_card_title_bar_shows_background_without_text(tmp_path) -> None:
+    """スコアカードのタイトルバーは帯（背景色）だけ表示し、文字は入れない
+    （2026-09-12 変更）。
+
+    以前はプレースホルダーとして "-" という文字を入れており、Tableau で
+    実際に開くとタイトルバーにその文字が見えてしまっていた。
+    """
+    workbook = _superstore_workbook(tmp_path)
+    card = workbook.draw_card(name="タイトル確認", main_metric="売上")
+
+    assert card.title is None
+    assert workbook.tree.xpath(
+        "string(/workbook/worksheets/worksheet[@name='タイトル確認']"
+        "/layout-options/title/formatted-text/run)"
+    ) == ""
+    assert card.title_style["background_color"] == "#602fff"
+
+
 def test_draw_card_chooses_aggregation_per_metric() -> None:
     workbook = TwbWorkbook.open("tests/sample_minimal.twb")
     datasource = workbook.get_datasources()[0]

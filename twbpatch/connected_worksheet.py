@@ -489,7 +489,7 @@ def _ensure_layout_title(worksheet_el: ET._Element) -> ET._Element:
     runs = formatted.xpath("./*[local-name()='run']")
     run = runs[0] if runs else ET.SubElement(formatted, "run")
     run.set("fontsize", "6")
-    run.text = "-"
+    run.text = ""
     return title
 
 
