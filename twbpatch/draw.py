@@ -13,6 +13,18 @@ if TYPE_CHECKING:
 
 _NUMERIC_DATATYPES = {"integer", "real", "decimal", "number"}
 
+#: 計算フィールドが集計済みかどうかは XML のどこにも記録されていない
+#: （データソース側の metadata-record も計算フィールドには存在しない、実測済み）。
+#: formula 文字列そのものを見て集計関数の呼び出しがあるかを判定する。
+_AGGREGATE_FUNCTION_PATTERN = re.compile(
+    r"\b(SUM|AVG|MIN|MAX|COUNTD|COUNT|ATTR|MEDIAN)\s*\(",
+    re.IGNORECASE,
+)
+
+
+def _formula_has_aggregate_function(formula: str) -> bool:
+    return _AGGREGATE_FUNCTION_PATTERN.search(formula) is not None
+
 
 def _resolve_fields(
     workbook: TwbWorkbook,
@@ -39,7 +51,7 @@ def _shelves(item_shelf: str) -> tuple[str, str]:
 
 
 def _auto_metric_aggregation(field: TwbField) -> str | None:
-    if field.is_calculated:
+    if field.is_calculated and _formula_has_aggregate_function(field.raw_formula or ""):
         return "agg"
     if field.role != "measure" or (field.datatype or "").lower() not in _NUMERIC_DATATYPES:
         return "countd"

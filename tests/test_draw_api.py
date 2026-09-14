@@ -134,6 +134,40 @@ def test_workbook_draw_methods_accept_datasource_field_tuples(tmp_path) -> None:
     assert card.get_panes()[0].customized_label["main_metric"] == "売上"
 
 
+def test_draw_card_aggregates_row_level_calculated_fields(tmp_path) -> None:
+    """計算フィールドでも、式が集計関数を含まなければ通常どおり集計する
+    （2026-09-12 追加）。
+
+    以前は `field.is_calculated` だけを見て一律「集計済み扱い（derivation=User）」
+    にしていたため、`IIF(...)` のような行レベルの式を持つ計算フィールドを指標に
+    使うと、集計されずに明細がそのまま出てしまっていた。式が SUM/AVG/COUNT/COUNTD
+    などの集計関数を含む場合だけ「集計済み」とみなし、含まない場合は通常のフィールドと
+    同じ既定集計（SUM）を適用する。
+    """
+    workbook = _superstore_workbook(tmp_path)
+    datasource = workbook.get_datasources(name=DATASOURCE_NAME)[0]
+    datasource.create_calculated_field(
+        name="行レベル売上", formula="IIF(1=1, [Sales], 0)", datatype="real", role="measure"
+    )
+    datasource.create_calculated_field(
+        name="集計済み利益", formula="SUM([Profit])", datatype="real", role="measure"
+    )
+
+    row_level = workbook.draw_card(datasource, name="行レベルカード", main_metric="行レベル売上")
+    aggregated = workbook.draw_card(datasource, name="集計済みカード", main_metric="集計済み利益")
+
+    assert workbook.tree.xpath(
+        "/workbook/worksheets/worksheet[@name='行レベルカード']"
+        "//column-instance/@derivation"
+    ) == ["Sum"]
+    assert workbook.tree.xpath(
+        "/workbook/worksheets/worksheet[@name='集計済みカード']"
+        "//column-instance/@derivation"
+    ) == ["User"]
+    assert row_level.get_panes()[0].mark_type == "automatic"
+    assert aggregated.get_panes()[0].mark_type == "automatic"
+
+
 def test_workbook_draw_bar_resolves_fields_from_different_datasources(tmp_path) -> None:
     source = tmp_path / "multi-datasource.twb"
     source.write_text(
