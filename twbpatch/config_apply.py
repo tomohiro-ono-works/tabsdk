@@ -177,6 +177,33 @@ def _apply_calculations(datasource: TwbDatasource, calculations: Any) -> None:
         )
 
 
+def _apply_renames(datasource: TwbDatasource, renames: Any) -> None:
+    """フォルダへは入れず、表示名だけを変更する。
+
+    `folders` は最上位がフォルダ名の3階層 YAML なのでフォルダなしを表現できない
+    （§ apply_field_config）。「リネームはしたいがフォルダには入れたくない」場合の
+    入口として別セクションにした。
+    """
+    if not isinstance(renames, dict):
+        raise ValueError("renames must be a mapping")
+
+    for original_name, display_name in renames.items():
+        if not isinstance(original_name, str) or not original_name.strip():
+            raise ValueError("field name must be a non-empty string")
+        if not isinstance(display_name, str) or not display_name.strip():
+            raise ValueError(f"display name must be a non-empty string: {original_name}")
+        original_name = original_name.strip()
+
+        matches = datasource.get_fields(name=original_name)
+        if not matches:
+            matches = datasource.get_fields(id=f"[{original_name}]")
+        if not matches:
+            raise NotFoundError(f"field not found: {original_name}")
+        if len(matches) > 1:
+            raise AmbiguousCaptionError(f"field name is ambiguous: {original_name}")
+        matches[0].update(name=display_name.strip())
+
+
 def _apply_datasources(
     workbook: TwbWorkbook,
     datasources: Any,
@@ -206,11 +233,17 @@ def _apply_datasources(
         if folders:
             datasource.apply_field_config(folders, field_grouping=field_grouping)
 
+        renames = section.get("renames")
+        if renames:
+            _apply_renames(datasource, renames)
+
         calculations = section.get("calculations")
         if calculations:
             _apply_calculations(datasource, calculations)
 
-        unknown = [key for key in section if key not in {"folders", "calculations"}]
+        unknown = [
+            key for key in section if key not in {"folders", "renames", "calculations"}
+        ]
         if unknown:
             _skip(f"datasources[{datasource.name}]", unknown)
 

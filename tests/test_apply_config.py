@@ -142,6 +142,43 @@ def test_apply_config_refuses_to_overwrite_a_source_field() -> None:
         )
 
 
+def test_apply_config_applies_renames_without_creating_a_folder() -> None:
+    """`renames` はフォルダに入れず表示名だけ変更する（2026-09-08 追加）。
+
+    `folders` は最上位がフォルダ名の3階層固定でフォルダなしを表現できないため、
+    「リネームしたいがフォルダには入れたくない」場合の入口として別セクションにした。
+    """
+    workbook = TwbWorkbook.open(SAMPLE)
+    workbook.apply_config(
+        {"datasources": {"売上データ": {"renames": {"売上": "売上金額"}}}}
+    )
+
+    datasource = workbook.get_datasources(name="売上データ")[0]
+    assert datasource.get_folders() == []
+    field = datasource.get_fields(name="売上金額")[0]
+    assert field.id == "[Sales]"
+    assert field.folder is None
+
+
+def test_apply_config_renames_and_folders_together() -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+    workbook.apply_config(
+        {
+            "datasources": {
+                "売上データ": {
+                    "folders": {"指標": {"粗利": "利益"}},
+                    "renames": {"売上": "売上金額"},
+                }
+            }
+        }
+    )
+
+    datasource = workbook.get_datasources(name="売上データ")[0]
+    assert [folder.name for folder in datasource.get_folders()] == ["指標"]
+    assert datasource.get_fields(name="利益")[0].folder.name == "指標"
+    assert datasource.get_fields(name="売上金額")[0].folder is None
+
+
 def test_apply_config_rejects_unknown_datasource() -> None:
     workbook = TwbWorkbook.open(SAMPLE)
     with pytest.raises(NotFoundError):

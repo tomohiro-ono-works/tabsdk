@@ -87,6 +87,7 @@ logging.basicConfig(level=logging.WARNING)
 | 余白 多め / 少なめ | `build_report(content_style=)` |
 | フィルターに「適用」ボタン | `build_report(filter_apply_button=)` |
 | リネーム・フォルダ | `apply_field_config()` |
+| リネーム（フォルダ未指定） | フィールドを解決して `field.update(name=)` |
 | 計算フィールド | `create_calculated_field()`。同名は式・型・役割・フォルダを上書き |
 | ダッシュボードのヘッダー | `build_report(header_title=, header_height=, ...)` |
 | 段とエリア | `draw_*()` でシートを作り `build_report()` で並べる |
