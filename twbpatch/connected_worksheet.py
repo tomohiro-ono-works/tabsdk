@@ -3029,6 +3029,27 @@ class TwbWorksheetField(ConnectedModel):
         )[0]
 
     @property
+    def worksheet_id(self) -> str:
+        return self._worksheet_id
+
+    @property
+    def role(self) -> str | None:
+        """置いたフィールドの `dimension` / `measure`。"""
+        from .connected import TwbDatasource
+
+        datasource_id = self.datasource_id
+        if datasource_id is None:
+            return None
+        fields = TwbDatasource(self._context, datasource_id).get_fields(id=self.field_id)
+        return fields[0].role if fields else None
+
+    @property
+    def attrs(self) -> dict[str, str]:
+        """配置を表す XML 要素の属性そのまま。"""
+        element = self._resolve_placement().source_el
+        return {str(key): str(value) for key, value in element.attrib.items()}
+
+    @property
     def shelf(self) -> str | None:
         return self._resolve_placement().shelf
 

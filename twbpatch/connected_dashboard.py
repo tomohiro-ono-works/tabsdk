@@ -272,6 +272,13 @@ def _replace_if_changed(
     return True
 
 
+def _bool_or_none(value: str | None) -> bool | None:
+    """XML の真偽値属性。書かれていなければ `None`（既定に任せている印）。"""
+    if value is None:
+        return None
+    return value.strip().lower() == "true"
+
+
 def _int_attr(element: ET._Element, name: str, default: int = 0) -> int:
     try:
         return int(float(element.get(name) or default))
@@ -753,6 +760,45 @@ class TwbDashboardAction(ConnectedModel):
     @property
     def target_worksheet_ids(self) -> list[str]:
         return list(self._snapshot().target_worksheet_ids)
+
+    @property
+    def excluded_source_worksheet_ids(self) -> list[str]:
+        """対象から外したシート。**Tableau は対象シートを除外リストで書く。**"""
+        return list(self._snapshot().excluded_source_worksheet_ids)
+
+    @property
+    def excluded_target_worksheet_ids(self) -> list[str]:
+        return list(self._snapshot().excluded_target_worksheet_ids)
+
+    @property
+    def dashboard_id(self) -> str | None:
+        return self._snapshot().dashboard_id
+
+    @property
+    def source_type(self) -> str | None:
+        return self._snapshot().source_type
+
+    @property
+    def target_type(self) -> str | None:
+        return self._snapshot().target_type
+
+    @property
+    def source_dashboard_id(self) -> str | None:
+        return self._snapshot().source_dashboard_id
+
+    @property
+    def target_dashboard_id(self) -> str | None:
+        """別のダッシュボードを対象にできるので、source と別に持つ。"""
+        return self._snapshot().target_dashboard_id
+
+    @property
+    def attrs(self) -> dict[str, str]:
+        return dict(self._snapshot().attrs)
+
+    @property
+    def details(self) -> dict[str, object]:
+        """`<action>` の中身をそのまま辞書にしたもの。属性と子要素を含む。"""
+        return self._snapshot().details
 
     @property
     def links(self) -> list[dict[str, str]]:
@@ -2031,6 +2077,117 @@ class TwbDashboardZone(ConnectedModel):
     @property
     def height(self) -> int | None:
         return self._pixel_rect()[3]
+
+    @property
+    def x_raw(self) -> int:
+        """Tableau が XML に書く座標。ダッシュボードの幅を 100000 とした比率。"""
+        return _zone_rect(self._resolve_element())[0]
+
+    @property
+    def y_raw(self) -> int:
+        return _zone_rect(self._resolve_element())[1]
+
+    @property
+    def width_raw(self) -> int:
+        return _zone_rect(self._resolve_element())[2]
+
+    @property
+    def height_raw(self) -> int:
+        return _zone_rect(self._resolve_element())[3]
+
+    @property
+    def dashboard_id(self) -> str:
+        return self._dashboard_id
+
+    @property
+    def type(self) -> str | None:
+        """XML の `type-v2`（無ければ `type`）。`kind` は SDK 側の区分値。"""
+        element = self._resolve_element()
+        return element.get("type-v2") or element.get("type")
+
+    @property
+    def param(self) -> str | None:
+        """コンテナなら並べる向き（`horz` / `vert`）。"""
+        return self._resolve_element().get("param")
+
+    @property
+    def mode(self) -> str | None:
+        """フィルタカードの表示形式。ほかのゾーンでは `None`。"""
+        return self._resolve_element().get("mode")
+
+    @property
+    def show_caption(self) -> bool | None:
+        """フィルタカードの見出しを出すか。`show_title` とは別の属性（§3.2）。"""
+        return _bool_or_none(self._resolve_element().get("show-caption"))
+
+    @property
+    def show_apply(self) -> bool | None:
+        """フィルタカードの「適用」ボタンを出すか。"""
+        return _bool_or_none(self._resolve_element().get("show-apply"))
+
+    @property
+    def url(self) -> str | None:
+        """Web ページゾーンの URL。"""
+        return self._resolve_element().get("url")
+
+    @property
+    def is_fixed(self) -> bool | None:
+        return _bool_or_none(self._resolve_element().get("is-fixed"))
+
+    @property
+    def is_scaled(self) -> bool | None:
+        return _bool_or_none(self._resolve_element().get("is-scaled"))
+
+    @property
+    def attrs(self) -> dict[str, str]:
+        """`<zone>` の属性そのまま。上のプロパティに出ていないものも入る。"""
+        return {str(key): str(value) for key, value in self._resolve_element().attrib.items()}
+
+    @property
+    def sizing_mode(self) -> str:
+        """所属ダッシュボードの `sizing-mode`。座標の解釈がこれで変わる。"""
+        return _dashboard_size(self._resolve_dashboard_element())[0]
+
+    @property
+    def dashboard_width_px(self) -> int | None:
+        """px 換算の基準になるダッシュボードの幅。自動サイズなら `None`。"""
+        return _dashboard_size(self._resolve_dashboard_element())[1]
+
+    @property
+    def dashboard_height_px(self) -> int | None:
+        return _dashboard_size(self._resolve_dashboard_element())[2]
+
+    def to_px(self, *, width: int, height: int) -> tuple[int, int, int, int]:
+        """任意のキャンバスサイズで px 換算する。
+
+        自動サイズのダッシュボードは基準の幅・高さを持たないため `x` などが
+        `None` になる。表示したいサイズを渡せば raw 座標から換算できる。
+        """
+        canvas_width = _validate_pixel(width, "width", positive=True)
+        canvas_height = _validate_pixel(height, "height", positive=True)
+        x, y, zone_width, zone_height = _zone_rect(self._resolve_element())
+        return (
+            _raw_to_px(x, int(canvas_width)),
+            _raw_to_px(y, int(canvas_height)),
+            _raw_to_px(zone_width, int(canvas_width)),
+            _raw_to_px(zone_height, int(canvas_height)),
+        )
+
+    @property
+    def parent_id(self) -> str | None:
+        """入れ子の親ゾーンの `id`。最上位なら `None`。"""
+        element = self._resolve_element()
+        parent = next(
+            (item for item in element.iterancestors() if _local_name(item) == "zone"),
+            None,
+        )
+        return parent.get("id") if parent is not None else None
+
+    @property
+    def depth(self) -> int:
+        """入れ子の深さ。最上位は `0`。"""
+        element = self._resolve_element()
+        return sum(1 for item in element.iterancestors() if _local_name(item) == "zone")
 
     def update(
         self,

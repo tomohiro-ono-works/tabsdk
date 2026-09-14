@@ -241,12 +241,14 @@ class TwbDashboardAction:
     source_worksheets: list[str] = dataclass_field(default_factory=list)
     source_worksheet_ids: list[str] = dataclass_field(default_factory=list)
     excluded_source_worksheets: list[str] = dataclass_field(default_factory=list)
+    excluded_source_worksheet_ids: list[str] = dataclass_field(default_factory=list)
     target_type: str | None = None
     target_dashboard: str | None = None
     target_dashboard_id: str | None = None
     target_worksheets: list[str] = dataclass_field(default_factory=list)
     target_worksheet_ids: list[str] = dataclass_field(default_factory=list)
     excluded_target_worksheets: list[str] = dataclass_field(default_factory=list)
+    excluded_target_worksheet_ids: list[str] = dataclass_field(default_factory=list)
     links: list[dict[str, str]] = dataclass_field(default_factory=list)
     params: dict[str, str] = dataclass_field(default_factory=dict)
     attrs: dict[str, str] = dataclass_field(default_factory=dict)
