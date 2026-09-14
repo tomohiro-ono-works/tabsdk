@@ -159,6 +159,52 @@ def test_apply_config_resolves_design_tokens(tmp_path) -> None:
     assert "@main_color" not in xml
 
 
+def test_apply_config_resolves_heatmap_design_tokens_for_crosstab(tmp_path) -> None:
+    """`draw_crosstab` の min/mid/max_color はデザインルールの既定3色を
+    `@min_color` 等で参照できる（2026-09-12 追加）。
+
+    3色そろえるかゼロかしか許されない制約があるため、画面はグラフ選択時に
+    自動でこの3トークンを参照させる（html_export.py の `defaultParamsFor()`）。
+    ここでは Python 側の解決だけを検証する。
+    """
+    workbook = _workbook(tmp_path)
+    config = _config()
+    config["design"]["min_color"] = "#2166ac"
+    config["design"]["mid_color"] = "#f7f7f7"
+    config["design"]["max_color"] = "#b2182b"
+    config["dashboard"]["rows"][1]["areas"].append(
+        {
+            "kind": "worksheet",
+            "datasource": "売上データ",
+            "sheet": "地域カテゴリ別ヒートマップ",
+            "chart": "draw_crosstab",
+            "params": {
+                "x_item": "地域",
+                "y_item": "カテゴリ",
+                "color_metric": "売上",
+                "label_metric": "売上",
+                "min_color": "@min_color",
+                "mid_color": "@mid_color",
+                "max_color": "@max_color",
+            },
+        }
+    )
+    workbook.apply_config(config)
+
+    # set_continuous_colors() は色をワークシート要素ではなく preferences の
+    # color-palette へ書く（テスト対象は @トークンが実色へ解決されたかどうか）。
+    from lxml import etree as ET
+
+    root = workbook.tree.getroot()
+    xml = ET.tostring(root, encoding="unicode")
+    assert "#2166ac" in xml
+    assert "#f7f7f7" in xml
+    assert "#b2182b" in xml
+    assert "@min_color" not in xml
+    assert "@mid_color" not in xml
+    assert "@max_color" not in xml
+
+
 def test_apply_config_applies_the_filter_apply_button(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     workbook.apply_config(_config())

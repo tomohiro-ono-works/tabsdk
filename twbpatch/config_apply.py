@@ -36,6 +36,9 @@ _DESIGN_FOR_DASHBOARD = (
     "sub_color_1",
     "sub_color_2",
     "text_color",
+    "min_color",
+    "mid_color",
+    "max_color",
     "spacing",
     "filter_apply_button",
 )
@@ -46,7 +49,18 @@ _DEFAULT_DATATYPE = "real"
 _DEFAULT_ROLE = "measure"
 
 #: `@main_color` のように design を参照できるキー。
-_DESIGN_TOKENS = ("main_color", "sub_color_1", "sub_color_2", "text_color")
+#: min/mid/max_color は draw_crosstab 用のヒートマップ既定3色（2026-09-12 追加）。
+#: draw_crosstab は3色そろえるかゼロかしか許さないため、画面はグラフ選択時に
+#: 自動でこの3トークンを参照させ、3色を毎回手入力させない。
+_DESIGN_TOKENS = (
+    "main_color",
+    "sub_color_1",
+    "sub_color_2",
+    "text_color",
+    "min_color",
+    "mid_color",
+    "max_color",
+)
 
 #: 余白の指定を `build_report(content_style=)` へ写す。
 _SPACING = {
