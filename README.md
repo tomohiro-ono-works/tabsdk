@@ -91,10 +91,11 @@ wb.save("output.twb", overwrite=True)
 | `datasources.*.folders` | 表示名の変更とフォルダ分類 |
 | `datasources.*.calculations` | 計算フィールドの作成。同名があれば式・データ型・役割・フォルダを上書き |
 | `dashboard` | シートを作って並べ、アクションを張る |
+| `kpi_tree` | ノードごとに KPI カードを作り、ツリー状に並べたダッシュボードを作る（`build_kpi_tree`）。`dashboard` と両方あればダッシュボードは 2 つ |
 
 `design` の色・余白・フィルターの「適用」ボタンは、**ダッシュボードを組むときに使います**。
 グラフの色に `@main_color` と書くと、デザインルールの色コードに置き換わります。
-`dashboard` が無い設定では届かないので、名前を警告ログへ出して読み飛ばします。
+`dashboard` も `kpi_tree` も無い設定では届かないので、名前を警告ログへ出して読み飛ばします。
 詳細は [docs/html_screen_spec.md](docs/html_screen_spec.md)。
 
 計算フィールドを画面で定義した場合は、**一度 `.twb` へ焼き直してから画面を出し直します。**
@@ -168,7 +169,7 @@ Worksheet のみ `id == name == XML @name`。
 | `get_unsupported_features` | — | `list[TwbUnsupportedFeature]` | SDK が未対応の Tableau 機能を列挙する |
 | `export_json` | — | `dict` | 公開値のみを組み立てて辞書化する。非公開コンテキストと `caption` は含めない |
 | `export_html` | `path: str \| Path, *, title: str = "twbpatch 設定", overwrite: bool = False` | `Path` | 設定画面の HTML を 1 ファイル出力する。外部参照なしで単体で開ける。仕様は `docs/html_screen_spec.md` |
-| `apply_config` | `config: str \| Path \| dict, *, field_grouping: str = "folder"` | `TwbWorkbook` | 設定画面が出力した YAML を適用する。`design` / `datasources` / `dashboard` の全節に対応。届かない設定は警告ログを出して読み飛ばす |
+| `apply_config` | `config: str \| Path \| dict, *, field_grouping: str = "folder"` | `TwbWorkbook` | 設定画面が出力した YAML を適用する。`design` / `datasources` / `dashboard` / `kpi_tree` の全節に対応。届かない設定は警告ログを出して読み飛ばす |
 
 ### 2.3 リソース取得・作成
 
@@ -215,7 +216,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 
 | メソッド | 引数 | 説明 |
 |---|---|---|
-| `build_kpi_tree` | `*, dashboard_name, root: KpiNode, align="center", edge_hyper: str \| None = None` | `align` は親カードの位置で `"center"`（子の範囲の縦中央）/ `"top"`（上端）。`edge_hyper` にエッジの座標の .hyper のパスを渡すと線を描く（`align="top"` のときだけ） |
+| `build_kpi_tree` | `*, dashboard_name, root: KpiNode, align="center", edge_hyper: str \| None = None, content_style: dict \| None = None` | `align` は親カードの位置で `"center"`（子の範囲の縦中央）/ `"top"`（上端）。`edge_hyper` にエッジの座標の .hyper のパスを渡すと線を描く（`align="top"` のときだけ）。`content_style` は台紙の書式で、`build_report` と同じく既定に重ねる |
 
 `KpiNode(worksheet, children=[])` は `twbpatch` から import する値オブジェクト。
 `children` が空のノードがツリーの末端になる。

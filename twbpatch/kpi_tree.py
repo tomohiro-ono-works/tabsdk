@@ -27,6 +27,7 @@ from .connected_worksheet import (
     _ensure_table_style,
     _set_style_value,
 )
+from .context import validate_style_group
 
 if TYPE_CHECKING:
     from .workbook import TwbWorkbook
@@ -36,10 +37,10 @@ _NODE_HEIGHT = 150
 _ALIGNS = {"center", "top"}
 
 # 見た目はダッシュボードタブ（build_report()）の KPI カードに揃える: 灰色の台紙に白いカードを余白付きで置く。
-# 台紙の外側・内側の余白の分だけ中身が内へ寄るので、ダッシュボードはその分大きくする。
-_TREE_STYLE = _DEFAULT_REPORT_CONTENT_STYLE
+# 台紙は build_report() と同じく content_style= で上書きできる。台紙の外側・内側の余白の分だけ
+# 中身が内へ寄るので、ダッシュボードはその分大きくする。
 _CARD_STYLE = _DEFAULT_REPORT_WORKSHEET_STYLE
-_TREE_INSET = int(_TREE_STYLE.get("margin", 0)) + int(_TREE_STYLE.get("padding", 0))
+_SIDES = ("left", "right", "top", "bottom")
 
 _EDGE_WIDTH = 60
 _EDGE_DATASOURCE_NAME = "KPIツリーのエッジ"
@@ -70,10 +71,13 @@ def build_kpi_tree(
     root: KpiNode,
     align: str = "center",
     edge_hyper: str | None = None,
+    content_style: dict[str, str | int | None] | None = None,
 ) -> TwbDashboard:
     if not isinstance(align, str) or align.lower() not in _ALIGNS:
         raise ValueError(f"align must be center or top: {align!r}")
     align = align.lower()
+    tree_style = _tree_style(content_style)
+    inset = {side: _inset(tree_style, side) for side in _SIDES}
     _validate_tree(workbook, root, set())
     _validate_dashboard_name(workbook, dashboard_name)
     if edge_hyper is not None:
@@ -84,13 +88,49 @@ def build_kpi_tree(
     gap = 0 if edge_fields is None else _EDGE_WIDTH
     dashboard = workbook.create_dashboard(
         name=dashboard_name,
-        width=depth * _NODE_WIDTH + (depth - 1) * gap + 2 * _TREE_INSET,
-        height=_leaf_count(root) * _NODE_HEIGHT + 2 * _TREE_INSET,
+        width=depth * _NODE_WIDTH + (depth - 1) * gap + inset["left"] + inset["right"],
+        height=_leaf_count(root) * _NODE_HEIGHT + inset["top"] + inset["bottom"],
     )
     row = dashboard.create_container(direction="horizontal")
-    row.update(style=dict(_TREE_STYLE))
+    row.update(style=tree_style)
     _place(workbook, row, root, depth, align, edge_fields)
+    background = tree_style.get("background_color")
+    if edge_fields is not None and background is not None:
+        for parent in _parents(root):
+            _fill_background(workbook.get_worksheets(name=_edge_sheet_name(parent))[0], str(background))
     return dashboard
+
+
+def _tree_style(content_style: dict[str, str | int | None] | None) -> dict[str, str | int | None]:
+    """台紙の書式。`build_report()` と同じく既定に重ねる。XML を変える前に大きさの計算まで検証する。"""
+    style: dict[str, str | int | None] = dict(_DEFAULT_REPORT_CONTENT_STYLE)
+    if content_style is not None:
+        style.update(validate_style_group("content_style", content_style))
+    for name, value in style.items():
+        if not name.replace("_", "").isalnum():
+            raise ValueError(f"invalid style name: {name}")
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (str, int))):
+            raise TypeError(f"style value must be str, int, or None: {name}")
+    for side in _SIDES:
+        _inset(style, side)
+    return style
+
+
+def _inset(style: dict[str, str | int | None], side: str) -> int:
+    """台紙の 1 辺で、中身が内へ寄る幅（外側の余白 + 内側の余白）。"""
+    total = 0
+    for kind in ("margin", "padding"):
+        value = style.get(f"{kind}_{side}", style.get(kind))
+        if value is None:
+            continue
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"content_style {kind} must be a whole number: {value!r}") from None
+        if number < 0:
+            raise ValueError(f"content_style {kind} must not be negative: {value!r}")
+        total += number
+    return total
 
 
 def _validate_tree(workbook: TwbWorkbook, node: KpiNode, seen: set[str]) -> None:
@@ -269,10 +309,13 @@ def _draw_edge_sheet(
     sheet.set_axis_range(field=y, min_value=-1, max_value=2 * _leaf_count(node) - 1, reverse=True)
     sheet.set_axis_range(field=x, min_value=0, max_value=2)
     sheet.update(lines_visible=False)
-    # シートの背景は既定で白く、台紙の上で帯になる。透明（#00000000）を書いても Tableau Public では
-    # 背景が残ったため、ワークシートとペインの両方を台紙と同じ色で塗る。
+    return sheet
+
+
+def _fill_background(sheet: TwbWorksheet, color: str) -> None:
+    """シートの背景は既定で白く、台紙の上で帯になる。透明（#00000000）を書いても Tableau Public では
+    背景が残ったため、ワークシートとペインの両方を台紙と同じ色で塗る。"""
     style = _ensure_table_style(_ensure_table(sheet._resolve_element()))
     for element in ("pane", "table"):
-        _set_style_value(style, element, "background-color", str(_TREE_STYLE["background_color"]))
-    workbook._context.mark_dirty()
-    return sheet
+        _set_style_value(style, element, "background-color", color)
+    sheet._context.mark_dirty()

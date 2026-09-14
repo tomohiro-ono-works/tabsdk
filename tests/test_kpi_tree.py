@@ -177,6 +177,44 @@ def test_build_kpi_tree_styles_cards_like_dashboard_tab(tmp_path) -> None:
     assert _no_errors(workbook)
 
 
+def test_build_kpi_tree_overrides_backdrop_with_content_style(tmp_path) -> None:
+    """台紙は build_report(content_style=) と同じく既定に重ねる。余白の分だけダッシュボードが広がる。"""
+    workbook = _superstore_workbook(tmp_path)
+
+    dashboard = workbook.build_kpi_tree(
+        dashboard_name="KPIツリー",
+        root=_sample_tree(workbook),
+        align="top",
+        edge_hyper="edge.hyper",
+        content_style={"margin": 4, "padding": 8, "background_color": "#eeeeee"},
+    )
+
+    inset = 4 + 8
+    assert (dashboard.width, dashboard.height) == (720 + 2 * inset, 450 + 2 * inset)
+    tree = dashboard.get_containers()[0]
+    assert tree.style == {"background_color": "#eeeeee", "border_style": "none", "margin": "4", "padding": "8"}
+    first = next(zone for zone in _all_zones(tree) if zone.name == "売上")
+    assert (first.x, first.y) == (inset, inset)
+    assert workbook.tree.xpath(
+        "/workbook/worksheets/worksheet[@name='エッジ|売上']/table/style"
+        "/style-rule[@element='table']/format[@attr='background-color']/@value"
+    ) == ["#eeeeee"]
+
+
+def test_build_kpi_tree_rejects_invalid_content_style_without_changes(tmp_path) -> None:
+    workbook = _superstore_workbook(tmp_path)
+    root = _sample_tree(workbook)
+
+    with pytest.raises(TypeError, match="content_style must be a dict"):
+        workbook.build_kpi_tree(dashboard_name="KPIツリー", root=root, content_style="wide")
+    with pytest.raises(ValueError, match="whole number"):
+        workbook.build_kpi_tree(dashboard_name="KPIツリー", root=root, content_style={"padding": "広め"})
+    with pytest.raises(ValueError, match="negative"):
+        workbook.build_kpi_tree(dashboard_name="KPIツリー", root=root, content_style={"margin_left": -1})
+
+    assert workbook.get_dashboards(name="KPIツリー") == []
+
+
 def test_build_kpi_tree_rejects_invalid_input_without_changes(tmp_path) -> None:
     workbook = _superstore_workbook(tmp_path)
     other = _superstore_workbook(tmp_path, "other.twb")

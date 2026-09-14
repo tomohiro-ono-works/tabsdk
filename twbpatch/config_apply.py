@@ -4,7 +4,7 @@
 YAML の形は `docs/html_screen_spec.md` の「出力する設定ファイル」を正とする。
 
 旧 API の `apply_field_config()` は最上位がデータソース名、こちらは最上位が
-`design` / `datasources` / `dashboard` のセクション。形が違うので別メソッドにし、
+`design` / `datasources` / `dashboard` / `kpi_tree` のセクション。形が違うので別メソッドにし、
 どちらの形かを見分ける処理を持たない。
 """
 
@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from .errors import AmbiguousCaptionError, NotFoundError
+from .kpi_tree import KpiNode
 
 if TYPE_CHECKING:  # pragma: no cover - 型注釈のためだけの import
     from .connected import TwbDatasource, TwbFolder
@@ -25,7 +26,7 @@ if TYPE_CHECKING:  # pragma: no cover - 型注釈のためだけの import
 _LOGGER = logging.getLogger(__name__)
 
 # 最上位に置ける節。ここに無いキーは読み飛ばす。
-_SECTIONS = ("design", "datasources", "dashboard")
+_SECTIONS = ("design", "datasources", "dashboard", "kpi_tree")
 
 #: `design` のうち、ワークブック全体へ直接書けるもの。
 _DESIGN_APPLIED = ("font",)
@@ -94,7 +95,7 @@ def _apply_design(workbook: TwbWorkbook, design: Any, *, has_dashboard: bool) ->
     """`design` のうちワークブック全体へ書けるものを適用する。
 
     色・余白・フィルタの「適用」ボタンは**ダッシュボードを組むときに使う**もので、
-    ワークブック全体に書く先は無い。`dashboard` が無い設定では届かないので読み飛ばす。
+    ワークブック全体に書く先は無い。`dashboard` も `kpi_tree` も無い設定では届かないので読み飛ばす。
     """
     if not isinstance(design, dict):
         raise ValueError("design must be a mapping")
@@ -469,6 +470,68 @@ def _apply_actions(
         )
 
 
+def _apply_kpi_tree(
+    workbook: TwbWorkbook,
+    kpi_tree: dict[str, Any],
+    design: dict[str, Any],
+) -> None:
+    """ノードごとに KPI カードを作ってから `build_kpi_tree()` で並べる 2 段。
+
+    ノードの `sheet` / `params` はダッシュボードタブのエリアと同じ形なので、グラフ種類
+    （KPI カード固定）とデータソース（タブで 1 つ）を補って `_draw_area()` にそのまま渡す。
+    """
+    if not isinstance(kpi_tree, dict):
+        raise ValueError("kpi_tree must be a mapping")
+    name = str(kpi_tree.get("name") or "").strip()
+    if not name:
+        raise ValueError("kpi_tree needs a name")
+    datasource = kpi_tree.get("datasource")
+    if not isinstance(datasource, str) or not datasource.strip():
+        raise ValueError("kpi_tree needs a datasource")
+    root = kpi_tree.get("root")
+    _check_kpi_node(root)
+    content_style = _SPACING.get(str(design.get("spacing") or "wide"))
+    if content_style is None:
+        raise ValueError(f"design.spacing must be one of {tuple(_SPACING)}")
+
+    workbook.build_kpi_tree(
+        dashboard_name=name,
+        root=_draw_kpi_node(workbook, root, datasource, design),
+        align=str(kpi_tree.get("align") or "center"),
+        # パスは .twb の置き場所から見たもの。画面はそれを知らないので、書かれたまま渡す。
+        edge_hyper=str(kpi_tree.get("edge_hyper") or "").strip() or None,
+        content_style=dict(content_style),
+    )
+
+
+def _check_kpi_node(node: Any) -> None:
+    """カードを作り始める前にツリーの形だけ確かめる。途中のノードで止まってシートが残らないように。"""
+    if not isinstance(node, dict):
+        raise ValueError("kpi_tree node must be a mapping")
+    children = node.get("children") or []
+    if not isinstance(children, list):
+        raise ValueError(f"kpi_tree children must be a list: {node.get('sheet')}")
+    for child in children:
+        _check_kpi_node(child)
+
+
+def _draw_kpi_node(
+    workbook: TwbWorkbook,
+    node: dict[str, Any],
+    datasource: str,
+    design: dict[str, Any],
+) -> KpiNode:
+    area = {
+        "sheet": node.get("sheet"),
+        "chart": "draw_card",
+        "datasource": datasource,
+        "params": node.get("params"),
+    }
+    sheet = _draw_area(workbook, area, design)
+    children = [_draw_kpi_node(workbook, child, datasource, design) for child in node.get("children") or []]
+    return KpiNode(workbook.get_worksheets(name=sheet)[0], children)
+
+
 def apply_workbook_config(
     workbook: TwbWorkbook,
     config: str | Path | dict[str, Any],
@@ -482,9 +545,10 @@ def apply_workbook_config(
         _skip("", unknown)
 
     dashboard = data.get("dashboard")
+    kpi_tree = data.get("kpi_tree")
     design = data.get("design")
     if design is not None:
-        _apply_design(workbook, design, has_dashboard=bool(dashboard))
+        _apply_design(workbook, design, has_dashboard=bool(dashboard) or bool(kpi_tree))
 
     datasources = data.get("datasources")
     if datasources:
@@ -492,4 +556,6 @@ def apply_workbook_config(
 
     if dashboard:
         _apply_dashboard(workbook, dashboard, design if isinstance(design, dict) else {})
+    if kpi_tree:
+        _apply_kpi_tree(workbook, kpi_tree, design if isinstance(design, dict) else {})
     return workbook

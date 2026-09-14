@@ -501,6 +501,7 @@ class TwbWorkbook:
         root: "KpiNode",
         align: str = "center",
         edge_hyper: str | None = None,
+        content_style: dict[str, str | int | None] | None = None,
     ) -> ConnectedDashboard:
         from .kpi_tree import build_kpi_tree
 
@@ -510,6 +511,7 @@ class TwbWorkbook:
             root=root,
             align=align,
             edge_hyper=edge_hyper,
+            content_style=content_style,
         )
 
     def draw_quadrant(
