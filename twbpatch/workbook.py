@@ -442,6 +442,7 @@ class TwbWorkbook:
         item_shelf: str = "rows",
         aggregation: str = "sum",
         descending: bool = True,
+        bar_color: str | None = None,
         visible: bool = True,
     ) -> ConnectedWorksheet:
         from .draw import draw_bar
@@ -455,6 +456,7 @@ class TwbWorkbook:
             item_shelf=item_shelf,
             aggregation=aggregation,
             descending=descending,
+            bar_color=bar_color,
             visible=visible,
         )
 

@@ -278,6 +278,7 @@ def draw_bar(
     item_shelf: str = "rows",
     aggregation: str = "sum",
     descending: bool = True,
+    bar_color: str | None = None,
     visible: bool = True,
 ) -> TwbWorksheet:
     item, metric = _resolve_fields(workbook, [item, metric], datasource)
@@ -290,7 +291,10 @@ def draw_bar(
         aggregation=aggregation,
         discrete=False,
     )
-    worksheet.get_panes()[0].update(mark_type="bar")
+    pane = worksheet.get_panes()[0]
+    pane.update(mark_type="bar")
+    if bar_color is not None:
+        pane.update(mark_color=bar_color)
     worksheet.add_sort(
         field=item,
         by=metric,

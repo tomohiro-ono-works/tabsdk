@@ -201,7 +201,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | メソッド | 主な引数（先頭に省略可能な `datasource`） | 説明 |
 |---|---|---|
 | `draw_sheet` | `*, name, items=None, item_shelf="rows", title=None, visible=True` | 汎用シート。`items` を指定シェルフへ配置するだけの土台 |
-| `draw_bar` | `*, name, item, metric, item_shelf="rows", aggregation="sum", descending=True` | 棒グラフ。`item` 別に `metric` を集計して並べる |
+| `draw_bar` | `*, name, item, metric, item_shelf="rows", aggregation="sum", descending=True, bar_color=None` | 棒グラフ。`item` 別に `metric` を集計して並べる |
 | `draw_yoy` | `*, name, item, metric, item_shelf="columns", aggregation="sum", date_level="month", color=None, show_axes=True` | 前年比の時系列。`date_level` で粒度を指定 |
 | `draw_card` | `*, name, main_metric, sub_metric=None, main_color="#602fff", value_color="#333333", title_background_color=None, vertical_alignment="center", main_aggregation="auto", sub_aggregation="auto"` | KPI カード。主指標と補助指標を大きく表示 |
 | `draw_quadrant` | `*, name, item, x_metric, y_metric, size_metric, colors=(4色), x/y/size_aggregation="auto", opacity=0.6, title=None` | 散布図の四象限。中央値で区切り4色に塗り分ける |

@@ -134,6 +134,37 @@ def test_workbook_draw_methods_accept_datasource_field_tuples(tmp_path) -> None:
     assert card.get_panes()[0].customized_label["main_metric"] == "売上"
 
 
+def test_workbook_draw_bar_applies_bar_color(tmp_path) -> None:
+    """`bar_color` を指定すると棒の色に反映される（2026-09-12 追加）。
+
+    以前は draw_bar に色を指定する引数が無く、常に既定色で描画されていた。
+    """
+    workbook = _superstore_workbook(tmp_path)
+    datasource = workbook.get_datasources(name=DATASOURCE_NAME)[0]
+
+    workbook.draw_bar(datasource, name="色指定なし", item="カテゴリ", metric="売上")
+    assert workbook.tree.xpath(
+        "/workbook/worksheets/worksheet[@name='色指定なし']"
+        "/table/panes/pane/style/style-rule[@element='mark']"
+        "/format[@attr='mark-color']/@value"
+    ) == []
+
+    bar = workbook.draw_bar(
+        datasource,
+        name="色指定あり",
+        item="カテゴリ",
+        metric="売上",
+        item_shelf="columns",
+        bar_color="#602fff",
+    )
+    assert workbook.tree.xpath(
+        "/workbook/worksheets/worksheet[@name='色指定あり']"
+        "/table/panes/pane/style/style-rule[@element='mark']"
+        "/format[@attr='mark-color']/@value"
+    ) == ["#602fff"]
+    assert bar.get_panes()[0].mark_type == "bar"
+
+
 def test_draw_card_aggregates_row_level_calculated_fields(tmp_path) -> None:
     """計算フィールドでも、式が集計関数を含まなければ通常どおり集計する
     （2026-09-12 追加）。
