@@ -63,3 +63,28 @@ def find_by_attr(parent: ET._Element, tag_local: str, attr: str, value: str) -> 
 
 def children_by_local(parent: ET._Element, tag_local: str) -> list[ET._Element]:
     return list(parent.xpath("./*[local-name()=$n]", n=tag_local))
+
+
+_METADATA_COLUMN_RECORDS_XPATH = (
+    "./*[local-name()='connection']/*[local-name()='metadata-records']"
+    "/*[local-name()='metadata-record' and @class='column']"
+    " | ./*[local-name()='extract']/*[local-name()='connection']"
+    "/*[local-name()='metadata-records']"
+    "/*[local-name()='metadata-record' and @class='column']"
+)
+
+
+def metadata_column_records(datasource_el: ET._Element) -> list[ET._Element]:
+    """データソース内の `metadata-record`（class='column'）を通常接続・抽出の両方から集める。
+
+    一度もシェルフ等で使われていないフィールドは `<column>` 要素を持たないが、
+    この metadata-record には必ず載る。
+    """
+    return list(datasource_el.xpath(_METADATA_COLUMN_RECORDS_XPATH))
+
+
+def metadata_text(record: ET._Element, child_name: str) -> Optional[str]:
+    for child in record:
+        if ET.QName(child).localname == child_name:
+            return child.text
+    return None

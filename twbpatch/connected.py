@@ -24,6 +24,7 @@ from .drill_path import (
     set_drill_path_fields,
 )
 from .datasource import datasource_elements, update_source_el
+from .domain.xpath import metadata_column_records, metadata_text as _metadata_text
 if TYPE_CHECKING:  # pragma: no cover - 型注釈のためだけの import
     from .field_input import FieldInput
 
@@ -131,13 +132,6 @@ def _datasource_layout(
     return layout
 
 
-def _metadata_text(record: ET._Element, child_name: str) -> str | None:
-    for child in record:
-        if ET.QName(child).localname == child_name:
-            return child.text
-    return None
-
-
 class _FieldDefinition(NamedTuple):
     id: str
     column: ET._Element | None
@@ -146,13 +140,7 @@ class _FieldDefinition(NamedTuple):
 
 def _effective_field_definitions(datasource_el: ET._Element) -> list[_FieldDefinition]:
     metadata_by_id: dict[str, ET._Element] = {}
-    for record in datasource_el.xpath(
-        "./*[local-name()='connection']/*[local-name()='metadata-records']"
-        "/*[local-name()='metadata-record' and @class='column']"
-        " | ./*[local-name()='extract']/*[local-name()='connection']"
-        "/*[local-name()='metadata-records']"
-        "/*[local-name()='metadata-record' and @class='column']"
-    ):
+    for record in metadata_column_records(datasource_el):
         field_id = _metadata_text(record, "local-name")
         if field_id:
             metadata_by_id.setdefault(field_id, record)

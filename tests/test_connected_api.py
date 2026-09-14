@@ -77,6 +77,49 @@ def test_get_fields_merges_connection_metadata_with_explicit_overrides(tmp_path)
     assert child_names.index("column") < child_names.index("folders-common")
 
 
+def test_create_calculated_field_resolves_metadata_only_field(tmp_path) -> None:
+    """`<column>` を持たない未使用フィールド（metadata-record のみ）でも
+    式内で参照できる。以前は build_caption_name_map() が `<column>` しか
+    見ておらず、実データとして存在していても NotFoundError になっていた。
+    """
+    source = tmp_path / "metadata-only-field.twb"
+    source.write_text(
+        """<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name="ds1" caption="売上データ">
+      <connection>
+        <metadata-records>
+          <metadata-record class="column">
+            <remote-name>Category</remote-name><local-name>[Category]</local-name>
+            <local-type>string</local-type><aggregation>Count</aggregation>
+          </metadata-record>
+          <metadata-record class="column">
+            <remote-name>当年昨年区分</remote-name><local-name>[当年昨年区分]</local-name>
+            <local-type>string</local-type><aggregation>Count</aggregation>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+    </datasource>
+  </datasources>
+</workbook>
+""",
+        encoding="utf-8",
+    )
+    workbook = TwbWorkbook.open(str(source))
+    datasource = workbook.get_datasources()[0]
+
+    by_internal_name = datasource.create_calculated_field(
+        name="カテゴリ数", formula="COUNTD([Category])"
+    )
+    assert by_internal_name.raw_formula == "COUNTD([Category])"
+
+    by_display_name = datasource.create_calculated_field(
+        name="件数", formula='IIF([当年昨年区分]="当年", 1, 0)'
+    )
+    assert "[当年昨年区分]" in (by_display_name.raw_formula or "")
+
+
 def test_get_datasources_and_fields_use_list_filters() -> None:
     workbook = TwbWorkbook.open(SAMPLE)
 
