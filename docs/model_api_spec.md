@@ -1097,12 +1097,12 @@ workbook.is_dirty: bool
 
 | 残したメソッド | 新 API に無いもの |
 |---|---|
-| `list_dashboard_zones()` | デバイスレイアウト、raw 座標、任意サイズでの px 換算、`parent_id` / `depth` |
-| `list_dashboard_actions()` | `excluded_source_worksheets` / `excluded_target_worksheets` / `details` |
+| `list_dashboard_zones()` | デバイスレイアウト（raw 座標・任意サイズでの px 換算・`parent_id` / `depth` は 2026-09-13 に `TwbDashboardZone` へ足した） |
+| `list_dashboard_actions()` | 無し。`excluded_source_worksheets` / `excluded_target_worksheets` / `details` は 2026-09-13 に `TwbDashboardAction` へ足した（除外は id で持つ） |
 | `list_dashboard_fields()` | `max_filter_value_chars=` |
 | `list_worksheet_fields()` | フィールドの `values` / `mark_type` / `category` / `type` |
 
-穴を埋めてから消す（`docs/backlog.md` L-6）。
+穴を埋めてから消す（`docs/backlog.md` L-6）。`list_dashboard_actions()` は穴が埋まったが、消すかどうかは未判断。
 
 `models.py` の dataclass は**削除しない**。投影層 14 モジュールの戻り値であり、
 接続型モデルの `_snapshot()` がこれを読んでいる。公開するのは新 API の戻り値に

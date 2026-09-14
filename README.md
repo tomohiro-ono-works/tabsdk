@@ -89,6 +89,7 @@ wb.save("output.twb", overwrite=True)
 |---|---|
 | `design.font` | ワークブック全体の既定フォント |
 | `datasources.*.folders` | 表示名の変更とフォルダ分類 |
+| `datasources.*.renames` | フォルダへは入れず、表示名だけを変更 |
 | `datasources.*.calculations` | 計算フィールドの作成。同名があれば式・データ型・役割・フォルダを上書き |
 | `dashboard` | シートを作って並べ、アクションを張る |
 | `kpi_tree` | ノードごとに KPI カードを作り、ツリー状に並べたダッシュボードを作る（`build_kpi_tree`）。`dashboard` と両方あればダッシュボードは 2 つ |
@@ -254,11 +255,12 @@ workbook.build_kpi_tree(
 
 **接続型モデルではなく `models.py` の投影 dataclass を返す。** 新 API に同じ情報を
 取る手段が無いため残している（§9、`docs/backlog.md` L-6）。穴が埋まったら消す。
+2026-09-13 にゾーンとアクションの穴の一部を埋めた（§3.10 / §3.11）。消すかどうかは未判断。
 
 | メソッド | 引数 | 戻り値 | 新 API に無いもの |
 |---|---|---|---|
-| `list_dashboard_zones` | `dashboard=None, *, by="auto", width_px=None, height_px=None, include_device_layouts=False` | `list[TwbDashboardZone]` | デバイスレイアウト、raw 座標、任意サイズでの px 換算、`parent_id` / `depth` |
-| `list_dashboard_actions` | `dashboard=None, *, by="auto"` | `list[TwbDashboardAction]` | `excluded_source_worksheets` / `excluded_target_worksheets` / `details` |
+| `list_dashboard_zones` | `dashboard=None, *, by="auto", width_px=None, height_px=None, include_device_layouts=False` | `list[TwbDashboardZone]` | デバイスレイアウト（raw 座標・px 換算・`parent_id` / `depth` は §3.10 で読める） |
+| `list_dashboard_actions` | `dashboard=None, *, by="auto"` | `list[TwbDashboardAction]` | 無し（除外シートと `details` は §3.11 で読める） |
 | `list_dashboard_fields` | `dashboard=None, *, by="auto", max_filter_value_chars=40` | `list[TwbWorksheetField]` | `max_filter_value_chars` |
 | `list_worksheet_fields` | `worksheet=None, *, by="auto", max_filter_value_chars=40` | `list[TwbWorksheetField]` | `values` / `mark_type` / `category` / `type` |
 
@@ -467,6 +469,9 @@ workbook.build_kpi_tree(
 | `discrete` | `bool \| None` | 不連続か |
 | `table_calculation` | `str \| None` | 表計算 |
 | `date_level` | `str \| None` | 日付の粒度 |
+| `worksheet_id` | `str` | 配置先のワークシート |
+| `role` | `str \| None` | 参照先フィールドの `dimension` / `measure` |
+| `attrs` | `dict[str, str]` | 配置を表す XML 要素の属性そのまま |
 
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
@@ -619,9 +624,19 @@ struct={
 | `fixed_size` | `int \| None` | 固定サイズ |
 | `hidden` | `bool` | 非表示か |
 | `style` | `dict[str, str]` | ゾーンスタイル |
+| `x_raw` / `y_raw` / `width_raw` / `height_raw` | `int` | Tableau が XML に書く座標。ダッシュボードの幅・高さを 100000 とした比率 |
+| `dashboard_id` | `str` | 所属ダッシュボード |
+| `sizing_mode` / `dashboard_width_px` / `dashboard_height_px` | `str` / `int \| None` | 所属ダッシュボードのサイズ。自動サイズなら幅・高さは `None` |
+| `parent_id` / `depth` | `str \| None` / `int` | 入れ子の親ゾーンと深さ（最上位は `None` / `0`） |
+| `type` / `param` | `str \| None` | XML の `type-v2`（無ければ `type`）/ コンテナの向き（`horz` / `vert`） |
+| `mode` / `show_caption` / `show_apply` | `str \| None` / `bool \| None` | フィルタカードの表示形式・見出し・「適用」ボタン |
+| `url` | `str \| None` | Web ページゾーンの URL |
+| `is_fixed` / `is_scaled` | `bool \| None` | XML の `is-fixed` / `is-scaled`。書かれていなければ `None` |
+| `attrs` | `dict[str, str]` | `<zone>` の属性そのまま |
 
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
+| `to_px` | `*, width: int, height: int` | `tuple[int, int, int, int]` | 任意のキャンバスサイズで raw 座標を px 換算する。自動サイズのダッシュボードでも使える |
 | `update` | `*, order=UNSET, weight=UNSET, x=UNSET, y=UNSET, width=UNSET, height=UNSET, show_title=UNSET, show_apply=UNSET, fixed_size=UNSET, friendly_name=UNSET, hidden=UNSET, style=UNSET` | `TwbDashboardZone` | 自身を更新。**旧 `update_style()` を統合**。タイル配置に `x`/`y`、浮動配置に `order`/`weight` を渡すと `ValueError`。`show_apply` はフィルタ zone 専用で、`False` は属性を削除する（Tableau が既定で書かないため） |
 | `delete` | — | `None` | **配置だけ**を削除。ワークシート本体は削除しない |
 
@@ -630,7 +645,10 @@ struct={
 作成は `TwbDashboard.create_action()`。
 
 **変数**: `id` / `name` / `type: str \| None` / `activation: str \| None` / `command: str \| None` /
-`source_worksheet_ids: list[str]` / `target_worksheet_ids: list[str]` / `links: list[dict]` / `params: dict[str, str]`
+`source_worksheet_ids: list[str]` / `target_worksheet_ids: list[str]` / `links: list[dict]` / `params: dict[str, str]` /
+`excluded_source_worksheet_ids: list[str]` / `excluded_target_worksheet_ids: list[str]`（**Tableau は対象シートを除外リストで書く**）/
+`dashboard_id` / `source_type` / `target_type` / `source_dashboard_id` / `target_dashboard_id: str \| None` /
+`attrs: dict[str, str]`（`<action>` の属性）/ `details: dict`（`<action>` の中身を属性と子要素ごと辞書にしたもの）
 
 **メソッド**
 
@@ -893,8 +911,8 @@ unsupported_features, set_filter, create_calculated_field（位置引数版）
 
 | メソッド | なぜ残すか |
 |---|---|
-| `list_dashboard_zones()` | デバイスレイアウトの読み取り、raw 座標、`width_px=` / `height_px=` を渡した px 換算、`parent_id` / `depth` が新 API に無い |
-| `list_dashboard_actions()` | `excluded_source_worksheets` / `excluded_target_worksheets` / `details` が新 API に無い。Tableau は対象シートを除外形式で書く |
+| `list_dashboard_zones()` | デバイスレイアウトの読み取りが新 API に無い（raw 座標・px 換算・`parent_id` / `depth` は 2026-09-13 に `TwbDashboardZone` へ足した） |
+| `list_dashboard_actions()` | 穴は埋まった（2026-09-13、`TwbDashboardAction.excluded_*_worksheet_ids` / `details`）。消すかどうかは未判断 |
 | `list_dashboard_fields()` | `max_filter_value_chars=` が新 API に無い |
 | `list_worksheet_fields()` | フィールドの `values` / `mark_type` / `category` / `type` が新 API に無い |
 

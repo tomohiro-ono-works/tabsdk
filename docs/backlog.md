@@ -99,7 +99,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | L-3 | 中 | ナビゲーションアクションを作れない | 不要 | **次回リリース**（2026-09-07 決定） |
 | L-4 | 低 | ペインを削除できない | 不要 | 未（H-13 の採否待ち） |
 | L-5 | **完了** | グループを作れない | 不要 | `create_group()`（2026-09-07）。セット・ビンは対象外 |
-| L-6 | 中 | ダッシュボード読み取りの穴 4 件 | **要** | 未（**E-2 の残り 4 件の前提**） |
+| L-6 | 中 | ダッシュボード読み取りの穴 4 件 | **要** | **一部完了**（2026-09-13）。ゾーンの座標・入れ子とアクションの除外は埋まった。デバイスレイアウト・フィルタ値の丸め・配置の値は未（**E-2 の残り 4 件の前提**） |
 
 **残り 19 件**（要分解 8 / そのまま着手可 11）。
 完了 37 件 / 保留 1 件 / 不採用 5 件 / 他課題へ統合 2 件。全 64 件（2026-09-07 実測）。
@@ -308,12 +308,17 @@ folder-item を `type` で区別していなかった。
 除外リストは Tableau の書き方そのものなので、読めないと「どのシートが対象か」を
 生の XML から判断することになる（`create_action()` は書ける）。
 
+> **2026-09-13 に 1 と 3 を実装した**（`tests/test_zone_action_reads.py`）。`TwbDashboardZone` に raw 座標・`to_px()`・
+> `parent_id` / `depth`・サイズ・フィルタカードの属性・`attrs`、`TwbDashboardAction` に `excluded_*_worksheet_ids`・
+> `details`・`attrs`、`TwbWorksheetField` に `worksheet_id` / `role` / `attrs`。`list_dashboard_actions()` は穴が埋まったが、
+> 消すかどうかは未判断。
+>
 > **次のアクション**: **個別タスクに分解する。** 4 項目は持ち主が違う。
 >
-> 1. `TwbDashboardZone` に raw 座標と `parent_id` / `depth` を足す（既存の投影に値はある）
+> 1. ~~`TwbDashboardZone` に raw 座標と `parent_id` / `depth` を足す（既存の投影に値はある）~~ → 済
 > 2. デバイスレイアウトのモデルを新設する。`dashboard.get_device_layouts()` か
 >    `get_zones(layout=...)` かを先に決める
-> 3. `TwbDashboardAction` に `excluded_*` を足す（`dashboard_action.py:185` に値はある）
+> 3. ~~`TwbDashboardAction` に `excluded_*` を足す（`dashboard_action.py:185` に値はある）~~ → 済
 > 4. `values` の丸めは表示の都合なので、モデルに持たせず呼び出し側で切る案もある
 
 ---
