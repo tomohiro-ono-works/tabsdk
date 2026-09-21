@@ -113,14 +113,29 @@ def _validate_spacing_scale(scale: float) -> None:
         raise ValueError("spacing_scale must be positive")
 
 
+def _validate_border_color(color: str | None) -> None:
+    if color is not None and (not isinstance(color, str) or not color.strip()):
+        raise ValueError("border_color must be a non-empty string or None")
+
+
+def _bordered(style: dict[str, Any], border_color: str | None) -> dict[str, Any]:
+    """枠線は色を指定したときだけ引く。指定が無ければ既定どおり枠線なし。"""
+    if border_color is None:
+        return style
+    return {**style, "border_style": "solid", "border_width": 1, "border_color": border_color}
+
+
 def _worksheet_zone_style(
-    context: WorkbookContext, sheet_name: str, spacing_scale: float
+    context: WorkbookContext,
+    sheet_name: str,
+    spacing_scale: float,
+    border_color: str | None = None,
 ) -> dict[str, Any]:
     style = dict(_DEFAULT_REPORT_WORKSHEET_STYLE)
     padding = _CHART_ZONE_PADDING.get(context.chart_kinds.get(sheet_name, ""))
     if padding is not None:
         style["padding"] = padding
-    return _scaled_spacing(style, spacing_scale)
+    return _bordered(_scaled_spacing(style, spacing_scale), border_color)
 
 
 def _local_name(element: ET._Element) -> str:
@@ -1246,10 +1261,12 @@ class TwbDashboard(ConnectedModel):
         header_font_color: str = "#333333",
         filter_apply_button: bool = False,
         spacing_scale: float = 1.0,
+        border_color: str | None = None,
     ) -> TwbDashboard:
         if not isinstance(filter_apply_button, bool):
             raise TypeError("filter_apply_button must be bool")
         _validate_spacing_scale(spacing_scale)
+        _validate_border_color(border_color)
         if header_title is not None and not isinstance(header_title, str):
             raise TypeError("header_title must be a string or None")
         container_sizes = dict(container_sizes or {})
@@ -1386,7 +1403,7 @@ class TwbDashboard(ConnectedModel):
                         weight=1,
                     )
                     zone_style = _worksheet_zone_style(
-                        self._context, sheet_name, spacing_scale
+                        self._context, sheet_name, spacing_scale, border_color
                     )
                     if grouped and len(names) > 1:
                         if sheet_index < len(names) - 1:

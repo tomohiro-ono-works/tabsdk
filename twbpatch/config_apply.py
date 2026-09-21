@@ -36,7 +36,10 @@ _DESIGN_FOR_DASHBOARD = (
     "main_color",
     "sub_color_1",
     "sub_color_2",
-    "text_color",
+    "sub_color_3",
+    "text_color_1",
+    "text_color_2",
+    "border_color",
     "min_color",
     "mid_color",
     "max_color",
@@ -57,18 +60,34 @@ _DESIGN_TOKENS = (
     "main_color",
     "sub_color_1",
     "sub_color_2",
-    "text_color",
+    "sub_color_3",
+    "text_color_1",
+    "text_color_2",
+    "border_color",
     "min_color",
     "mid_color",
     "max_color",
 )
+
+def _spacing_name(design: dict[str, Any]) -> str:
+    return str(design.get("spacing") or _DEFAULT_SPACING)
+
+
+def _design_border_color(design: dict[str, Any]) -> str | None:
+    """枠線の色。空なら枠線を引かない（2026-09-21）。"""
+    color = str(design.get("border_color") or "").strip()
+    return color or None
+
+
+#: `design.spacing` の既定。画面の既定と揃える（2026-09-21 に wide から変更）。
+_DEFAULT_SPACING = "narrow"
 
 #: 余白の指定を `build_report(content_style=)` へ写す。
 _SPACING = {
     "wide": {"margin": 8, "padding": 16},
     "narrow": {"margin": 4, "padding": 8},
 }
-#: 「多め」のときは、グラフごとの余白も 1.5 倍にする（0 は 0 のまま）。
+#: 余白「広い」のときは、グラフごとの余白も 1.5 倍にする（0 は 0 のまま）。
 _SPACING_SCALE = {"wide": 1.5, "narrow": 1.0}
 
 _AREA_KINDS = ("worksheet", "filter")
@@ -441,7 +460,7 @@ def _apply_dashboard(
     header = dashboard.get("header") or {}
     if not isinstance(header, dict):
         raise ValueError("dashboard header must be a mapping")
-    content_style = _SPACING.get(str(design.get("spacing") or "wide"))
+    content_style = _SPACING.get(_spacing_name(design))
     if content_style is None:
         raise ValueError(f"design.spacing must be one of {tuple(_SPACING)}")
 
@@ -452,7 +471,8 @@ def _apply_dashboard(
     )
     build_options: dict[str, Any] = {
         "content_style": dict(content_style),
-        "spacing_scale": _SPACING_SCALE[str(design.get("spacing") or "wide")],
+        "spacing_scale": _SPACING_SCALE[_spacing_name(design)],
+        "border_color": _design_border_color(design),
     }
     if str(header.get("title") or "").strip():
         build_options["header_title"] = header["title"].strip()
@@ -529,7 +549,7 @@ def _apply_kpi_tree(
         raise ValueError("kpi_tree needs a datasource")
     root = kpi_tree.get("root")
     _check_kpi_node(root)
-    content_style = _SPACING.get(str(design.get("spacing") or "wide"))
+    content_style = _SPACING.get(_spacing_name(design))
     if content_style is None:
         raise ValueError(f"design.spacing must be one of {tuple(_SPACING)}")
 
@@ -542,7 +562,8 @@ def _apply_kpi_tree(
         # save() が .twb の隣へ置く（2026-09-15。画面や YAML でパスを指定させない）。
         edges=align == "top",
         content_style=dict(content_style),
-        spacing_scale=_SPACING_SCALE[str(design.get("spacing") or "wide")],
+        spacing_scale=_SPACING_SCALE[_spacing_name(design)],
+        border_color=_design_border_color(design),
     )
 
 

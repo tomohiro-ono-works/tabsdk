@@ -82,7 +82,11 @@ def test_export_html_design_tab_uses_pickers(tmp_path) -> None:
     assert '<option value="Meiryo UI" selected>' in html
     assert '<option value="Tableau Book">' in html
     # カラーコードは色味を選べる
-    for name in ("d-main", "d-sub1", "d-sub2", "d-text", "d-heat-min", "d-heat-mid", "d-heat-max"):
+    # サブカラー③・文字色①②・枠線の色は 2026-09-21 追加
+    for name in (
+        "d-main", "d-sub1", "d-sub2", "d-sub3", "d-text1", "d-text2", "d-border",
+        "d-heat-min", "d-heat-mid", "d-heat-max",
+    ):
         assert f'<input type="color" id="{name}-pick">' in html
 
 
@@ -359,7 +363,8 @@ def test_export_html_dashboard_tab_is_an_editor(tmp_path) -> None:
     assert ".areas { display: flex; gap: 10px; padding: 12px; overflow-x: auto;" in html
     # px の入力は 10 刻み。既定は段の高さ 300 / エリアの幅 600
     assert '<input type="number" step="10" min="0" id="db-width" value="1600">' in html
-    assert 'type: "number", step: "10", min: "0", value: row.height' in html
+    # 段の高さだけは 60 刻み（2026-09-21 に 10 から変更）
+    assert 'type: "number", step: "60", min: "0", value: row.height' in html
     assert 'height: "300"' in html
     assert 'width: "600"' in html
     # 段とエリアはドラッグで動かす。左右ボタンは持たない
@@ -544,10 +549,10 @@ def test_export_html_crosstab_defaults_to_design_heatmap_colors(tmp_path) -> Non
         '}' in html
     )
     assert 'area.params = defaultParamsFor(chart.value);' in html
-    # デザインルールタブの既定3色（ヒートマップ用）とその参照キー
-    assert '<input type="color" id="d-heat-min-pick"><input type="text" id="d-heat-min" value="#2166ac">' in html
-    assert '<input type="color" id="d-heat-mid-pick"><input type="text" id="d-heat-mid" value="#f7f7f7">' in html
-    assert '<input type="color" id="d-heat-max-pick"><input type="text" id="d-heat-max" value="#b2182b">' in html
+    # デザインルールタブの既定3色（ヒートマップ用）とその参照キー（色は 2026-09-21 変更）
+    assert '<input type="color" id="d-heat-min-pick"><input type="text" id="d-heat-min" value="#ce70f0">' in html
+    assert '<input type="color" id="d-heat-mid-pick"><input type="text" id="d-heat-mid" value="#ffffff">' in html
+    assert '<input type="color" id="d-heat-max-pick"><input type="text" id="d-heat-max" value="#2366e1">' in html
     assert '{ key: "min_color", label: "ヒートマップ：最小値の色", input: "d-heat-min" }' in html
     assert '{ key: "mid_color", label: "ヒートマップ：中間の色", input: "d-heat-mid" }' in html
     assert '{ key: "max_color", label: "ヒートマップ：最大値の色", input: "d-heat-max" }' in html
@@ -814,3 +819,124 @@ def test_export_html_lists_chart_types_in_the_configured_order(tmp_path) -> None
         "クロス集計（ヒートマップ）",
         "散布図（四象限）",
     ]
+
+
+def test_export_html_dropdowns_can_be_filtered_by_typing(tmp_path) -> None:
+    """プルダウンは文字入力で絞り込める（2026-09-21）。
+
+    候補が多いフィールドの選択で、目で探すしかなかった。`<select>` を隠して
+    `<input list>` + `<datalist>` を前に出し、呼び出し側は今までどおり
+    `select.value` と change イベントで扱う。
+    """
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert "function searchable(select)" in html
+    assert 'el("span", { class: "combo-wrap" }, [input, list, select])' in html
+    assert ".combo-wrap select { display: none; }" in html
+    # グラフ種類・データソース・フィールド・エリアの区分・アクションのどれも包む
+    for call in (
+        'searchable(chart)',
+        'searchable(dsSelectEl)',
+        'searchable(role)',
+        'searchable(kind)',
+        'searchable(type)',
+        'searchable(source)',
+    ):
+        assert call in html
+
+
+def test_export_html_marks_empty_or_duplicated_sheet_names(tmp_path) -> None:
+    """シート名が空・重複なら入力欄を薄い赤にする（2026-09-21）。
+
+    これまで重複はダウンロード前の検証でしか分からず、入力中は気づけなかった。
+    """
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert "function markSheetName(input, area)" in html
+    assert "const bad = !name || usedSheetNames(area).has(name);" in html
+    assert "input.bad { background: #ffe0e0; border-color: #e09090; }" in html
+
+
+def test_export_html_filter_picks_the_role_before_the_field(tmp_path) -> None:
+    """フィルターはディメンション / メジャーを選んでからフィールドを選ぶ（2026-09-21）。"""
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert '["dimension", "ディメンション"], ["measure", "メジャー"], ["", "すべて"],' in html
+    assert "function filterRoleOf(area)" in html
+    assert 'fieldOptions(area.datasource, area.filterField, filterRoleOf(area) || undefined)' in html
+
+
+def test_export_html_hides_the_datasource_object_fields(tmp_path) -> None:
+    """データソースそのものを表す擬似フィールドは画面に出さない（2026-09-21）。
+
+    改名もフォルダ分類もできないのに、リネーム・フォルダ設定の表に並んでいた。
+    """
+    source = tmp_path / "object-field.twb"
+    source.write_text(
+        """<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name="ds1" caption="売上データ">
+      <column name="[Sales]" caption="売上"
+              datatype="real" role="measure" type="quantitative" />
+      <column name="[__tableau_internal_object_id__].[Orders_ABC]" caption="Orders"
+              datatype="table" role="measure" type="quantitative" />
+    </datasource>
+  </datasources>
+</workbook>
+""",
+        encoding="utf-8",
+    )
+    workbook = TwbWorkbook.open(str(source))
+
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert "__tableau_internal_object_id__" not in html
+    assert "売上" in html
+    # export_json() は .twb のままを返す（画面だけの絞り込み）
+    assert any(
+        field["id"].startswith("[__tableau_internal_object_id__]")
+        for field in workbook.export_json()["datasources"][0]["fields"]
+    )
+
+
+def test_export_html_kpi_card_labels_use_the_main_and_sub_wording(tmp_path) -> None:
+    """KPI カードの用語は メイン / サブ に揃える（2026-09-21）。"""
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert '"label": "メインメジャー"' in html
+    assert '"label": "サブメジャー"' in html
+    assert '"label": "メインカラー"' in html
+    assert "主メジャー" not in html and "副メジャー" not in html
+
+
+def test_export_html_design_tab_starts_with_the_house_palette(tmp_path) -> None:
+    """デザインルールの既定色（2026-09-21 に決めた配色）。"""
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    for input_id, color in [
+        ("d-main", "#2366e1"),
+        ("d-sub1", "#ce70f0"),
+        ("d-sub2", "#ccd500"),
+        ("d-sub3", "#4a9ca5"),
+        ("d-text1", "#202020"),
+        ("d-text2", "#4e4e4e"),
+        ("d-heat-min", "#ce70f0"),
+        ("d-heat-mid", "#ffffff"),
+        ("d-heat-max", "#2366e1"),
+    ]:
+        assert f'<input type="text" id="{input_id}" value="{color}">' in html
+
+
+def test_export_html_design_tab_defaults_to_narrow_spacing(tmp_path) -> None:
+    """余白は「広い / 狭い」で、既定は狭い（2026-09-21）。"""
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert '<input type="radio" name="d-space" value="wide"> 広い' in html
+    assert '<input type="radio" name="d-space" value="narrow" checked> 狭い' in html

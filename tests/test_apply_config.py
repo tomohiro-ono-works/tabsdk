@@ -302,3 +302,40 @@ def test_field_update_rejects_datatype_on_a_source_field() -> None:
     field = workbook.get_datasources(name="売上データ")[0].get_fields(name="売上")[0]
     with pytest.raises(UnsupportedFeatureError, match="calculated fields"):
         field.update(datatype="integer")
+
+
+def test_design_border_color_draws_borders_around_the_zones(tmp_path) -> None:
+    """デザインルールの枠線の色を入れると、ゾーンに枠線が付く（2026-09-21）。
+
+    色が空なら今までどおり枠線なし。
+    """
+    workbook = TwbWorkbook.open(SAMPLE)
+    config = {
+        "design": {"main_color": "#2f3b52", "border_color": "#334455"},
+        "dashboard": {
+            "name": "売上ダッシュボード",
+            "rows": [
+                {
+                    "name": "段",
+                    "areas": [
+                        {
+                            "kind": "worksheet",
+                            "datasource": "売上データ",
+                            "sheet": "カード",
+                            "chart": "draw_card",
+                            "params": {"main_metric": "売上"},
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+
+    workbook.apply_config(config)
+
+    assert workbook.tree.xpath(
+        "//zone[@name='カード']/zone-style/format[@attr='border-color']/@value"
+    ) == ["#334455"]
+    assert workbook.tree.xpath(
+        "//zone[@name='カード']/zone-style/format[@attr='border-style']/@value"
+    ) == ["solid"]

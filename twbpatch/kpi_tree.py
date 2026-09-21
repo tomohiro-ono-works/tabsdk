@@ -18,12 +18,14 @@ from typing import TYPE_CHECKING
 from .connected import TwbDatasource, TwbField
 from .connected_dashboard import (
     _CHART_ZONE_PADDING,
+    _bordered,
     _DEFAULT_REPORT_CONTENT_STYLE,
     _DEFAULT_REPORT_WORKSHEET_STYLE,
     TwbDashboard,
     TwbDashboardContainer,
     _scaled_spacing,
     _validate_spacing_scale,
+    _validate_border_color,
 )
 from .connected_worksheet import (
     TwbWorksheet,
@@ -84,8 +86,10 @@ def build_kpi_tree(
     edge_hyper: str | None = None,
     content_style: dict[str, str | int | None] | None = None,
     spacing_scale: float = 1.0,
+    border_color: str | None = None,
 ) -> TwbDashboard:
     _validate_spacing_scale(spacing_scale)
+    _validate_border_color(border_color)
     if not isinstance(align, str) or align.lower() not in _ALIGNS:
         raise ValueError(f"align must be center or top: {align!r}")
     align = align.lower()
@@ -112,7 +116,15 @@ def build_kpi_tree(
     )
     row = dashboard.create_container(direction="horizontal")
     row.update(style=tree_style)
-    _place(workbook, row, root, depth, align, edge_fields, _scaled_spacing(_CARD_STYLE, spacing_scale))
+    _place(
+        workbook,
+        row,
+        root,
+        depth,
+        align,
+        edge_fields,
+        _bordered(_scaled_spacing(_CARD_STYLE, spacing_scale), border_color),
+    )
     background = tree_style.get("background_color")
     if edge_fields is not None and background is not None:
         for parent in _parents(root):

@@ -216,7 +216,7 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 
 | メソッド | 引数 | 説明 |
 |---|---|---|
-| `build_kpi_tree` | `*, dashboard_name, root: KpiNode, align="center", edges: bool = False, edge_hyper: str \| None = None, content_style: dict \| None = None, spacing_scale=1.0` | `align` は親カードの位置で `"center"`（子の範囲の縦中央）/ `"top"`（上端）。`edges=True` でエッジ（線）を描く（`align="top"` のときだけ）。`content_style` は台紙の書式で、`build_report` と同じく既定に重ねる |
+| `build_kpi_tree` | `*, dashboard_name, root: KpiNode, align="center", edges: bool = False, edge_hyper: str \| None = None, content_style: dict \| None = None, spacing_scale=1.0, border_color=None` | `align` は親カードの位置で `"center"`（子の範囲の縦中央）/ `"top"`（上端）。`edges=True` でエッジ（線）を描く（`align="top"` のときだけ）。`content_style` は台紙の書式で、`build_report` と同じく既定に重ねる |
 
 `KpiNode(worksheet, children=[])` は `twbpatch` から import する値オブジェクト。
 `children` が空のノードがツリーの末端になる。
@@ -492,7 +492,7 @@ workbook.build_kpi_tree(
 | `create_action` | `*, kind, name, source, targets=None, field=None, url=None, activation="on-select", clear_selection="show_all"` | `TwbDashboardAction` | アクションを1件作成。`kind` は `filter` / `url` |
 | `create_container` | `*, direction="horizontal", friendly_name=None, distribute_evenly=False` | `TwbDashboardContainer` | 最上位コンテナを作成 |
 | `add_floating_worksheet` | `worksheet: TwbWorksheet, *, x=0, y=0, width=600, height=400, show_title=True` | `TwbDashboardZone` | 浮動配置。タイル配置とは明示的に別 API |
-| `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_title=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333", filter_apply_button=False, spacing_scale=1.0` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築。ゾーンの余白は描いたグラフの種類で決まる（カード 0 / 棒 16 / クロス・象限 0 / 帳票 8、角の丸み 8）。`spacing_scale` はその余白の倍率。`header_title` を省略するとヘッダーにダッシュボード名を書く。`filter_apply_button=True` で置いたフィルタすべてに「適用」ボタンを付ける |
+| `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_title=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333", filter_apply_button=False, spacing_scale=1.0, border_color=None` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築。ゾーンの余白は描いたグラフの種類で決まる（カード 0 / 棒 16 / クロス・象限 0 / 帳票 8、角の丸み 8）。`spacing_scale` はその余白の倍率、`border_color` は枠線の色（省略時は枠線なし）。`header_title` を省略するとヘッダーにダッシュボード名を書く。`filter_apply_button=True` で置いたフィルタすべてに「適用」ボタンを付ける |
 | `update` | `*, name=UNSET, visible=UNSET` | `TwbDashboard` | 自身を更新 |
 | `delete` | — | `None` | 削除 |
 

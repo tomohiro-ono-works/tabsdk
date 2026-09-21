@@ -74,13 +74,14 @@ def test_kpi_tree_draws_cards_and_places_them(tmp_path) -> None:
     dashboard = workbook.get_dashboards(name="KPIツリー")[0]
     # 上端揃えなのでエッジ（幅 60）も入る
     assert set(_card_zones(dashboard)) == {"売上", "エッジ|売上", "利益", "地域数"}
-    # 既定の余白は「多め」: 台紙の外側 8 + 内側 16 の分だけダッシュボードが広がる
-    assert (dashboard.width, dashboard.height) == (400 + 60 + 2 * 24, 300 + 2 * 24)
-    assert dashboard.get_containers()[0].style["padding"] == "16"
+    # 既定の余白は「狭い」: 台紙の外側 4 + 内側 8 の分だけダッシュボードが広がる
+    # （2026-09-21 に既定を wide から narrow へ変更）
+    assert (dashboard.width, dashboard.height) == (400 + 60 + 2 * 12, 300 + 2 * 12)
+    assert dashboard.get_containers()[0].style["padding"] == "8"
     zones = _card_zones(dashboard)
-    assert (zones["売上"].x, zones["売上"].y) == (24, 24)
-    assert (zones["利益"].x, zones["利益"].y) == (284, 24)
-    assert (zones["地域数"].x, zones["地域数"].y) == (284, 174)
+    assert (zones["売上"].x, zones["売上"].y) == (12, 12)
+    assert (zones["利益"].x, zones["利益"].y) == (272, 12)
+    assert (zones["地域数"].x, zones["地域数"].y) == (272, 162)
 
     # デザインルールの色の参照（@main_color）が実際の色コードになってカードに入る
     assert "#2f3b52" in ET.tostring(

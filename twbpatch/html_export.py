@@ -49,6 +49,11 @@ input[type=text], input[type=search], input[type=number], select { font: inherit
          padding: 4px 8px; border: 1px solid #c3cad6; border-radius: 4px; }
 input[type=number] { width: 96px; }
 label.f input[type=number] { width: 88px; font-size: 12px; padding: 3px 6px; }
+/* 文字入力で絞り込めるプルダウン（2026-09-21）。元の select は隠して値だけ持たせる */
+.combo-wrap select { display: none; }
+input.combo { min-width: 120px; }
+/* 空・重複など、そのままでは適用できない入力（2026-09-21） */
+input.bad { background: #ffe0e0; border-color: #e09090; }
 button.act { font: inherit; padding: 5px 12px; border: 1px solid #c3cad6;
              background: #fff; border-radius: 4px; cursor: pointer; }
 button.act:hover { background: #eef1f6; }
@@ -166,6 +171,51 @@ function el(tag, attrs, children) {
   }
   (children || []).forEach(child => node.appendChild(child));
   return node;
+}
+
+/* ---- プルダウンの文字入力による絞り込み（2026-09-21） ----
+   <select> を隠して <input list> + <datalist> を前に出す。打った文字で候補が絞られ、
+   呼び出し側は今までどおり select.value と change イベントで扱える。
+   新しく作られた <select> も拾えるように MutationObserver で見張る。 */
+let comboSeq = 0;
+function searchable(select) {
+  if (select.dataset.combo || select.disabled) return select;
+  select.dataset.combo = "1";
+  const listId = "combo-" + (++comboSeq);
+  const options = Array.prototype.map.call(select.options, option => ({
+    value: option.value,
+    text: option.textContent,
+    group: option.parentNode && option.parentNode.tagName === "OPTGROUP"
+      ? option.parentNode.label : "",
+  }));
+  const list = el("datalist", { id: listId },
+    options.filter(item => item.text).map(item =>
+      el("option", item.group ? { value: item.text, label: item.group }
+                              : { value: item.text })));
+  const selected = options.find(item => item.value === select.value);
+  const input = el("input", { type: "text", class: "combo", list: listId,
+                              placeholder: "入力して絞り込み",
+                              value: selected ? selected.text : "" });
+  function commit() {
+    const text = input.value.trim();
+    const hit = options.find(item => item.text === text)
+      || options.find(item => item.value === text);
+    if (hit) {
+      select.value = hit.value;
+      input.value = hit.text;
+    } else if (!text && options.some(item => !item.value)) {
+      select.value = "";
+    } else {
+      // 候補に無い文字は捨てて、選ばれている値へ戻す
+      const current = options.find(item => item.value === select.value);
+      input.value = current ? current.text : "";
+      return;
+    }
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  input.addEventListener("change", commit);
+  input.addEventListener("blur", commit);
+  return el("span", { class: "combo-wrap" }, [input, list, select]);
 }
 
 /* ---- タブ ---- */
@@ -1127,7 +1177,8 @@ function bindColor(id) {
     if (typeof renderKpiTree === "function") renderKpiTree();
   });
 }
-["d-main", "d-sub1", "d-sub2", "d-text", "d-heat-min", "d-heat-mid", "d-heat-max"]
+["d-main", "d-sub1", "d-sub2", "d-sub3", "d-text1", "d-text2", "d-border",
+ "d-heat-min", "d-heat-mid", "d-heat-max"]
   .forEach(bindColor);
 
 function designYaml() {
@@ -1137,7 +1188,11 @@ function designYaml() {
   out += "  main_color: " + yamlKey(value("d-main")) + "\n";
   out += "  sub_color_1: " + yamlKey(value("d-sub1")) + "\n";
   out += "  sub_color_2: " + yamlKey(value("d-sub2")) + "\n";
-  out += "  text_color: " + yamlKey(value("d-text")) + "\n";
+  out += "  sub_color_3: " + yamlKey(value("d-sub3")) + "\n";
+  out += "  text_color_1: " + yamlKey(value("d-text1")) + "\n";
+  out += "  text_color_2: " + yamlKey(value("d-text2")) + "\n";
+  // 枠線は色を入れたときだけ引く。空なら枠線なし
+  if (value("d-border")) out += "  border_color: " + yamlKey(value("d-border")) + "\n";
   out += "  min_color: " + yamlKey(value("d-heat-min")) + "\n";
   out += "  mid_color: " + yamlKey(value("d-heat-mid")) + "\n";
   out += "  max_color: " + yamlKey(value("d-heat-max")) + "\n";
@@ -1270,6 +1325,7 @@ function newArea() {
     datasource: 0,
     params: defaultParamsFor(chart),
     filterField: "",
+    filterRole: "dimension",
     action: { enabled: false, type: "filter", target: "", field: "" },
   };
 }
@@ -1326,6 +1382,11 @@ function uniqueName(base, used) {
 /* シート名の重複を見る相手: ダッシュボードタブ・KPI ツリータブ・.twb に既にあるシート。
    `except` は名前を付けようとしている項目自身。KPI ツリーのシート名は
    html_kpi_tree.py の kpiTreeSheetNames() から取る。 */
+/* フィルターのフィールドの種類。未設定はディメンション（2026-09-21） */
+function filterRoleOf(area) {
+  return area.filterRole === undefined ? "dimension" : area.filterRole;
+}
+
 function dashboardSheetNames(except) {
   const names = [];
   DASH.rows.forEach(row => row.areas.forEach(area => {
@@ -1338,6 +1399,15 @@ function usedSheetNames(except) {
   dashboardSheetNames(except).forEach(name => used.add(name));
   kpiTreeSheetNames(except).forEach(name => used.add(name));
   return used;
+}
+
+/* シート名が空・重複なら入力欄を薄い赤にする（2026-09-21）。
+   ダウンロード前の検証と同じ条件を、入力中にその場で見せる。 */
+function markSheetName(input, area) {
+  const name = (input.value || "").trim();
+  const bad = !name || usedSheetNames(area).has(name);
+  input.classList.toggle("bad", bad);
+  return !bad;
 }
 
 /* 手で入力したシート名の重複を、ダウンロード前の検証で出す。
@@ -1419,7 +1489,9 @@ const DESIGN_TOKENS = [
   { key: "main_color", label: "メインカラー", input: "d-main" },
   { key: "sub_color_1", label: "サブカラー①", input: "d-sub1" },
   { key: "sub_color_2", label: "サブカラー②", input: "d-sub2" },
-  { key: "text_color", label: "通常時の文字色", input: "d-text" },
+  { key: "sub_color_3", label: "サブカラー③", input: "d-sub3" },
+  { key: "text_color_1", label: "文字色①", input: "d-text1" },
+  { key: "text_color_2", label: "文字色②", input: "d-text2" },
   { key: "min_color", label: "ヒートマップ：最小値の色", input: "d-heat-min" },
   { key: "mid_color", label: "ヒートマップ：中間の色", input: "d-heat-mid" },
   { key: "max_color", label: "ヒートマップ：最大値の色", input: "d-heat-max" },
@@ -1454,7 +1526,7 @@ function colorControl(value, onChange) {
     if (!source.value) onChange(picker.value);
   });
   picker.disabled = !!token;
-  return el("span", { class: "color2" }, [source, picker]);
+  return el("span", { class: "color2" }, [searchable(source), picker]);
 }
 
 //: draw_quadrant の colors 既定値。4色そろわない場合の初期値にも使う。
@@ -1512,7 +1584,7 @@ function paramControl(area, spec) {
     control.addEventListener("input", () => { area.params[spec.name] = control.value.trim(); });
   }
   const label = (spec.label || spec.name) + (spec.required ? " *" : "");
-  const field = labeled(label, control);
+  const field = labeled(label, control.tagName === "SELECT" ? searchable(control) : control);
   field.setAttribute("title", spec.name);
   return field;
 }
@@ -1616,7 +1688,7 @@ function renderArea(row, area) {
   });
 
   card.appendChild(el("div", { class: "area-head" }, [
-    grip, kind, labeled("幅 (px)", width),
+    grip, searchable(kind), labeled("幅 (px)", width),
     el("span", { class: "spacer" }), duplicate, remove,
   ]));
 
@@ -1629,20 +1701,38 @@ function renderArea(row, area) {
   });
 
   if (area.kind === "filter") {
-    const field = el("select", {}, fieldOptions(area.datasource, area.filterField));
+    /* フィールドの前に種類（ディメンション / メジャー）を選ばせ、候補を絞る（2026-09-21）。
+       フィルターに使うのはたいていディメンションなので、既定はディメンション。 */
+    const role = el("select", {}, [
+      ["dimension", "ディメンション"], ["measure", "メジャー"], ["", "すべて"],
+    ].map(choice => el("option",
+      Object.assign({ value: choice[0], text: choice[1] },
+                    choice[0] === filterRoleOf(area) ? { selected: "selected" } : {}))));
+    const field = el("select", {},
+      fieldOptions(area.datasource, area.filterField, filterRoleOf(area) || undefined));
+    role.addEventListener("change", () => {
+      area.filterRole = role.value;
+      area.filterField = "";
+      renderRows();
+    });
     field.addEventListener("change", () => { area.filterField = field.value; });
     card.appendChild(el("div", { class: "fields" }, [
-      labeled("データソース", dsSelectEl),
-      labeled("フィールド", field),
+      labeled("データソース", searchable(dsSelectEl)),
+      labeled("種類", searchable(role)),
+      labeled("フィールド", searchable(field)),
     ]));
   } else {
     const sheet = el("input", { type: "text", value: area.sheet, placeholder: "シート名" });
-    sheet.addEventListener("input", () => { area.sheet = sheet.value.trim(); });
+    sheet.addEventListener("input", () => {
+      area.sheet = sheet.value.trim();
+      markSheetName(sheet, area);
+    });
+    markSheetName(sheet, area);
     const genName = el("button", { class: "mini", text: "✎",
       title: "グラフ種類と選んだ項目からシート名を生成" });
     genName.addEventListener("click", () => {
       const generated = generateSheetName(area);
-      if (generated) { area.sheet = generated; sheet.value = generated; }
+      if (generated) { area.sheet = generated; sheet.value = generated; markSheetName(sheet, area); }
     });
     const sheetWrap = el("span", { class: "name-gen" }, [sheet, genName]);
 
@@ -1657,8 +1747,8 @@ function renderArea(row, area) {
 
     const head = el("div", { class: "fields" }, [
       labeled("シート名", sheetWrap),
-      labeled("グラフ種類", chart),
-      labeled("データソース", dsSelectEl),
+      labeled("グラフ種類", searchable(chart)),
+      labeled("データソース", searchable(dsSelectEl)),
     ]);
     card.appendChild(head);
 
@@ -1698,7 +1788,7 @@ function renderArea(row, area) {
       area.action.type = type.value;
       renderRows();
     });
-    actionBox.appendChild(labeled("種類", type));
+    actionBox.appendChild(labeled("種類", searchable(type)));
 
     if (area.action.type === "filter") {
       const target = el("input", { type: "text", value: area.action.target,
@@ -1710,7 +1800,7 @@ function renderArea(row, area) {
       const field = el("select", {},
                        fieldOptions(area.datasource, area.action.field, "dimension"));
       field.addEventListener("change", () => { area.action.field = field.value; });
-      actionBox.appendChild(labeled("絞り込むフィールド", field));
+      actionBox.appendChild(labeled("絞り込むフィールド", searchable(field)));
     } else {
       const url = el("input", { type: "text", value: area.action.target,
                                 placeholder: "https://" });
@@ -1734,7 +1824,8 @@ function moveRow(row, delta) {
 function renderRow(row, index) {
   const name = el("input", { type: "text", value: row.name, placeholder: "段の名前" });
   name.addEventListener("input", () => { row.name = name.value.trim(); });
-  const height = el("input", { type: "number", step: "10", min: "0", value: row.height });
+  /* 段の高さは 60 刻み（2026-09-21）。カード 150 の倍数まわりで揃えやすくする */
+  const height = el("input", { type: "number", step: "60", min: "0", value: row.height });
   height.addEventListener("input", () => { row.height = height.value.trim(); });
 
   const up = el("button", { class: "mini", text: "↑", title: "上へ" });
@@ -1973,38 +2064,50 @@ _BODY = """
       <select id="d-font">__FONT_OPTIONS__</select>
       <label for="d-main">メインカラーコード</label>
       <span class="color">
-        <input type="color" id="d-main-pick"><input type="text" id="d-main" value="#2f3b52">
+        <input type="color" id="d-main-pick"><input type="text" id="d-main" value="#2366e1">
       </span>
       <label for="d-sub1">サブカラー&#9312;</label>
       <span class="color">
-        <input type="color" id="d-sub1-pick"><input type="text" id="d-sub1" value="#4a7dff">
+        <input type="color" id="d-sub1-pick"><input type="text" id="d-sub1" value="#ce70f0">
       </span>
       <label for="d-sub2">サブカラー&#9313;</label>
       <span class="color">
-        <input type="color" id="d-sub2-pick"><input type="text" id="d-sub2" value="#c0c0c0">
+        <input type="color" id="d-sub2-pick"><input type="text" id="d-sub2" value="#ccd500">
       </span>
-      <label for="d-text">通常時の文字色</label>
+      <label for="d-sub3">サブカラー&#9314;</label>
       <span class="color">
-        <input type="color" id="d-text-pick"><input type="text" id="d-text" value="#333333">
+        <input type="color" id="d-sub3-pick"><input type="text" id="d-sub3" value="#4a9ca5">
+      </span>
+      <label for="d-text1">文字色&#9312;</label>
+      <span class="color">
+        <input type="color" id="d-text1-pick"><input type="text" id="d-text1" value="#202020">
+      </span>
+      <label for="d-text2">文字色&#9313;</label>
+      <span class="color">
+        <input type="color" id="d-text2-pick"><input type="text" id="d-text2" value="#4e4e4e">
+      </span>
+      <label for="d-border">枠線の色</label>
+      <span class="color">
+        <input type="color" id="d-border-pick"><input type="text" id="d-border" value="">
       </span>
       <label for="d-heat-min">ヒートマップ：最小値の色</label>
       <span class="color">
-        <input type="color" id="d-heat-min-pick"><input type="text" id="d-heat-min" value="#2166ac">
+        <input type="color" id="d-heat-min-pick"><input type="text" id="d-heat-min" value="#ce70f0">
       </span>
       <label for="d-heat-mid">ヒートマップ：中間の色</label>
       <span class="color">
-        <input type="color" id="d-heat-mid-pick"><input type="text" id="d-heat-mid" value="#f7f7f7">
+        <input type="color" id="d-heat-mid-pick"><input type="text" id="d-heat-mid" value="#ffffff">
       </span>
       <label for="d-heat-max">ヒートマップ：最大値の色</label>
       <span class="color">
-        <input type="color" id="d-heat-max-pick"><input type="text" id="d-heat-max" value="#b2182b">
+        <input type="color" id="d-heat-max-pick"><input type="text" id="d-heat-max" value="#2366e1">
       </span>
       <label for="d-apply">フィルターに「適用」ボタン</label>
       <span><input type="checkbox" id="d-apply"> 入れる</span>
       <label>余白</label>
       <span>
-        <label><input type="radio" name="d-space" value="wide" checked> 多め</label>
-        <label><input type="radio" name="d-space" value="narrow"> 少なめ</label>
+        <label><input type="radio" name="d-space" value="wide"> 広い</label>
+        <label><input type="radio" name="d-space" value="narrow" checked> 狭い</label>
       </span>
     </div>
   </div>
@@ -2218,11 +2321,11 @@ _PARAM_LABELS = {
     "descending": "降順にする",
     "visible": "シートを表示する",
     "title": "タイトル",
-    "main_metric": "主メジャー",
-    "sub_metric": "副メジャー",
-    "main_aggregation": "主メジャーの集計",
-    "sub_aggregation": "副メジャーの集計",
-    "main_color": "主な色",
+    "main_metric": "メインメジャー",
+    "sub_metric": "サブメジャー",
+    "main_aggregation": "メインメジャーの集計",
+    "sub_aggregation": "サブメジャーの集計",
+    "main_color": "メインカラー",
     "value_color": "数値の色",
     "title_background_color": "タイトルの背景色",
     "vertical_alignment": "縦の揃え",
@@ -2349,6 +2452,32 @@ def _embed_json(data: dict[str, Any]) -> str:
     return text.replace("</", "<\\/")
 
 
+#: データソースそのものを表す擬似フィールド（Tableau のオブジェクト）。
+#: 改名もフォルダ分類もできないので画面に出さない（2026-09-21）。
+_OBJECT_FIELD_PREFIX = "[__tableau_internal_object_id__]"
+
+
+def _without_object_fields(data: dict[str, Any]) -> dict[str, Any]:
+    datasources = data.get("datasources")
+    if not isinstance(datasources, list):
+        return data
+    data = dict(data)
+    data["datasources"] = [
+        {
+            **datasource,
+            "fields": [
+                field
+                for field in datasource.get("fields", [])
+                if not str(field.get("id") or "").startswith(_OBJECT_FIELD_PREFIX)
+            ],
+        }
+        if isinstance(datasource, dict)
+        else datasource
+        for datasource in datasources
+    ]
+    return data
+
+
 def render_workbook_html(
     data: dict[str, Any],
     *,
@@ -2357,6 +2486,7 @@ def render_workbook_html(
 ) -> str:
     from .html_kpi_tree import KPI_TREE_NAV, KPI_TREE_SCRIPT, KPI_TREE_SECTION, KPI_TREE_STYLE
 
+    data = _without_object_fields(data)
     body = (
         _BODY.replace("__FONT_OPTIONS__", _font_options(font))
         .replace("__KPI_TREE_NAV__", KPI_TREE_NAV)

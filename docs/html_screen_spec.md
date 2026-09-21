@@ -73,11 +73,12 @@ TwbWorkbook.export_html(
 |---|---|---|
 | フォント | 選択式（19 件） | `set_default_font()` |
 | メインカラー | 色見本 + 16 進表記 | **なし** |
-| サブカラー①② | 同上 | **なし** |
-| 通常時の文字色 | 同上 | **なし**（`set_default_font()` は `font-family` しか書かない） |
+| サブカラー①②③ | 同上 | **なし**（③は 2026-09-21 追加） |
+| 文字色①② | 同上 | **なし**（`set_default_font()` は `font-family` しか書かない）。2026-09-21 に `text_color` を ①② の 2 つへ分けた |
+| 枠線の色 | 同上（既定は空） | `build_report(border_color=)` / `build_kpi_tree(border_color=)`。**色を入れたときだけ**ゾーンに枠線（solid・幅 1）を引く（2026-09-21 追加） |
 | ヒートマップ：最小値/中間/最大値の色 | 同上（既定 `#2166ac` / `#f7f7f7` / `#b2182b`） | **なし**。`draw_crosstab` の `min_color`/`mid_color`/`max_color` から `@min_color` 等で参照する専用（2026-09-12 追加） |
 | フィルターに「適用」ボタン | チェック | **なし**。XML 上の表現も未調査 |
-| 余白 | 多め / 少なめ | `build_report()` の `content_style` に相当 |
+| 余白 | 広い / 狭い（**既定は狭い**、2026-09-21 に「多め / 少なめ」から改称し既定を変更） | `build_report()` の `content_style` に相当 |
 
 フォント候補は `FONT_CHOICES`。Tableau Desktop の既定（Tableau Book / Medium / Regular）と
 Windows・macOS の日本語標準フォントを並べる。
@@ -259,8 +260,8 @@ Tableau の関数を一通り実装することになるため、**画面で入�
   入力欄の文字選択ができなくなるため
 - 段は折り畳める。畳むと見出しに「エリア N 件」だけが残る
 - エリアの表示幅は **360px 固定**で、段の中を横スクロールする
-- px の入力（ダッシュボードの幅・高さ、段の高さ、エリアの幅）は 10 刻み。
-  既定は段の高さ 300、エリアの幅 600
+- px の入力（ダッシュボードの幅・高さ、エリアの幅）は 10 刻み。**段の高さだけ 60 刻み**
+  （2026-09-21 に 10 から変更）。既定は段の高さ 300、エリアの幅 600
 - エリアは「複製」ボタン（⧉）で同じ段の直後にコピーできる（2026-09-08 追加）。
   `params` / `action` を含めて複製し、シート名はそのままコピーする（重複チェックは
   シート名生成ボタン側で行うため、複製時点では変えない）
@@ -270,10 +271,18 @@ Tableau の関数を一通り実装することになるため、**画面で入�
 | 種別 | 入力 |
 |---|---|
 | グラフ | シート名 / グラフ種類 / データソース / グラフパラメータ |
-| フィルター | データソース / フィールド |
+| フィルター | データソース / 種類（ディメンション / メジャー / すべて） / フィールド |
+
+**シート名が空、または他と重複していると入力欄を薄い赤にする**（2026-09-21）。
+判定はダウンロード前の検証と同じで、`.twb` の既存シート・ダッシュボードタブ・
+KPI ツリータブのシート名を見る。
 
 **シート名は右隣のボタン（✎）でグラフ種類と選んだ項目から自動生成できる**（2026-09-08
 追加、手入力も可）。`{短縮ラベル}|{フィールド名}`（複数は `×` で連結）の形。
+
+**プルダウンはすべて文字入力で絞り込める**（2026-09-21）。`searchable()` が `<select>` を隠して
+`<input list>` + `<datalist>` を前に出す。候補に無い文字を入れた場合は捨てて、選ばれている値へ戻す。
+呼び出し側は今までどおり `select.value` と change イベントで扱う。
 
 **選択肢の並び順は `_CHART_LABELS` の順**（2026-09-21。よく使う順に固定した。
 以前はメソッド名の名前順だった）。下の表もその順に並べる。
@@ -393,7 +402,13 @@ KPI ツリータブのシート名と `.twb` に既にあるシート。エリ�
 | 項目 / 横の項目 / 縦の項目 / 順位の区切り | ディメンションのみ |
 | メジャー / 主メジャー / 横軸のメジャー / 色のメジャー など | メジャーのみ |
 
-非表示のフィールドは候補から外す。フィルターのフィールド欄は種類を問わないので絞らない。
+非表示のフィールドは候補から外す。**データソースそのものを表す擬似フィールド
+（`[__tableau_internal_object_id__]` で始まるもの）は画面に出さない**（2026-09-21。改名も
+フォルダ分類もできないのに、リネーム・フォルダ設定の表に並んでいた）。`export_json()` は
+絞り込まず `.twb` のままを返す。
+
+**フィルターは種類を選んでからフィールドを選ぶ**（2026-09-21）。既定はディメンション。
+「すべて」を選べば従来どおり全フィールドから選べる。
 
 **フィールドの候補はフォルダごとに `<optgroup>` でまとめる**（2026-09-12 追加）。
 プルダウンは1つのまま、フォルダを見出しにしてフィールドを分類する。フォルダ未指定の
@@ -508,9 +523,12 @@ design:
   main_color: "#2f3b52"
   sub_color_1: "#4a7dff"
   sub_color_2: "#c0c0c0"
-  text_color: "#333333"
+  sub_color_3: "#8c9bb5"
+  text_color_1: "#333333"
+  text_color_2: "#555555"
+  border_color: "#334455"  # 空なら枠線なし（キーごと出さない）
   filter_apply_button: false
-  spacing: "wide"          # wide / narrow
+  spacing: "narrow"        # wide（広い）/ narrow（狭い）。画面・受け手とも既定は narrow
 
 datasources:
   "データソース名":
@@ -596,7 +614,7 @@ kpi_tree:
 | `areas[].action` | `dashboard.create_action()` |
 | `design.font` | `set_default_font()`（`apply_config()` から適用済み） |
 | `design` の色 | `draw_*()` の色引数。`@main_color` を実際の色コードへ解決して渡す |
-| `design.spacing` | `build_report(content_style=, spacing_scale=)`。台紙は `wide` が `margin 8 / padding 16`、`narrow` が `margin 4 / padding 8`。`wide` のときはグラフごとのゾーンの余白も 1.5 倍（`spacing_scale=1.5`。0 は 0 のまま） |
+| `design.spacing` | `build_report(content_style=, spacing_scale=)`。台紙は `wide` が `margin 8 / padding 16`、`narrow` が `margin 4 / padding 8`。`wide` のときはグラフごとのゾーンの余白も 1.5 倍（`spacing_scale=1.5`。0 は 0 のまま）。**`spacing` が無いときの受け手の既定も `narrow`**（2026-09-21 に画面と揃えた） |
 | `design.filter_apply_button` | `build_report(filter_apply_button=)` |
 | `kpi_tree.name` / `align` | `build_kpi_tree(dashboard_name=, align=, edges=align == "top")`。.hyper は同梱のものを `save()` が .twb の隣へ置く |
 | `kpi_tree.datasource` + ノードの `sheet` / `params` | ノードごとに `draw_card()`（エリアと同じ `_draw_area()` を通す） |

@@ -441,6 +441,7 @@ class TwbWorkbook:
         edge_hyper: str | None = None,
         content_style: dict[str, str | int | None] | None = None,
         spacing_scale: float = 1.0,
+        border_color: str | None = None,
     ) -> ConnectedDashboard:
         from .kpi_tree import build_kpi_tree
 
@@ -453,6 +454,7 @@ class TwbWorkbook:
             edge_hyper=edge_hyper,
             content_style=content_style,
             spacing_scale=spacing_scale,
+            border_color=border_color,
         )
 
     def draw_quadrant(

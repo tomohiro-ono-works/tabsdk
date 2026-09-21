@@ -92,7 +92,7 @@ logging.basicConfig(level=logging.WARNING)
 |---|---|
 | 全体のフォント | `set_default_font()` |
 | メインカラー / サブカラー / 文字色 | グラフの色に `@main_color` と書くと解決される |
-| 余白 多め / 少なめ | `build_report(content_style=)` |
+| 余白 広い / 狭い | `build_report(content_style=)` |
 | フィルターに「適用」ボタン | `build_report(filter_apply_button=)` |
 | リネーム・フォルダ | `apply_field_config()` |
 | リネーム（フォルダ未指定） | フィールドを解決して `field.update(name=)` |
