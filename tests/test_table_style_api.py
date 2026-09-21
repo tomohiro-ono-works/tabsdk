@@ -174,27 +174,3 @@ def test_draw_card_builds_formatted_main_and_sub_metrics(tmp_path) -> None:
     assert not [message for message in workbook.validate() if message.severity == "error"]
 
 
-def test_draw_yoy_uses_continuous_month_date(tmp_path) -> None:
-
-    workbook = _workbook(tmp_path)
-    datasource = workbook.get_datasources()[0]
-    worksheet = workbook.draw_yoy(
-        datasource,
-        name="時系列",
-        item="注文日",
-        metric="売上",
-    )
-
-    assert worksheet._resolve_element().xpath("string(./table/cols)") == (
-        "[ds1].[tmn:Order Date:qk]"
-    )
-    date = worksheet.get_fields(name="注文日")[0]
-    assert date.date_level == "month"
-    assert date.discrete is False
-    assert date.aggregation is None
-    instance = worksheet._resolve_element().xpath(
-        ".//*[local-name()='column-instance'][@column='[Order Date]']"
-    )[0]
-    assert instance.get("derivation") == "Month-Trunc"
-    assert worksheet.get_panes()[0].mark_type == "line"
-    assert not [message for message in workbook.validate() if message.severity == "error"]

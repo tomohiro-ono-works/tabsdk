@@ -12,9 +12,13 @@ nav { position: sticky; top: 0; z-index: 10; display: flex; gap: 3px; align-item
 nav button { border: 0; padding: 6px 14px; margin-top: 4px; font: inherit; cursor: pointer;
              background: #46536e; color: #dbe1ec; border-radius: 5px 5px 0 0; }
 nav button.active { background: #f6f7f9; color: #222; font-weight: 600; }
-nav button.dl { margin: 4px 0 4px 18px; border-radius: 4px; background: #4a7dff; color: #fff;
-                font-weight: 600; }
-nav button.dl:hover { background: #3a68e0; }
+/* YAML のダウンロードはタブごと（2026-09-14）。タブの右上に置く */
+.tab-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px;
+               margin-bottom: 12px; }
+.tab-actions .tag { font-size: 11px; color: #6b7688; }
+button.dl { font: inherit; padding: 5px 14px; border: 0; border-radius: 4px; cursor: pointer;
+            background: #4a7dff; color: #fff; font-weight: 600; }
+button.dl:hover { background: #3a68e0; }
 nav .meta { margin-left: 14px; color: #c7d0e0; font-size: 11px; line-height: 1.35;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 nav .meta b { color: #fff; font-weight: 600; margin-right: 8px; }
@@ -1116,9 +1120,11 @@ function bindColor(id) {
   text.addEventListener("input", () => {
     if (/^#[0-9a-fA-F]{6}$/.test(text.value.trim())) picker.value = text.value.trim();
     if (typeof renderRows === "function") renderRows();
+    if (typeof renderKpiTree === "function") renderKpiTree();
   });
   picker.addEventListener("input", () => {
     if (typeof renderRows === "function") renderRows();
+    if (typeof renderKpiTree === "function") renderKpiTree();
   });
 }
 ["d-main", "d-sub1", "d-sub2", "d-text", "d-heat-min", "d-heat-mid", "d-heat-max"]
@@ -1142,15 +1148,20 @@ function designYaml() {
   return out;
 }
 
-/* ---- YAML 出力（全タブ分を 1 ファイルに） ---- */
-function buildYaml() {
-  captureCurrent();
-  let out = "# twbpatch 設定ファイル\n";
+/* ---- YAML 出力（タブごとに、そのタブで使う節だけを出す、2026-09-14） ----
+   以前は全タブを 1 ファイルに束ねていたが、ダッシュボードタブを使わなくても
+   dashboard: 節（段 0）が出て、適用すると空のダッシュボードが増えていた。
+   データソースの節は 2 回適用しても上書きになるので、各タブのファイルに入れてよい。 */
+function yamlHeader(sections) {
+  let out = "# twbpatch 設定ファイル（" + sections.join(" / ") + "）\n";
   out += "# 受け手: wb.apply_config() がこのファイルを読んで .twb へ反映する。\n";
-  out += "# design の色・余白・適用ボタンは dashboard を組むときに使う。\n";
   out += "# 集計方法は画面で指定しない。役割とデータ型から自動で決める。\n\n";
-  out += designYaml();
-  out += "\ndatasources:\n";
+  return out;
+}
+
+function datasourcesYaml() {
+  captureCurrent();
+  let out = "datasources:\n";
   let wrote = false;
   DATA.datasources.forEach((ds, index) => {
     const state = EDITS[index];
@@ -1199,11 +1210,10 @@ function buildYaml() {
     }
   });
   if (!wrote) out += "  {}\n";
-  out += "\n" + dashboardYaml();
   return out;
 }
 
-document.getElementById("yaml-download").addEventListener("click", () => {
+function datasourceErrors() {
   captureCurrent();
   const errors = [];
   DATA.datasources.forEach((ds, index) => {
@@ -1215,12 +1225,20 @@ document.getElementById("yaml-download").addEventListener("click", () => {
       errors.push((ds.name || ds.id) + ": " + message);
     });
   });
-  errors.push.apply(errors, validateDashboard());
+  return errors;
+}
+
+function downloadYaml(fileName, errors, build) {
   if (errors.length) {
     alert("エラーを直してから出力してください。\n\n" + errors.join("\n"));
     return;
   }
-  download("twbpatch_config.yaml", buildYaml());
+  download(fileName, build());
+}
+
+document.getElementById("yaml-download-datasources").addEventListener("click", () => {
+  downloadYaml("twbpatch_datasources.yaml", datasourceErrors(),
+               () => yamlHeader(["datasources"]) + datasourcesYaml());
 });
 
 /* ---- ダッシュボードタブ（新規作成） ---- */
@@ -1267,15 +1285,13 @@ function cloneArea(area) {
 }
 
 /* シート名の自動生成: グラフ種類ごとに使うフィールドを決め、{短縮ラベル}|{フィールド} で組む。
-   複数選択の項目は limit で使う件数を絞る（前年比の時系列・前年差帳票はメイン指標①のみ）。 */
+   複数選択の項目は limit で使う件数を絞る。 */
 const SHEET_NAME_PATTERNS = {
   draw_card: { label: "スコア", fields: [{ name: "main_metric" }] },
   draw_bar: { label: "棒", fields: [{ name: "item" }, { name: "metric" }] },
-  draw_yoy: { label: "時系列", fields: [{ name: "metric" }] },
   draw_quadrant: { label: "象限", fields: [{ name: "x_metric" }, { name: "y_metric" }] },
   draw_crosstab: { label: "クロス", fields: [{ name: "x_item" }, { name: "y_item" }] },
   draw_sheet: { label: "帳票", fields: [{ name: "items", limit: 2 }] },
-  draw_colored_yoy_sheet: { label: "前年差", fields: [{ name: "metrics", limit: 1 }] },
 };
 function fieldPartsOf(area, spec) {
   const value = area.params[spec.name];
@@ -1292,15 +1308,65 @@ function generateSheetName(area) {
     .filter(values => values.length)
     .map(values => values.join(","));
   if (!parts.length) return "";
-  const base = pattern.label + "|" + parts.join("×");
-  const used = new Set();
-  DASH.rows.forEach(row => row.areas.forEach(other => {
-    if (other !== area && other.sheet) used.add(other.sheet);
-  }));
+  return uniqueName(pattern.label + "|" + parts.join("×"), usedSheetNames(area));
+}
+
+/* 名前が重複したら「 (2)」「 (3)」…を付ける（2026-09-14）。受け手（apply_config）では付けない。
+   受け手で付けると、同じ YAML を誤って 2 回適用しても止まらずに黙って増え、
+   アクションの対象シート（名前で指定）もずれるため。 */
+function uniqueName(base, used) {
   if (!used.has(base)) return base;
+  // 「売上 (2)」を複製したら「売上 (2) (2)」ではなく「売上 (3)」にする
+  const stem = base.replace(/ \(\d+\)$/, "");
   let n = 2;
-  while (used.has(base + "_" + n)) n += 1;
-  return base + "_" + n;
+  while (used.has(stem + " (" + n + ")")) n += 1;
+  return stem + " (" + n + ")";
+}
+
+/* シート名の重複を見る相手: ダッシュボードタブ・KPI ツリータブ・.twb に既にあるシート。
+   `except` は名前を付けようとしている項目自身。KPI ツリーのシート名は
+   html_kpi_tree.py の kpiTreeSheetNames() から取る。 */
+function dashboardSheetNames(except) {
+  const names = [];
+  DASH.rows.forEach(row => row.areas.forEach(area => {
+    if (area !== except && area.kind === "worksheet" && area.sheet) names.push(area.sheet);
+  }));
+  return names;
+}
+function usedSheetNames(except) {
+  const used = new Set((DATA.worksheets || []).map(ws => ws.name));
+  dashboardSheetNames(except).forEach(name => used.add(name));
+  kpiTreeSheetNames(except).forEach(name => used.add(name));
+  return used;
+}
+
+/* 手で入力したシート名の重複を、ダウンロード前の検証で出す。
+   `names` はそのタブのシート名（[名前, 表示用の場所] の組）、`others` は別タブのシート名。 */
+function duplicateSheetErrors(names, others, otherLabel) {
+  const errors = [];
+  const existing = new Set((DATA.worksheets || []).map(ws => ws.name));
+  const other = new Set(others);
+  const seen = new Set();
+  names.forEach(([name, label]) => {
+    if (!name) return;
+    if (seen.has(name)) errors.push(label + ": シート名「" + name + "」がこのタブの中で重複");
+    else if (existing.has(name)) errors.push(label + ": シート名「" + name + "」は .twb に既にある");
+    else if (other.has(name)) errors.push(label + ": シート名「" + name + "」が" + otherLabel + "と重複");
+    seen.add(name);
+  });
+  return errors;
+}
+
+/* ダッシュボード名の重複。別タブの名前は、そのタブを使っているときだけ渡す */
+function duplicateDashboardErrors(name, label, otherName, otherLabel) {
+  if (!name) return [label + ": ダッシュボード名が空"];
+  if ((DATA.dashboards || []).some(db => db.name === name)) {
+    return [label + ": ダッシュボード名「" + name + "」は .twb に既にある"];
+  }
+  if (otherName && otherName === name) {
+    return [label + ": ダッシュボード名「" + name + "」が" + otherLabel + "と重複"];
+  }
+  return [];
 }
 
 function dsOptions(selected) {
@@ -1517,6 +1583,7 @@ function renderArea(row, area) {
   duplicate.addEventListener("click", () => {
     const copy = cloneArea(area);
     row.areas.splice(row.areas.indexOf(area) + 1, 0, copy);
+    if (copy.sheet) copy.sheet = uniqueName(copy.sheet, usedSheetNames(copy));
     renderRows();
   });
 
@@ -1758,6 +1825,16 @@ renderRows();
    そのまま apply_config() の TypeError になっていた（2026-09-08 バグ修正）。 */
 function validateDashboard() {
   const errors = [];
+  if (!DASH.rows.length) return ["ダッシュボード: 段がありません"];
+  errors.push.apply(errors, duplicateDashboardErrors(
+    document.getElementById("db-name").value.trim(), "ダッシュボード",
+    kpiTreeDashboardName(), "KPI ツリータブ"));
+  const sheets = [];
+  DASH.rows.forEach((row, rowIndex) => row.areas.forEach((area, areaIndex) => {
+    if (area.kind !== "worksheet") return;
+    sheets.push([area.sheet, (row.name || ("段" + (rowIndex + 1))) + " / エリア" + (areaIndex + 1)]);
+  }));
+  errors.push.apply(errors, duplicateSheetErrors(sheets, kpiTreeSheetNames(null), "KPI ツリータブ"));
   DASH.rows.forEach((row, rowIndex) => {
     const rowLabel = row.name || ("段" + (rowIndex + 1));
     row.areas.forEach((area, areaIndex) => {
@@ -1787,6 +1864,44 @@ function validateDashboard() {
   return errors;
 }
 
+/* グラフの引数を `params:` として書く。`pad` は `params:` の行の字下げ。
+   KPI ツリーのノードも同じ形で書く（html_kpi_tree.py）。 */
+function paramsYaml(chart, source, pad) {
+  // value_color と title_background_color は画面に出さず main_color を
+  // そのまま複製する（draw_card 固有、2026-09-12, 2026-09-13）
+  const params = Object.assign({}, source);
+  if (chart === "draw_card" && params.main_color) {
+    params.value_color = params.main_color;
+    params.title_background_color = params.main_color;
+  }
+  const names = Object.keys(params).filter(key => {
+    const v = params[key];
+    return v !== "" && v !== undefined && !(Array.isArray(v) && !v.length);
+  });
+  if (!names.length) return "";
+  let out = pad + "params:\n";
+  names.forEach(key => {
+    const v = params[key];
+    if (Array.isArray(v)) {
+      out += pad + "  " + key + ":\n";
+      v.forEach(item => { out += pad + "    - " + yamlKey(item) + "\n"; });
+    } else if (typeof v === "boolean") {
+      out += pad + "  " + key + ": " + (v ? "true" : "false") + "\n";
+    } else {
+      out += pad + "  " + key + ": " + yamlKey(v) + "\n";
+    }
+  });
+  return out;
+}
+
+document.getElementById("yaml-download-dashboard").addEventListener("click", () => {
+  const errors = datasourceErrors();
+  errors.push.apply(errors, validateDashboard());
+  downloadYaml("twbpatch_dashboard.yaml", errors, () =>
+    yamlHeader(["design", "datasources", "dashboard"])
+    + designYaml() + "\n" + datasourcesYaml() + "\n" + dashboardYaml());
+});
+
 function dashboardYaml() {
   const value = id => document.getElementById(id).value.trim();
   let out = "dashboard:\n";
@@ -1814,31 +1929,7 @@ function dashboardYaml() {
       } else {
         out += "          sheet: " + yamlKey(area.sheet) + "\n";
         out += "          chart: " + yamlKey(area.chart) + "\n";
-        // value_color と title_background_color は画面に出さず main_color を
-        // そのまま複製する（draw_card 固有、2026-09-12, 2026-09-13）
-        const params = Object.assign({}, area.params);
-        if (area.chart === "draw_card" && params.main_color) {
-          params.value_color = params.main_color;
-          params.title_background_color = params.main_color;
-        }
-        const names = Object.keys(params).filter(key => {
-          const v = params[key];
-          return v !== "" && v !== undefined && !(Array.isArray(v) && !v.length);
-        });
-        if (names.length) {
-          out += "          params:\n";
-          names.forEach(key => {
-            const v = params[key];
-            if (Array.isArray(v)) {
-              out += "            " + key + ":\n";
-              v.forEach(item => { out += "              - " + yamlKey(item) + "\n"; });
-            } else if (typeof v === "boolean") {
-              out += "            " + key + ": " + (v ? "true" : "false") + "\n";
-            } else {
-              out += "            " + key + ": " + yamlKey(v) + "\n";
-            }
-          });
-        }
+        out += paramsYaml(area.chart, area.params, "          ");
       }
       if (area.action.enabled) {
         out += "          action:\n";
@@ -1867,7 +1958,7 @@ _BODY = """
   <button data-tab="tab-design">全体（デザインルール）</button>
   <button data-tab="tab-datasource" class="active">データソース</button>
   <button data-tab="tab-dashboard">ダッシュボード</button>
-  <button class="dl" id="yaml-download">設定 YAML をダウンロード</button>
+  __KPI_TREE_NAV__
   <span class="meta"><b>__TITLE__</b>
     データソース __DS_COUNT__ 件・ワークシート __WS_COUNT__ 件・ダッシュボード __DB_COUNT__ 件</span>
 </nav>
@@ -1920,6 +2011,10 @@ _BODY = """
 </section>
 
 <section id="tab-datasource" class="active">
+  <div class="tab-actions">
+    <span class="tag">出力: データソース</span>
+    <button class="dl" id="yaml-download-datasources">設定 YAML をダウンロード</button>
+  </div>
   <div class="toolbar">
     <label for="ds-select">データソース</label>
     <select id="ds-select"></select>
@@ -1979,6 +2074,10 @@ _BODY = """
 </section>
 
 <section id="tab-dashboard">
+  <div class="tab-actions">
+    <span class="tag">出力: デザインルール ＋ データソース ＋ ダッシュボード</span>
+    <button class="dl" id="yaml-download-dashboard">設定 YAML をダウンロード</button>
+  </div>
   <div class="panel acc open" id="acc-dashboard">
     <h2 class="acc-head">ダッシュボード <span class="todo">受け手は未実装</span></h2>
     <div class="acc-body">
@@ -2025,6 +2124,8 @@ _BODY = """
   </div>
 
 </section>
+
+__KPI_TREE_SECTION__
 
 </main>
 """
@@ -2078,14 +2179,13 @@ def _is_skipped(name: str) -> bool:
     return name in _DRAW_SKIP or name == "aggregation" or name.endswith("_aggregation")
 
 #: グラフ種類の表示名。仕様 §6.14 の説明に合わせる。
+#: **この並び順がそのまま画面の選択肢の順になる**（2026-09-21。よく使う順）。
 _CHART_LABELS = {
-    "draw_sheet": "帳票",
-    "draw_bar": "棒グラフ",
-    "draw_yoy": "前年比の時系列",
     "draw_card": "KPIカード",
-    "draw_quadrant": "散布図（四象限）",
+    "draw_bar": "棒グラフ",
+    "draw_sheet": "帳票",
     "draw_crosstab": "クロス集計（ヒートマップ）",
-    "draw_colored_yoy_sheet": "前年差を色分けした帳票",
+    "draw_quadrant": "散布図（四象限）",
 }
 
 #: フィールドを取る引数が、ディメンションとメジャーのどちらを求めるか。
@@ -2192,9 +2292,14 @@ def _draw_specs() -> dict[str, dict[str, Any]]:
     from .workbook import TwbWorkbook
 
     specs: dict[str, dict[str, Any]] = {}
-    for method_name in sorted(dir(TwbWorkbook)):
-        if not method_name.startswith("draw_"):
-            continue
+    # 画面の選択肢は _CHART_LABELS の並び順。表示名の無いものは後ろに名前順で足す。
+    names = [name for name in _CHART_LABELS if hasattr(TwbWorkbook, name)]
+    names += [
+        name
+        for name in sorted(dir(TwbWorkbook))
+        if name.startswith("draw_") and name not in _CHART_LABELS
+    ]
+    for method_name in names:
         signature = inspect.signature(getattr(TwbWorkbook, method_name))
         params = []
         for parameter in signature.parameters.values():
@@ -2250,17 +2355,21 @@ def render_workbook_html(
     title: str = "twbpatch 設定",
     font: str = "Meiryo UI",
 ) -> str:
+    from .html_kpi_tree import KPI_TREE_NAV, KPI_TREE_SCRIPT, KPI_TREE_SECTION, KPI_TREE_STYLE
+
     body = (
         _BODY.replace("__FONT_OPTIONS__", _font_options(font))
+        .replace("__KPI_TREE_NAV__", KPI_TREE_NAV)
+        .replace("__KPI_TREE_SECTION__", KPI_TREE_SECTION)
         .replace("__TITLE__", _escape(title))
         .replace("__DS_COUNT__", str(len(data.get("datasources", []))))
         .replace("__WS_COUNT__", str(len(data.get("worksheets", []))))
         .replace("__DB_COUNT__", str(len(data.get("dashboards", []))))
     )
     return (
-        _TEMPLATE.replace("__STYLE__", _STYLE)
+        _TEMPLATE.replace("__STYLE__", _STYLE + KPI_TREE_STYLE)
         .replace("__BODY__", body)
-        .replace("__SCRIPT__", _SCRIPT)
+        .replace("__SCRIPT__", _SCRIPT + KPI_TREE_SCRIPT)
         .replace("__DATA__", _embed_json(data))
         .replace("__DRAW_SPECS__", _embed_json(_draw_specs()))
         .replace("__TITLE__", _escape(title))

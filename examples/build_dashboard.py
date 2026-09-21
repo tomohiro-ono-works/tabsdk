@@ -8,8 +8,8 @@
 このファイル 1 本で以下をカバーする。
 
 1. フィールド整理     apply_field_config() による英名 → 和名・フォルダ分類
-2. 計算フィールド     create_calculated_field(s) / create_yoy_calculated_fields()
-3. グラフ生成         draw_* 7 種
+2. 計算フィールド     create_calculated_field(s)
+3. グラフ生成         draw_* 5 種
 4. 表スタイル         update(table_style=...) / set_title()
 5. ダッシュボード     build_report() と create_container() の 2 通り
 6. ペイン直接操作     draw_* に無いグラフ（円グラフ）を get_panes() で作る
@@ -29,8 +29,6 @@ OUTPUT = ROOT / "outputs" / "example_dashboard.twb"
 
 DATASOURCE = "EC Orders"
 DASHBOARD = "ECサイト分析ダッシュボード"
-YEAR_CATEGORY = "当年昨年区分"
-YOY_METRICS = ("売上", "利益")
 
 
 def main() -> None:
@@ -59,34 +57,12 @@ def main() -> None:
         role="measure",
         discrete=True,
     )
-    # 前年差の計算フィールド群。年区分のフィールドが前提になる。
-    yoy_folder = datasource.create_folder(name="前年差")
-    datasource.create_calculated_field(
-        name=YEAR_CATEGORY,
-        formula='IIF(YEAR([注文日]) = YEAR(TODAY()), "当年", "昨年")',
-        datatype="string",
-        role="dimension",
-        discrete=True,
-        folder=yoy_folder,
-    )
-    for metric in YOY_METRICS:
-        datasource.create_yoy_calculated_fields(
-            metric=metric,
-            year_category=YEAR_CATEGORY,
-            folder=yoy_folder,
-        )
-
-    # 3. グラフ生成（draw_* 7 種） -------------------------------------------
+    # 3. グラフ生成（draw_* 5 種） -------------------------------------------
     # workbook のメソッド版は (データソース名, フィールド名) のタプルで項目を指定する。
     workbook.draw_card(
         name="スコアカード_売上",
         main_metric=(DATASOURCE, "売上"),
         sub_metric=(DATASOURCE, "利益"),
-    )
-    workbook.draw_yoy(
-        name="時系列_売上",
-        item=(DATASOURCE, "注文日"),
-        metric=(DATASOURCE, "売上"),
     )
     workbook.draw_bar(
         name="サブカテゴリ別売上",
@@ -135,27 +111,6 @@ def main() -> None:
         }
     )
 
-    # 前年差帳票。色分けは draw_colored_yoy_sheet が引数でまとめて受ける。
-    yoy_report = workbook.draw_colored_yoy_sheet(
-        name="前年差帳票",
-        items=[
-            (DATASOURCE, "#"),
-            (DATASOURCE, "カテゴリ"),
-            (DATASOURCE, "サブカテゴリ"),
-        ],
-        metrics=[(DATASOURCE, metric) for metric in YOY_METRICS],
-        negative_color="#ff007f",
-        positive_color="#602fff",
-        ratio_color="#555555",
-        mark_type="bar",
-        axis_min=0,
-        axis_max=1,
-        show_axes=False,
-        bar_opacity=0.0,
-        index_partition_by=(DATASOURCE, "カテゴリ"),
-    )
-    yoy_report.update(title="カテゴリ・サブカテゴリ別 年前年差帳票")
-
     # 5. ペイン直接操作 -----------------------------------------------------
     # draw_* に円グラフは無いので、ペインの mark_type を直接変えて組む。
     # フィールドは名前でも (データソース名, フィールド名) でも TwbField でも指定できる。
@@ -177,9 +132,9 @@ def main() -> None:
                 "height": 50,
                 "items": [{"kind": "filter", "field": (DATASOURCE, "カテゴリ")}],
             },
-            "スコア・時系列コンテナ": {
+            "スコアコンテナ": {
                 "items": [
-                    {"kind": "worksheet", "sheets": ["スコアカード_売上", "時系列_売上"]},
+                    {"kind": "worksheet", "sheet": "スコアカード_売上"},
                 ],
             },
             "分析グラフコンテナ": {
@@ -192,11 +147,10 @@ def main() -> None:
             "帳票コンテナ": {
                 "items": [
                     {"kind": "worksheet", "sheet": "帳票"},
-                    {"kind": "worksheet", "sheet": "前年差帳票"},
                 ],
             },
         },
-        container_sizes={"スコア・時系列コンテナ": 206},
+        container_sizes={"スコアコンテナ": 206},
         content_style={
             "background_color": "#e6e6e6",
             "margin": 0,

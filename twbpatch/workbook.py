@@ -121,6 +121,10 @@ class TwbWorkbook:
             errors = [m for m in self.validate() if m.severity == "error"]
             if errors:
                 raise ValidationError(f"validation failed: {errors[0].code}: {errors[0].message}")
+        from .kpi_tree import bundled_attachments
+
+        # ライブラリが同梱したファイル（KPI ツリーのエッジの .hyper）を .twb の隣 / .twbx の中へ置く
+        attachments = bundled_attachments(self.tree.getroot())
         if path.lower().endswith(".twbx"):
             if not self._parsed.is_twbx or not self._parsed.extract_dir or not self._parsed.twb_inner_path:
                 raise SaveError(".twbx 保存には .twbx から開いたワークブックが必要です。")
@@ -130,9 +134,10 @@ class TwbWorkbook:
                 extract_dir=self._parsed.extract_dir,
                 twb_inner_path=self._parsed.twb_inner_path,
                 overwrite=overwrite,
+                attachments=attachments,
             )
         else:
-            save_twb(self.tree, path, overwrite=overwrite)
+            save_twb(self.tree, path, overwrite=overwrite, attachments=attachments)
         self._context.mark_saved()
 
     def export_json(self) -> dict:
@@ -362,76 +367,6 @@ class TwbWorkbook:
             visible=visible,
         )
 
-    def draw_colored_yoy_sheet(
-        self,
-        datasource: ConnectedDatasource | None = None,
-        *,
-        name: str,
-        items: list[FieldInput],
-        metrics: list[FieldInput],
-        negative_color: str = "#ff007f",
-        positive_color: str = "#602fff",
-        ratio_color: str = "#555555",
-        mark_type: str = "bar",
-        bar_color: str | None = None,
-        axis_min: float = 0,
-        axis_max: float = 1,
-        show_axes: bool = False,
-        bar_opacity: float = 1.0,
-        index_partition_by: FieldInput | None = None,
-        visible: bool = True,
-    ) -> ConnectedWorksheet:
-        from .draw import draw_colored_yoy_sheet
-
-        return draw_colored_yoy_sheet(
-            self,
-            datasource,
-            name=name,
-            items=items,
-            metrics=metrics,
-            negative_color=negative_color,
-            positive_color=positive_color,
-            ratio_color=ratio_color,
-            mark_type=mark_type,
-            bar_color=bar_color,
-            axis_min=axis_min,
-            axis_max=axis_max,
-            show_axes=show_axes,
-            bar_opacity=bar_opacity,
-            index_partition_by=index_partition_by,
-            visible=visible,
-        )
-
-    def draw_yoy(
-        self,
-        datasource: ConnectedDatasource | None = None,
-        *,
-        name: str,
-        item: FieldInput,
-        metric: FieldInput,
-        item_shelf: str = "columns",
-        aggregation: str = "sum",
-        date_level: str = "month",
-        color: str | None = None,
-        show_axes: bool = True,
-        visible: bool = True,
-    ) -> ConnectedWorksheet:
-        from .draw import draw_yoy
-
-        return draw_yoy(
-            self,
-            datasource,
-            name=name,
-            item=item,
-            metric=metric,
-            item_shelf=item_shelf,
-            aggregation=aggregation,
-            date_level=date_level,
-            color=color,
-            show_axes=show_axes,
-            visible=visible,
-        )
-
     def draw_bar(
         self,
         datasource: ConnectedDatasource | None = None,
@@ -443,6 +378,7 @@ class TwbWorkbook:
         aggregation: str = "sum",
         descending: bool = True,
         bar_color: str | None = None,
+        title: str | None = None,
         visible: bool = True,
     ) -> ConnectedWorksheet:
         from .draw import draw_bar
@@ -457,6 +393,7 @@ class TwbWorkbook:
             aggregation=aggregation,
             descending=descending,
             bar_color=bar_color,
+            title=title,
             visible=visible,
         )
 
@@ -500,8 +437,10 @@ class TwbWorkbook:
         dashboard_name: str,
         root: "KpiNode",
         align: str = "center",
+        edges: bool = False,
         edge_hyper: str | None = None,
         content_style: dict[str, str | int | None] | None = None,
+        spacing_scale: float = 1.0,
     ) -> ConnectedDashboard:
         from .kpi_tree import build_kpi_tree
 
@@ -510,8 +449,10 @@ class TwbWorkbook:
             dashboard_name=dashboard_name,
             root=root,
             align=align,
+            edges=edges,
             edge_hyper=edge_hyper,
             content_style=content_style,
+            spacing_scale=spacing_scale,
         )
 
     def draw_quadrant(

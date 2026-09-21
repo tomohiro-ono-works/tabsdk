@@ -72,18 +72,14 @@ def test_every_folder_argument_accepts_a_name(tmp_path) -> None:
     plural = datasource.create_calculated_fields(
         calculations={"複数形": "COUNTD([注文ID])"}, folder="Measure"
     )
-    yoy = datasource.create_yoy_calculated_fields(
-        metric="売上", year_category="当年昨年区分", folder="Measure"
-    )
 
     assert single.folder.name == "Measure"
     assert plural[0].folder.name == "Measure"
-    assert all(field.folder.name == "Measure" for field in yoy)
 
 
 @pytest.mark.parametrize(
     "method",
-    ["create_calculated_field", "create_calculated_fields", "create_yoy_calculated_fields"],
+    ["create_calculated_field", "create_calculated_fields"],
 )
 @pytest.mark.parametrize(
     "folder, error",
@@ -98,7 +94,6 @@ def test_bad_folder_arguments_fail_the_same_way(tmp_path, method, folder, error)
     arguments = {
         "create_calculated_field": dict(name="X", formula="SUM([売上])"),
         "create_calculated_fields": dict(calculations={"X": "SUM([売上])"}),
-        "create_yoy_calculated_fields": dict(metric="売上", year_category="当年昨年区分"),
     }[method]
 
     with pytest.raises(error):

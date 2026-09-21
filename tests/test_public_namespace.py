@@ -70,8 +70,6 @@ def test_all_entries_are_defined() -> None:
 
 DRAW_METHODS = [
     "draw_sheet",
-    "draw_colored_yoy_sheet",
-    "draw_yoy",
     "draw_bar",
     "draw_card",
     "draw_quadrant",

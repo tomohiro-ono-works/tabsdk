@@ -915,59 +915,6 @@ class TwbDatasource(ConnectedModel):
             )
         return created
 
-    def create_yoy_calculated_fields(
-        self,
-        *,
-        metric: str,
-        year_category: str,
-        folder: str | TwbFolder | None = None,
-        create_folder_if_missing: bool = False,
-    ) -> list[TwbField]:
-        current = f"{metric}|当年"
-        previous = f"{metric}|昨年"
-        difference = f"{metric}|昨年差"
-        calculations = {
-            current: (f'IIF([{year_category}]="当年",[{metric}],null)', "real"),
-            previous: (f'IIF([{year_category}]="昨年",[{metric}],null)', "real"),
-            difference: (f"SUM([{current}])-SUM([{previous}])", "real"),
-            f"{metric}|昨年差<0": (
-                f"IIF([{difference}]<0,SUM([{current}]),null)",
-                "real",
-            ),
-            f"{metric}|昨年差>=0": (
-                f"IIF(zn([{difference}])>=0,SUM([{current}]),null)",
-                "real",
-            ),
-            f"{metric}色|昨年差": (
-                f"IIF(zn([{difference}])>=0,SUM([{current}]),null)",
-                "real",
-            ),
-            f"{metric}比|昨年比": (
-                f"SUM([{current}])/SUM([{previous}])",
-                "real",
-                "%",
-            ),
-        }
-        datasource_el = self._resolve_element()
-        original = copy.deepcopy(datasource_el)
-        original_revision = self._context.revision
-        original_dirty = self._context.is_dirty
-        try:
-            return self.create_calculated_fields(
-                calculations=calculations,
-                folder=folder,
-                create_folder_if_missing=create_folder_if_missing,
-            )
-        except Exception:
-            current_datasource_el = self._resolve_element()
-            parent = current_datasource_el.getparent()
-            if parent is not None:
-                parent.replace(current_datasource_el, original)
-            self._context.revision = original_revision
-            self._context.invalidate_caches()
-            self._context.is_dirty = original_dirty
-            raise
-
     def update(
         self,
         *,

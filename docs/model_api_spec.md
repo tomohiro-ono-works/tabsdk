@@ -528,19 +528,11 @@ datasource.create_calculated_field(
     ref_map=ref_map,
 )
 
-datasource.create_yoy_calculated_fields(
-    metric="利益",
-    year_category="当年昨年区分",
-    folder="Measure",
-)
-
 datasource.update(source=UNSET, name=UNSET)
 datasource.delete()
 ```
 
 `source` は接続先を表す値オブジェクトとして公開プロパティから取得する。単一値であるため `get_source()` は設けない。
-
-`create_yoy_calculated_fields()` は、指標の当年値、昨年値、昨年差、正負別表示、色、昨年比の7計算フィールドを順番に作成して `list[TwbField]` を返す。昨年比には `%` 書式を設定する。参照先や生成名に問題がある場合は、呼び出し内で作成したフィールドをすべてロールバックする。
 
 ### 6.3 `TwbField`
 
@@ -565,7 +557,7 @@ field.delete()
 
 `create_folder_if_missing=True`（既定 `False`）を渡したときだけ、その名前でフォルダを作って割り当てる（2026-09-07 決定）。旧 `TwbWorkbook` の `folder=` は黙って作っていたが、打ち間違いに気づけないため**作るときは明示する**形にした。`TwbFolder` を渡す場合はすでに実在するのでフラグは効かない。
 
-**`folder=` と `create_folder_if_missing=` を受け取るメソッドはすべて同じ規則に従う。** `create_calculated_field()`、`create_calculated_fields()`、`create_yoy_calculated_fields()`、`create_drill_path()`、`create_group()`、`field.move_to_folder()` の 6 つ。解決は `TwbDatasource._resolve_folder()` に集約する（2026-09-07 に `move_to_folder()` も揃えた）。
+**`folder=` と `create_folder_if_missing=` を受け取るメソッドはすべて同じ規則に従う。** `create_calculated_field()`、`create_calculated_fields()`、`create_drill_path()`、`create_group()`、`field.move_to_folder()` の 5 つ。解決は `TwbDatasource._resolve_folder()` に集約する（2026-09-07 に `move_to_folder()` も揃えた）。
 
 フォルダ所属は独立した関連操作とし、`field.update(folder=...)` には含めない。
 
@@ -843,11 +835,9 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 |---|---|
 | `draw_sheet()` | 項目を指定シェルフへ並べた土台シート |
 | `draw_bar()` | 棒グラフ |
-| `draw_yoy()` | 前年比の時系列 |
 | `draw_card()` | KPI カード |
 | `draw_quadrant()` | 散布図の四象限 |
 | `draw_crosstab()` | ヒートマップ付きクロス集計 |
-| `draw_colored_yoy_sheet()` | 前年差を色分けした帳票 |
 | `build_kpi_tree()` | 既にあるシートを指標の親子関係のツリーとして左から右へ並べた Dashboard を作る |
 | `add_filter()` | フィルターの入口。`scope="worksheet"` / `"datasource"` を引数で選ぶ |
 | `set_default_font()` | ワークブック全体の既定フォント |
@@ -878,7 +868,7 @@ workbook.build_kpi_tree(dashboard_name="KPIツリー", root=KpiNode(card, [...])
   高さがばらついて揃わなくなる
 - Dashboard の大きさは 幅 = 階層の深さ × 200、高さ = 末端ノードの数 × 150 に、台紙の余白（上下左右 8）を足す（固定サイズ）
 - **見た目は `build_report()` の KPI カードに揃える**（2026-09-14）。ツリー全体のコンテナを灰色の台紙
-  （背景 #f5f5f5・枠線なし・外側の余白 8）にし、カードのゾーンを白（背景 #ffffff・枠線なし・外側の余白 4・内側の余白 16）にする。
+  （背景 #f5f5f5・枠線なし・外側の余白 8）にし、カードのゾーンを白（背景 #ffffff・枠線なし・外側の余白 4・内側の余白 0・角の丸み 8）にする。
   カードのタイトルは `build_report()` と同じく、シートにタイトルがあるときだけ出す。枠線は引かず、台紙との余白で区切って見せる
 - **台紙の書式は `content_style=` で上書きできる**（2026-09-14）。`build_report(content_style=)` と同じく既定に重ね、
   設定 YAML からはデザインルールの「余白」がここに入る。台紙の外側と内側の余白の合計だけ Dashboard を大きくするため、
@@ -889,15 +879,21 @@ workbook.build_kpi_tree(dashboard_name="KPIツリー", root=KpiNode(card, [...])
 - XML を変える前にツリー全体を検証する。同じシートが 2 回出る・別ワークブックのシート・
   `KpiNode` 以外のノードは例外になり、Dashboard は作られない
 
-**エッジ（線）は `edge_hyper=` にエッジの座標の .hyper のパスを渡したときだけ描く**（2026-09-13）。
+**エッジ（線）は `edges=True`（または `edge_hyper=` にパス）を渡したときだけ描く**（2026-09-13、`edges=` は 2026-09-15）。
 Tableau のダッシュボードには線のオブジェクトが無いため、座標だけを持つ表から親ノードごとに
 折れ線のシートを作る。
 
 - **エッジ用データソース「KPIツリーのエッジ」はライブラリが足す。** ワークブックに無ければ
   §6.1 の `create_hyper_datasource()` で列 `edge` / `point`（string・dimension）/ `x` / `y`（integer・measure）を宣言して作り、
-  あれば使い回す。既にあるものの抽出のパスが `edge_hyper` と違えば例外にする。.hyper ファイル自体はコピーしない
+  あれば使い回す。既にあるものの抽出のパスが違えば例外にする
+- **`edges=True` でパスを渡さなければ、ライブラリ同梱の表（`twbpatch/assets/edge.hyper`）を使う。** 抽出のパスは
+  `twbpatch_kpi_tree_edge.hyper`（.twb からの相対）で、**`save()` が .twb の隣（.twbx なら中の .twb と同じフォルダ）へ
+  同梱のファイルを置く。** 保存のたびに XML からこの抽出の有無を判定するので、作った .twb を開き直して別の場所へ保存しても付いていく。
+  隣に別の内容の同名ファイルがあれば、`overwrite=False` では .twb も書かずに `SaveError` にする。
+  設定画面や YAML で .hyper の場所を指定させないため（2026-09-15。絶対パスを埋め込むと .twb を移したときに線が消える）
+- `edge_hyper=` にパスを渡したときは、そのファイルを利用者が用意する。ライブラリはコピーしない
 - 線 `E-k` は O(0,0) → P-k(1,k) → P2-k(2,k) の 3 点で、k は親の中心から子の中心までの縦位置（ノードの高さの半分、75px 単位）。
-  表（`examples/edge.hyper`）の k の上限は 13 で、1 つの親の下の末端は 7 つまで
+  表（同梱の `twbpatch/assets/edge.hyper`、元データは `examples/edge.txt`）の k の上限は 13 で、1 つの親の下の末端は 7 つまで
 - **上端揃え（`align="top"`）のときだけ描ける。** 中央揃えでは子が親より上に来て k が負になり、表に無い
 - 親ノードとその子の列のあいだに幅 60px のエッジ列を挟む。Dashboard の幅は
   「深さ × 200 +（深さ − 1）× 60 + 台紙の余白 16」になる。線の端とカードのあいだには、カードの外側の余白 4 の灰色の隙間が出る
@@ -907,7 +903,7 @@ Tableau のダッシュボードには線のオブジェクトが無いため、
   Tableau で手作りしたシートと同じ設定にする: 線マーク・階段補間・詳細に edge と point・edge を値で絞るフィルター・
   y 軸の反転・軸の非表示・線の書式なし
 - 軸の範囲は固定する。自動だと余白が入り、線の端がカードとずれる。y は −1〜2 × 末端数 − 1、x は 0〜2
-- 次は XML を変える前に例外にする: 中央揃えでの `edge_hyper=`、`.hyper` でないパス、抽出のパスが違う既存のエッジ用データソース、
+- 次は XML を変える前に例外にする: 中央揃えでの `edges=True` / `edge_hyper=`、`.hyper` でないパス、抽出のパスが違う既存のエッジ用データソース、
   k が上限を超えるツリー、同名のエッジ用シートが既にある、同名の Dashboard が既にある。
   **エッジ用データソースを作るのが最初の変更になるため、Dashboard 名の重複もその前に検証する**
 - **既存 Dashboard の作り直しではない**（§6.13）。新しい Dashboard を 1 つ作るだけで、
@@ -941,6 +937,29 @@ Tableau のフィルターは XML 上 3 か所に分かれて書かれる。ク�
 | メソッド | 何をするか |
 |---|---|
 | `build_report()` | `struct` からコンテナ階層とゾーン配置を一括で組み立てる |
+
+#### ゾーンの書式はグラフの種類で決める（2026-09-21）
+
+`build_report()` / `build_kpi_tree()` がワークシートを置くときのゾーンの書式は、
+**そのシートを描いた `draw_*()` の種類で決める**。利用者に余白を指定させない。
+
+| グラフ | 外側の余白 | 内側の余白 |
+|---|---|---|
+| `draw_card()` | 4 | 0 |
+| `draw_bar()` | 4 | 16 |
+| `draw_crosstab()` | 4 | 0 |
+| `draw_quadrant()` | 4 | 0 |
+| `draw_sheet()` | 4 | 8 |
+| 上記以外（手で作ったシート） | 4 | 16 |
+
+- 角の丸みは全種類 8。**Tableau は角の丸みだけ接頭辞付きの要素名
+  `_.fcp.DashboardRoundedCorners.true...format` で書き、`document-format-change-manifest` へ
+  `_.fcp.DashboardRoundedCorners.true...DashboardRoundedCorners` の宣言も足す**（2026-09-21 に実ファイルで確認）。
+  公開する書式名は `corner_radius` で、この形式への変換は内部で行う
+- グラフの種類は `draw_*()` がワークブックの作業用の記録に残す。**`.twb` には残らない**ので、
+  開き直した後のシートや手で作ったシートは「上記以外」の扱いになる
+- `spacing_scale=` で余白を一律に伸ばせる（`margin` / `padding` のみ、0 は 0 のまま）。
+  設定 YAML のデザインルール「余白」が `wide` のとき 1.5 倍になる
 | `create_action()` | アクションを1件作る。`<action>` 本体と、参照するデータソース・列の宣言を同時に書く |
 
 **`TwbDashboardContainer`**

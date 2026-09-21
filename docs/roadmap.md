@@ -20,7 +20,7 @@
 ### 2026-09-07 の到達点: 設定画面から `.twb` までが 1 本につながった
 
 ```
-export_html()  →  画面で設定  →  twbpatch_config.yaml  →  apply_config()  →  save()
+export_html()  →  画面で設定  →  タブごとの設定 YAML  →  apply_config()  →  save()
 ```
 
 **画面が出す節はすべて受け手に届く。** 途中で人が Python を書く必要はない。

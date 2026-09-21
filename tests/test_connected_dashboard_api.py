@@ -136,9 +136,12 @@ def test_build_report_creates_named_rows_and_resolves_worksheet_names(tmp_path) 
     assert [item.fixed_size for item in root.get_containers()] == [50, 300, 300]
     assert outer.get_zones()[0].text == "経営ダッシュボード"
     assert root.get_containers()[0].get_zones() == []
+    # 角の丸みは Tableau が接頭辞付きの要素名で書く形式（2026-09-21）。
+    # draw_* で描いていないシートなので、内側の余白はグラフ別ではなく既定の 16。
     assert root.get_containers()[1].get_zones()[0].style == {
         "background_color": "#ffffff",
         "border_style": "none",
+        "corner_radius": "8",
         "margin": "4",
         "padding": "16",
     }
@@ -484,3 +487,112 @@ def test_layout_flow_objects_fixed_sizes_and_styles(tmp_path) -> None:
         )
     assert workbook.tree.xpath("/workbook/dashboards/dashboard/simple-id")
     assert not [message for message in workbook.validate() if message.severity == "error"]
+
+
+def _worksheet_zones(dashboard):
+    def walk(container):
+        zones = [zone for zone in container.get_zones() if zone.kind == "worksheet"]
+        for child in container.get_containers():
+            zones.extend(walk(child))
+        return zones
+
+    return walk(dashboard.get_containers()[0])
+
+
+def _chart_workbook(tmp_path):
+    """draw_*() でグラフを描ける最小のワークブック。手で作った SheetA も入れる。"""
+    path = tmp_path / "charts.twb"
+    path.write_text(
+        """<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name="ds1" caption="売上データ">
+      <column name="[Category]" caption="カテゴリ"
+              datatype="string" role="dimension" type="nominal" />
+      <column name="[Sales]" caption="売上"
+              datatype="real" role="measure" type="quantitative" />
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="SheetA" caption="シートA" />
+  </worksheets>
+</workbook>
+""",
+        encoding="utf-8",
+    )
+    return TwbWorkbook.open(str(path))
+
+
+def test_build_report_uses_chart_specific_padding_and_rounded_corners(tmp_path) -> None:
+    """ダッシュボードに置くときの内側の余白は、描いたグラフの種類ごとに変える（2026-09-21）。
+
+    角の丸みは Tableau が接頭辞付きの要素名で書くので、宣言も一緒に足す。
+    """
+    workbook = _chart_workbook(tmp_path)
+    datasource = workbook.get_datasources()[0]
+    metric, item = "売上", "カテゴリ"
+    workbook.draw_card(datasource, name="カード", main_metric=metric)
+    workbook.draw_bar(datasource, name="棒", item=item, metric=metric)
+    workbook.draw_sheet(datasource, name="帳票", items=[item])
+    dashboard = workbook.create_dashboard(name="D")
+
+    dashboard.build_report(
+        dashboard_name="D",
+        struct={
+            "段": {
+                "items": [
+                    {"kind": "worksheet", "sheets": ["カード"]},
+                    {"kind": "worksheet", "sheets": ["棒"]},
+                    {"kind": "worksheet", "sheets": ["帳票"]},
+                    {"kind": "worksheet", "sheets": ["SheetA"]},
+                ]
+            }
+        },
+    )
+
+    zones = _worksheet_zones(dashboard)
+    padding = {zone.name: zone.style["padding"] for zone in zones}
+    # 手で作った SheetA は種類が分からないので既定の 16
+    assert padding == {"カード": "0", "棒": "16", "帳票": "8", "SheetA": "16"}
+    assert {zone.style["corner_radius"] for zone in zones} == {"8"}
+    assert workbook.tree.xpath(
+        "/workbook/document-format-change-manifest"
+        "/*[local-name()='_.fcp.DashboardRoundedCorners.true...DashboardRoundedCorners']"
+    )
+    assert not [message for message in workbook.validate() if message.severity == "error"]
+
+
+def test_build_report_scales_spacing_when_asked(tmp_path) -> None:
+    """余白を「多め」にしたときは 1.5 倍。0 は 0 のまま（2026-09-21）。"""
+    workbook = _chart_workbook(tmp_path)
+    workbook.draw_card(workbook.get_datasources()[0], name="カード", main_metric="売上")
+    dashboard = workbook.create_dashboard(name="D")
+
+    dashboard.build_report(
+        dashboard_name="D",
+        struct={
+            "段": {
+                "items": [
+                    {"kind": "worksheet", "sheets": ["カード"]},
+                    {"kind": "worksheet", "sheets": ["SheetA"]},
+                ]
+            }
+        },
+        spacing_scale=1.5,
+    )
+
+    styles = {zone.name: zone.style for zone in _worksheet_zones(dashboard)}
+    assert (styles["カード"]["margin"], styles["カード"]["padding"]) == ("6", "0")
+    assert (styles["SheetA"]["margin"], styles["SheetA"]["padding"]) == ("6", "24")
+
+
+def test_build_report_rejects_a_bad_spacing_scale(tmp_path) -> None:
+    workbook = _chart_workbook(tmp_path)
+    dashboard = workbook.create_dashboard(name="D")
+    struct = {"段": {"items": [{"kind": "worksheet", "sheets": ["SheetA"]}]}}
+
+    with pytest.raises(ValueError, match="spacing_scale must be positive"):
+        dashboard.build_report(dashboard_name="D", struct=struct, spacing_scale=0)
+    with pytest.raises(TypeError, match="spacing_scale must be a number"):
+        dashboard.build_report(dashboard_name="D", struct=struct, spacing_scale="wide")
+    assert dashboard.get_containers() == []

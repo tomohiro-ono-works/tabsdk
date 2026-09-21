@@ -68,6 +68,8 @@ _SPACING = {
     "wide": {"margin": 8, "padding": 16},
     "narrow": {"margin": 4, "padding": 8},
 }
+#: 「多め」のときは、グラフごとの余白も 1.5 倍にする（0 は 0 のまま）。
+_SPACING_SCALE = {"wide": 1.5, "narrow": 1.0}
 
 _AREA_KINDS = ("worksheet", "filter")
 
@@ -123,31 +125,34 @@ def _resolve_folder(datasource: TwbDatasource, name: str) -> TwbFolder:
 
 
 def _apply_calculations(datasource: TwbDatasource, calculations: Any) -> None:
-    """計算フィールドを定義順に作る。
+    """計算フィールドを、式が参照する計算フィールドから先に作る。
 
-    定義順に作るのは、後の式が前の計算フィールドを表示名で参照できるようにするため。
-    同名のフィールドが既にあれば上書きする。2 周方式では同じ YAML を 2 度通すため、
-    2 度目にエラーで止まると往復が回らない。
+    表示名で参照するには参照先が先に存在している必要がある。YAML の並び順には頼らない
+    （`_calculation_order()`）。同名のフィールドが既にあれば上書きする。2 周方式では同じ
+    YAML を 2 度通すため、2 度目にエラーで止まると往復が回らない。
     """
     if not isinstance(calculations, list):
         raise ValueError("calculations must be a list")
 
+    # 作り始める前に全件を検証する。途中の 1 件で止まって一部だけ作られないように。
     for entry in calculations:
         if not isinstance(entry, dict):
             raise ValueError("calculation must be a mapping")
-
         name = entry.get("name")
         formula = entry.get("formula")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("calculation name must be a non-empty string")
         if not isinstance(formula, str) or not formula.strip():
             raise ValueError(f"calculation formula must be a non-empty string: {name}")
-        name = name.strip()
-
-        datatype = entry.get("datatype") or _DEFAULT_DATATYPE
         role = entry.get("role") or _DEFAULT_ROLE
         if role not in {"measure", "dimension"}:
-            raise ValueError(f"calculation role must be 'measure' or 'dimension': {name}")
+            raise ValueError(f"calculation role must be 'measure' or 'dimension': {name.strip()}")
+
+    for entry in _calculation_order(calculations):
+        name = entry["name"].strip()
+        formula = entry["formula"]
+        datatype = entry.get("datatype") or _DEFAULT_DATATYPE
+        role = entry.get("role") or _DEFAULT_ROLE
         # ディメンションは不連続、メジャーは連続。画面では指定しない。
         discrete = role == "dimension"
 
@@ -190,6 +195,37 @@ def _apply_calculations(datasource: TwbDatasource, calculations: Any) -> None:
             discrete=discrete,
             folder=folder,
         )
+
+
+def _calculation_order(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """式が `[名前]` で参照する計算フィールドを、参照する側より先に並べる。
+
+    画面の計算フィールドの表は行を途中に挿入できず、参照先を後から足すと末尾に入る
+    （2026-09-14、表の上から作っていたため `formula reference not found` で止まった）。
+    Tableau も計算フィールドの並び順を気にしないので、YAML の並び順に意味を持たせない。
+    参照し合っていないものは YAML の並び順のまま。参照が循環していれば何も作らずに例外にする。
+    """
+    names = [entry["name"].strip() for entry in entries]
+    depends = [
+        {
+            other
+            for other, name in enumerate(names)
+            if other != index and f"[{name}]" in entry["formula"]
+        }
+        for index, entry in enumerate(entries)
+    ]
+    pending = list(range(len(entries)))
+    placed: set[int] = set()
+    ordered: list[dict[str, Any]] = []
+    while pending:
+        ready = next((index for index in pending if depends[index] <= placed), None)
+        if ready is None:
+            cycle = ", ".join(names[index] for index in pending)
+            raise ValueError(f"calculations reference each other in a cycle: {cycle}")
+        pending.remove(ready)
+        placed.add(ready)
+        ordered.append(entries[ready])
+    return ordered
 
 
 def _apply_renames(datasource: TwbDatasource, renames: Any) -> None:
@@ -414,7 +450,10 @@ def _apply_dashboard(
         width=_int_or_none(dashboard.get("width"), "dashboard width") or 1200,
         height=_int_or_none(dashboard.get("height"), "dashboard height") or 800,
     )
-    build_options: dict[str, Any] = {"content_style": dict(content_style)}
+    build_options: dict[str, Any] = {
+        "content_style": dict(content_style),
+        "spacing_scale": _SPACING_SCALE[str(design.get("spacing") or "wide")],
+    }
     if str(header.get("title") or "").strip():
         build_options["header_title"] = header["title"].strip()
     header_height = _int_or_none(header.get("height"), "header height")
@@ -494,13 +533,16 @@ def _apply_kpi_tree(
     if content_style is None:
         raise ValueError(f"design.spacing must be one of {tuple(_SPACING)}")
 
+    align = str(kpi_tree.get("align") or "center").strip().lower()
     workbook.build_kpi_tree(
         dashboard_name=name,
         root=_draw_kpi_node(workbook, root, datasource, design),
-        align=str(kpi_tree.get("align") or "center"),
-        # パスは .twb の置き場所から見たもの。画面はそれを知らないので、書かれたまま渡す。
-        edge_hyper=str(kpi_tree.get("edge_hyper") or "").strip() or None,
+        align=align,
+        # エッジは上端揃えのときだけ描ける。上端なら必ず描く。.hyper はライブラリ同梱のものを使い、
+        # save() が .twb の隣へ置く（2026-09-15。画面や YAML でパスを指定させない）。
+        edges=align == "top",
         content_style=dict(content_style),
+        spacing_scale=_SPACING_SCALE[str(design.get("spacing") or "wide")],
     )
 
 

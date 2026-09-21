@@ -248,13 +248,13 @@ YAML の形がもう決まるので、先に Python を固めても手戻りし�
 1. `config_apply.py` の `_SECTIONS` に `kpi_tree` を足し、`_apply_kpi_tree()` を作った
 2. カードを作る前にツリーの形（ノードが mapping、`children` がリスト）だけ確かめる。
    1 段目: ノードごとに `_draw_area()` でカードを作る。2 段目: `KpiNode` を組んで `build_kpi_tree()` に渡す。
-   `edge_hyper` は書かれたまま渡す（空欄ならエッジなし）
+   ~~`edge_hyper` は書かれたまま渡す~~ → 2026-09-15 に廃止。上端揃えならエッジを描き、同梱の .hyper を `save()` が .twb の隣へ置く
 3. `_apply_design(has_dashboard=...)` に `kpi_tree` も含めた。デザインルールの「余白」は、ダッシュボードタブと同じ
    `_SPACING` を `build_kpi_tree(content_style=)`（新設）へ渡して台紙に反映する
 4. テスト `tests/test_apply_config_kpi_tree.py`: カードの配置と色の参照 / 余白 / エッジあり・なし /
    `dashboard` と両方でダッシュボードが 2 つ / デザインルールを読み飛ばさない / 形の崩れた節はシートを作る前に例外
 
-### ステップ 4: 画面の統合（計画、2026-09-14）
+### ステップ 4: 画面の統合 — 1〜9 は済、10 の確認待ち（2026-09-14）
 
 #### 現状（実測）
 
@@ -311,7 +311,7 @@ KPI ツリーの API を `kpi_tree.py` に分けたのと同じ理由で、タ�
 2. **ダウンロードをタブごとにする。** 上の表の中身で、データソース・ダッシュボードの 2 タブから先に分ける
    （KPI ツリーはまだ中身が無いため）。検証もタブごとに、そのタブで出す節の分だけ行う
 3. **タブ上部の設定。** ダッシュボード名 / データソース（既存の `dsOptions()`）/ 親ノードの位置（中央・上端）/
-   エッジの .hyper のパス（文字入力、空欄ならエッジなし）
+   ~~エッジの .hyper のパス~~ → 2026-09-15 に画面から外した（「画面から指定する必要がない。.twb を作るときに Python 側で足せばよい」）
 4. **ツリーの編集を移す。** 試作の `subtree()` / `drawEdges()` / ＋（子を追加）/ ×（配下ごと削除）/ ⧉（複製）/
    ⠿ のドラッグ（上端・下端で兄弟の前後、中央で子）。**ノードの入力欄は手で書かず**、`DRAW_SPECS["draw_card"]` と
    既存の `paramControl()` / `labeled()` / `colorControl()` で作る。メジャー候補とデザインルールの色は実データを使う。
@@ -329,13 +329,23 @@ KPI ツリーの API を `kpi_tree.py` に分けたのと同じ理由で、タ�
 10. **確認。** `examples/sample_ec.twb` から HTML を出し、ブラウザで操作 → タブごとに YAML をダウンロード →
     `apply_config()` → Tableau Public で開く（ユーザー確認）
 
-#### 着手前に決めること
+#### 結果（2026-09-14）
 
-- **別セッションとの順番。** 別セッションの `html_export.py` の変更がコミットされてから差し込むか、先に差し込むか
+- 別セッションの `html_export.py` の変更を先にテーマごとにコミットしてから差し込んだ
+- 1〜9 は済。`tests/test_export_html_kpi_tree.py`（7 件）と既存テストの更新
+- **headless Chrome で画面を操作して確かめた**（`tmp/kpi_harness.py`、テストには入れていない）: ルート作成 → ＋ で子 →
+  シート名の自動生成（重複で「スコア|Sales (2)」）→ 中央 / 上端の切り替え → 配下ごとの複製（「売上 (2)」の複製は「売上 (3)」）→
+  ノードの移動 → 検証（段 0 のダッシュボード、両タブをまたいだシート名の重複）。
+  画面が出した YAML を `examples/sample_ec.twb` に適用し、エッジ付きの KPI ツリー（768 × 498）を検証エラー 0 件で保存できた
+  （`outputs/kpi_tree_from_screen.twb`）
+- 実装中に決めたこと: ファイル名はタブごとに `twbpatch_datasources.yaml` / `twbpatch_dashboard.yaml` /
+  `twbpatch_kpi_tree.yaml`。ツリーは空から始め（「ルートのノードを作る」）、ルートの × でツリーを消せる。
+  段が 0 のダッシュボードタブはダウンロードを止める。エリアの複製にも「 (2)」を付ける
+- 残り: 10（ユーザーがブラウザで操作 → 適用 → Tableau Public）
 
 ### ステップ 5: 仕上げ
 
-1. `docs/roundtrip.md` の 2 周目に KPI ツリーを足す
+1. ~~`docs/roundtrip.md` の 2 周目に KPI ツリーを足す~~ → ステップ 4 で済
 2. `docs/backlog.md` I-2 と `docs/roadmap.md` の状態を更新する
 3. `/spec-conformance` で §13 と README のドリフトを確認する
 
@@ -347,8 +357,7 @@ KPI ツリーの API を `kpi_tree.py` に分けたのと同じ理由で、タ�
 kpi_tree:
   name: "KPI ツリー"
   datasource: "EC Orders"
-  align: "top"                    # center / top
-  edge_hyper: "edge.hyper"        # .twb から見た .hyper のパス。空欄・省略でエッジなし（中央揃えとは同時に使えない）
+  align: "top"                    # center / top。top ならエッジを描く（.hyper は指定しない）
   root:
     sheet: "売上"
     params:

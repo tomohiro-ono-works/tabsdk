@@ -8,7 +8,12 @@ from typing import Any
 from lxml import etree as ET
 
 from .connected import get_datasources, get_display_name, _matches, _validate_get_args
-from .connected_worksheet import TwbWorksheet, TwbWorksheetField, get_worksheets
+from .connected_worksheet import (
+    TwbWorksheet,
+    TwbWorksheetField,
+    _ensure_manifest_feature,
+    get_worksheets,
+)
 from .context import (
     UNSET,
     ConnectedModel,
@@ -50,14 +55,72 @@ _DEFAULT_REPORT_CONTENT_STYLE = {
 _DEFAULT_REPORT_WORKSHEET_STYLE = {
     "background_color": "#ffffff",
     "border_style": "none",
+    "corner_radius": 8,
     "margin": 4,
     "padding": 16,
+}
+#: グラフの種類ごとの内側の余白（2026-09-21 決定）。種類は `draw_*` が
+#: `WorkbookContext.chart_kinds` へ記録する。記録が無いシートは既定の 16。
+_CHART_ZONE_PADDING = {
+    "draw_card": 0,
+    "draw_bar": 16,
+    "draw_crosstab": 0,
+    "draw_quadrant": 0,
+    "draw_sheet": 8,
 }
 
 # build_report() の段の高さの既定。段ごとの height= か container_sizes= で変える。
 # 以前はコンテナ名に「フィルタ」「スコア」が含まれるかで 50 / 250 / 300 を切り替えて
 # いたが、名前でも中身でも挙動を変えないと決めたため 1 つに統一した（K-1、2026-09-07）。
 _CONTAINER_HEIGHT = 300
+
+
+#: 角の丸みだけは、Tableau が接頭辞付きの要素名で書き、ファイル先頭の
+#: `document-format-change-manifest` にも宣言を足す（2026-09-21 に実ファイルで確認）。
+_FCP_FORMAT_FEATURES = {"corner-radius": "DashboardRoundedCorners"}
+
+
+def _format_tag(attr: str) -> str:
+    feature = _FCP_FORMAT_FEATURES.get(attr)
+    return "format" if feature is None else f"_.fcp.{feature}.true...format"
+
+
+def _format_attr(element: ET._Element) -> str | None:
+    """`format` 要素なら `attr` を返す。接頭辞付きの要素名も同じ `format` として扱う。"""
+    local = _local_name(element)
+    if local == "format" or local.endswith("...format"):
+        return element.get("attr")
+    return None
+
+
+def _scaled_spacing(style: dict[str, Any], scale: float) -> dict[str, Any]:
+    """余白（margin / padding）だけを倍率で伸ばす。0 は 0 のまま。"""
+    if scale == 1.0:
+        return dict(style)
+    return {
+        name: round(value * scale)
+        if isinstance(value, int) and not isinstance(value, bool)
+        and (name == "margin" or name == "padding" or name.startswith(("margin_", "padding_")))
+        else value
+        for name, value in style.items()
+    }
+
+
+def _validate_spacing_scale(scale: float) -> None:
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)):
+        raise TypeError("spacing_scale must be a number")
+    if scale <= 0:
+        raise ValueError("spacing_scale must be positive")
+
+
+def _worksheet_zone_style(
+    context: WorkbookContext, sheet_name: str, spacing_scale: float
+) -> dict[str, Any]:
+    style = dict(_DEFAULT_REPORT_WORKSHEET_STYLE)
+    padding = _CHART_ZONE_PADDING.get(context.chart_kinds.get(sheet_name, ""))
+    if padding is not None:
+        style["padding"] = padding
+    return _scaled_spacing(style, spacing_scale)
 
 
 def _local_name(element: ET._Element) -> str:
@@ -312,13 +375,18 @@ def _zone_style_values(zone_el: ET._Element) -> dict[str, str]:
     if style is None:
         return {}
     return {
-        (item.get("attr") or "").replace("-", "_"): item.get("value") or ""
+        attr.replace("-", "_"): item.get("value") or ""
         for item in style
-        if _local_name(item) == "format" and item.get("attr")
+        for attr in [_format_attr(item)]
+        if attr
     }
 
 
-def _set_zone_styles(zone_el: ET._Element, styles: dict[str, str | int | None]) -> None:
+def _set_zone_styles(
+    zone_el: ET._Element,
+    styles: dict[str, str | int | None],
+    context: WorkbookContext | None = None,
+) -> None:
     for name, value in styles.items():
         if not isinstance(name, str) or not name or not name.replace("_", "").isalnum():
             raise ValueError(f"invalid style name: {name}")
@@ -331,7 +399,7 @@ def _set_zone_styles(zone_el: ET._Element, styles: dict[str, str | int | None]) 
         return
     for name, value in styles.items():
         attr = name.replace("_", "-")
-        matches = style.xpath("./*[local-name()='format'][@attr=$attr]", attr=attr)
+        matches = [item for item in style if _format_attr(item) == attr]
         if value is None:
             for item in matches:
                 style.remove(item)
@@ -340,7 +408,10 @@ def _set_zone_styles(zone_el: ET._Element, styles: dict[str, str | int | None]) 
             for item in matches[1:]:
                 style.remove(item)
         else:
-            ET.SubElement(style, "format", attrib={"attr": attr, "value": str(value)})
+            ET.SubElement(style, _format_tag(attr), attrib={"attr": attr, "value": str(value)})
+            if context is not None and attr in _FCP_FORMAT_FEATURES:
+                feature = _FCP_FORMAT_FEATURES[attr]
+                _ensure_manifest_feature(context, f"_.fcp.{feature}.true...{feature}")
     if not len(style):
         zone_el.remove(style)
 
@@ -1174,9 +1245,11 @@ class TwbDashboard(ConnectedModel):
         header_background_color: str = "#c0c0c0",
         header_font_color: str = "#333333",
         filter_apply_button: bool = False,
+        spacing_scale: float = 1.0,
     ) -> TwbDashboard:
         if not isinstance(filter_apply_button, bool):
             raise TypeError("filter_apply_button must be bool")
+        _validate_spacing_scale(spacing_scale)
         if header_title is not None and not isinstance(header_title, str):
             raise TypeError("header_title must be a string or None")
         container_sizes = dict(container_sizes or {})
@@ -1307,10 +1380,14 @@ class TwbDashboard(ConnectedModel):
                 for sheet_index, sheet_name in enumerate(names):
                     zone = target.add_worksheet(
                         worksheets[sheet_name],
-                        show_title=worksheets[sheet_name].title is not None,
+                        # 文字が無くても、背景色があるタイトルは帯として出す（KPI カード）
+                        show_title=worksheets[sheet_name].title is not None
+                        or worksheets[sheet_name].title_style["background_color"] is not None,
                         weight=1,
                     )
-                    zone_style = dict(_DEFAULT_REPORT_WORKSHEET_STYLE)
+                    zone_style = _worksheet_zone_style(
+                        self._context, sheet_name, spacing_scale
+                    )
                     if grouped and len(names) > 1:
                         if sheet_index < len(names) - 1:
                             zone_style["padding_bottom"] = 0
@@ -1795,7 +1872,7 @@ class TwbDashboardContainer(ConnectedModel):
                 attrs["bold"] = "true"
             ET.SubElement(formatted, "run", attrib=attrs).text = text
         if style:
-            _set_zone_styles(child, style)
+            _set_zone_styles(child, style, self._context)
         _insert_zone(parent, child, order)
         weights = dict(self._context.layout_weights)
         weights[(self._dashboard_id, zone_id)] = weight
@@ -1917,7 +1994,7 @@ class TwbDashboardContainer(ConnectedModel):
             else:
                 container.attrib.pop("layout-strategy-id", None)
         if style is not UNSET:
-            _set_zone_styles(container, style)
+            _set_zone_styles(container, style, self._context)
             _layout_container(self._dashboard_id, container, weights)
         if not is_root:
             if order is not UNSET:
@@ -2281,7 +2358,7 @@ class TwbDashboardZone(ConnectedModel):
             else:
                 zone.attrib.pop("hidden-by-user", None)
         if style is not UNSET:
-            _set_zone_styles(zone, style)
+            _set_zone_styles(zone, style, self._context)
         _replace_if_changed(dashboard_el, updated, self._context)
         self._context.layout_weights = weights
         return self

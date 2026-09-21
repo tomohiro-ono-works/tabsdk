@@ -72,14 +72,15 @@ wb.export_html("config.html", title="売上分析 設定", overwrite=True)
 ```
 
 出力した HTML は外部参照を持たず、そのままブラウザで開けます（オフライン可）。
-画面はデータソース（表示名・フォルダ・計算フィールド）、全体の書式、ダッシュボードの構成の
-3 タブで、「設定 YAML をダウンロード」で 1 ファイルに落ちます。
+画面はデータソース（表示名・フォルダ・計算フィールド）、全体の書式、ダッシュボードの構成、
+KPI ツリーの 4 タブです。YAML はタブごとの「設定 YAML をダウンロード」で、そのタブで使う設定だけが落ちます
+（ダッシュボードと KPI ツリーのファイルには、全体の書式とデータソースの設定も入ります）。
 
 ### 設定画面が出した YAML を適用する
 
 ```python
 wb = TwbWorkbook.open("template.twb")
-wb.apply_config("twbpatch_config.yaml")
+wb.apply_config("twbpatch_dashboard.yaml")
 wb.save("output.twb", overwrite=True)
 ```
 
@@ -90,7 +91,7 @@ wb.save("output.twb", overwrite=True)
 | `design.font` | ワークブック全体の既定フォント |
 | `datasources.*.folders` | 表示名の変更とフォルダ分類 |
 | `datasources.*.renames` | フォルダへは入れず、表示名だけを変更 |
-| `datasources.*.calculations` | 計算フィールドの作成。同名があれば式・データ型・役割・フォルダを上書き |
+| `datasources.*.calculations` | 計算フィールドの作成。同名があれば式・データ型・役割・フォルダを上書き。式が参照する計算フィールドから先に作るので、並び順は問わない |
 | `dashboard` | シートを作って並べ、アクションを張る |
 | `kpi_tree` | ノードごとに KPI カードを作り、ツリー状に並べたダッシュボードを作る（`build_kpi_tree`）。`dashboard` と両方あればダッシュボードは 2 つ |
 
@@ -164,7 +165,7 @@ Worksheet のみ `id == name == XML @name`。
 | メソッド | 引数 | 戻り値 | 説明 |
 |---|---|---|---|
 | `open` *(classmethod)* | `path: str` | `TwbWorkbook` | `.twb` / `.twbx` を開く。`.twbx` は内部の `.twb` を読む |
-| `save` | `path: str, *, validate: bool = True, overwrite: bool = False` | `None` | 保存。`validate=True` なら検証に失敗した時点で書き込まない。`overwrite=False` で既存ファイルへの上書きを拒否 |
+| `save` | `path: str, *, validate: bool = True, overwrite: bool = False` | `None` | 保存。`validate=True` なら検証に失敗した時点で書き込まない。`overwrite=False` で既存ファイルへの上書きを拒否。KPI ツリーのエッジ（`build_kpi_tree(edges=True)`）があれば、同梱の `twbpatch_kpi_tree_edge.hyper` を .twb の隣（.twbx なら中）へ置く |
 | `reload` | — | `TwbWorkbook` | 未保存の変更を破棄して再読込。既存の接続型モデルは無効化され、以降の操作は `DetachedModelError` |
 | `validate` | — | `list[TwbValidationMessage]` | 現在の XML ツリーを検証し、問題を列挙する |
 | `get_unsupported_features` | — | `list[TwbUnsupportedFeature]` | SDK が未対応の Tableau 機能を列挙する |
@@ -203,12 +204,10 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 | メソッド | 主な引数（先頭に省略可能な `datasource`） | 説明 |
 |---|---|---|
 | `draw_sheet` | `*, name, items=None, item_shelf="rows", title=None, visible=True` | 汎用シート。`items` を指定シェルフへ配置するだけの土台 |
-| `draw_bar` | `*, name, item, metric, item_shelf="rows", aggregation="sum", descending=True, bar_color=None` | 棒グラフ。`item` 別に `metric` を集計して並べる |
-| `draw_yoy` | `*, name, item, metric, item_shelf="columns", aggregation="sum", date_level="month", color=None, show_axes=True` | 前年比の時系列。`date_level` で粒度を指定 |
+| `draw_bar` | `*, name, item, metric, item_shelf="rows", aggregation="sum", descending=True, bar_color=None, title=None` | 棒グラフ。`item` 別に `metric` を集計して並べる |
 | `draw_card` | `*, name, main_metric, sub_metric=None, main_color="#602fff", value_color="#333333", title_background_color=None, vertical_alignment="center", main_aggregation="auto", sub_aggregation="auto"` | KPI カード。主指標と補助指標を大きく表示 |
 | `draw_quadrant` | `*, name, item, x_metric, y_metric, size_metric, colors=(4色), x/y/size_aggregation="auto", opacity=0.6, title=None` | 散布図の四象限。中央値で区切り4色に塗り分ける |
 | `draw_crosstab` | `*, name, x_item, y_item, color_metric, label_metric, color/label_aggregation="auto", min_color=None, mid_color=None, max_color=None, title=None` | ヒートマップ付きクロス集計 |
-| `draw_colored_yoy_sheet` | `*, name, items, metrics, negative_color="#ff007f", positive_color="#602fff", ratio_color="#555555", mark_type="bar", bar_color=None, axis_min=0, axis_max=1, show_axes=False, bar_opacity=1.0, index_partition_by=None` | 前年差を色分けした帳票。指標ごとに固定軸の棒を並べる |
 
 ### 2.4.1 KPI ツリーの配置（`build_kpi_tree`）
 
@@ -217,17 +216,18 @@ workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
 
 | メソッド | 引数 | 説明 |
 |---|---|---|
-| `build_kpi_tree` | `*, dashboard_name, root: KpiNode, align="center", edge_hyper: str \| None = None, content_style: dict \| None = None` | `align` は親カードの位置で `"center"`（子の範囲の縦中央）/ `"top"`（上端）。`edge_hyper` にエッジの座標の .hyper のパスを渡すと線を描く（`align="top"` のときだけ）。`content_style` は台紙の書式で、`build_report` と同じく既定に重ねる |
+| `build_kpi_tree` | `*, dashboard_name, root: KpiNode, align="center", edges: bool = False, edge_hyper: str \| None = None, content_style: dict \| None = None, spacing_scale=1.0` | `align` は親カードの位置で `"center"`（子の範囲の縦中央）/ `"top"`（上端）。`edges=True` でエッジ（線）を描く（`align="top"` のときだけ）。`content_style` は台紙の書式で、`build_report` と同じく既定に重ねる |
 
 `KpiNode(worksheet, children=[])` は `twbpatch` から import する値オブジェクト。
 `children` が空のノードがツリーの末端になる。
 
 - ノードは 横 200 × 縦 150 固定。ダッシュボードの大きさは ツリーの深さ × 200、末端ノードの数 × 150 に、周りの余白 8 ずつを足したものになる
-- 見た目はダッシュボードの `build_report` と同じ。灰色の台紙に白いカードを余白付きで置き、カードのタイトルはシートにタイトルがあるときだけ出す
+- 見た目はダッシュボードの `build_report` と同じ。灰色の台紙に白いカード（内側の余白 0・角の丸み 8）を置き、カードのタイトルは帯（背景色）だけ出す
 - 同じシートを 2 つのノードに置く、別ワークブックのシートを渡すと例外。このときダッシュボードは作られない
-- **エッジ（線）**: `edge_hyper="edge.hyper"` のように座標の .hyper（`examples/edge.hyper`）のパスを渡す。
-  データソース「KPIツリーのエッジ」が無ければ作り、あれば使い回す。.hyper ファイルはコピーしないので、.twb から
-  そのパスで見える場所に置く。親ノードごとに `エッジ|<親のシート名>` という非表示のシートを作り、
+- **エッジ（線）**: `edges=True` で描く。座標の .hyper はライブラリに同梱したものを使い、**`save()` が .twb の隣
+  （.twbx なら中）へ `twbpatch_kpi_tree_edge.hyper` として置く**ので、ファイルを用意する必要はない。自前の .hyper を使うときは
+  `edge_hyper="edge.hyper"` のように .twb から見たパスを渡す（こちらはコピーしない）。
+  データソース「KPIツリーのエッジ」が無ければ作り、あれば使い回す。親ノードごとに `エッジ|<親のシート名>` という非表示のシートを作り、
   カードと子の列のあいだに幅 60px で置く。ダッシュボードの幅は その分だけ広がる。1 つの親の下の末端は 7 つまで
 
 ```python
@@ -299,7 +299,6 @@ workbook.build_kpi_tree(
 | `create_folder` | `*, name: str` | `TwbFolder` | フォルダを作成 |
 | `create_calculated_field` | `*, name, formula, datatype="real", role="measure", discrete=False, folder=None, hidden=False, number_format=None, table_calculation=None, formula_ref="auto", strict=True, ref_map=None, create_folder_if_missing=False` | `TwbField` | 計算フィールドを1件作成。`formula` 内の表示名は保存前に `id` へ変換される |
 | `create_calculated_fields` | `*, calculations: dict, folder=None, role="measure", discrete=False, strict=True, create_folder_if_missing=False` | `list[TwbField]` | 計算フィールドを一括作成 |
-| `create_yoy_calculated_fields` | `*, metric, year_category, folder=None, create_folder_if_missing=False` | `list[TwbField]` | 前年比に必要な計算フィールド群をまとめて作成 |
 | `set_filter` | `*, field: TwbField` | `TwbDatasource` | データソースレベルのフィルタを設定 |
 | `apply_field_config` | `config: str \| Path \| dict, *, field_grouping="folder"` | `TwbDatasource` | 設定に沿って表示名・フォルダを一括適用 |
 | `update` | `*, source=UNSET, name=UNSET, field_grouping=UNSET` | `TwbDatasource` | 自身を更新 |
@@ -338,8 +337,8 @@ workbook.build_kpi_tree(
 | `delete` | — | `None` | 削除。計算式・配置・フィルタ等から参照されていれば `ResourceInUseError` |
 
 **`folder=` は無ければ `NotFoundError`。** 暗黙には作らない。`create_folder_if_missing=True`
-を渡したときだけ、その名前でフォルダを作って割り当てる。`folder=` を取る 6 メソッド
-（`create_calculated_field` / `create_calculated_fields` / `create_yoy_calculated_fields` /
+を渡したときだけ、その名前でフォルダを作って割り当てる。`folder=` を取る 5 メソッド
+（`create_calculated_field` / `create_calculated_fields` /
 `create_drill_path` / `create_group` / `move_to_folder`）で規則は同じ。
 
 ### 3.3 `TwbFolder`
@@ -493,7 +492,7 @@ workbook.build_kpi_tree(
 | `create_action` | `*, kind, name, source, targets=None, field=None, url=None, activation="on-select", clear_selection="show_all"` | `TwbDashboardAction` | アクションを1件作成。`kind` は `filter` / `url` |
 | `create_container` | `*, direction="horizontal", friendly_name=None, distribute_evenly=False` | `TwbDashboardContainer` | 最上位コンテナを作成 |
 | `add_floating_worksheet` | `worksheet: TwbWorksheet, *, x=0, y=0, width=600, height=400, show_title=True` | `TwbDashboardZone` | 浮動配置。タイル配置とは明示的に別 API |
-| `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_title=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333", filter_apply_button=False` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築。`header_title` を省略するとヘッダーにダッシュボード名を書く。`filter_apply_button=True` で置いたフィルタすべてに「適用」ボタンを付ける |
+| `build_report` | `*, dashboard_name, struct, container_sizes=None, content_style=None, header_title=None, header_height=43, header_background_color="#c0c0c0", header_font_color="#333333", filter_apply_button=False, spacing_scale=1.0` | `TwbDashboard` | 構造定義から帳票レイアウトを一括構築。ゾーンの余白は描いたグラフの種類で決まる（カード 0 / 棒 16 / クロス・象限 0 / 帳票 8、角の丸み 8）。`spacing_scale` はその余白の倍率。`header_title` を省略するとヘッダーにダッシュボード名を書く。`filter_apply_button=True` で置いたフィルタすべてに「適用」ボタンを付ける |
 | `update` | `*, name=UNSET, visible=UNSET` | `TwbDashboard` | 自身を更新 |
 | `delete` | — | `None` | 削除 |
 

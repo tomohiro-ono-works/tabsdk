@@ -34,11 +34,11 @@ wb.export_html("config.html", overwrite=True)
 - リネーム・フォルダ設定
 - 計算フィールド
 
-「設定 YAML をダウンロード」で `twbpatch_config.yaml` が落ちる。
+データソースタブの「設定 YAML をダウンロード」で `twbpatch_datasources.yaml` が落ちる。
 
 ```python
 wb = TwbWorkbook.open("template.twb")
-wb.apply_config("twbpatch_config.yaml")
+wb.apply_config("twbpatch_datasources.yaml")
 wb.save("step1.twb", overwrite=True)
 ```
 
@@ -52,26 +52,34 @@ wb = TwbWorkbook.open("step1.twb")
 wb.export_html("config2.html", overwrite=True)
 ```
 
-`config2.html` でダッシュボードのタブを設定し、YAML を落として適用する。
+`config2.html` でダッシュボードのタブ（または KPI ツリーのタブ）を設定し、**そのタブの**「設定 YAML をダウンロード」で
+落として適用する。ファイルはダッシュボードが `twbpatch_dashboard.yaml`、KPI ツリーが `twbpatch_kpi_tree.yaml` で、
+どちらもデザインルールとデータソースの設定を含む。
 
 ```python
 wb = TwbWorkbook.open("step1.twb")
-wb.apply_config("twbpatch_config.yaml")
+wb.apply_config("twbpatch_dashboard.yaml")
+wb.apply_config("twbpatch_kpi_tree.yaml")   # 両方作るなら続けて適用してよい
 wb.save("output.twb", overwrite=True)
 ```
 
+データソースの設定は 2 つのファイルに入っているので 2 回適用されるが、上書きになるだけで止まらない。
+シート名・ダッシュボード名が 2 つのファイルでぶつかると止まるので、画面はダウンロード前にタブをまたいで検証する。
+
 ## 気をつけること
 
-**2 周目の YAML は必ず作り直す。** `datasources.*.folders` は「元カラム名 → 表示名」
-なので、適用済みの `.twb` へ 1 周目の YAML をもう一度渡すと、元カラム名が見つからず
-`NotFoundError` になる。`calculations` だけは同名を上書きするので 2 度通しても平気。
+**データソースの設定は 2 度通しても止まらない。** `calculations` は同名を上書きし、`folders` / `renames` の元カラム名は
+表示名が変わった後もフィールドの ID から引ける（2026-09-14 実測。以前の「`NotFoundError` になる」は今の実装と合わない）。
+
+**ダッシュボード・KPI ツリーは 2 度通すと止まる。** 同じシート名が既にあるため `worksheet already exists` になる。
+保存済みの `.twb` へ同じファイルをもう一度適用しない。
 
 **ダッシュボードは新規作成しかできない。** 画面は既存ダッシュボードを読み込まない。
 `apply_config()` も `create_dashboard()` から始める。
 
 **届かない設定はログに出る。** 受け手が無い節は警告ログへ名前を出して読み飛ばす。
-`design` の色・余白・適用ボタンは `dashboard` を組むときに使うので、
-`dashboard` が無い設定では届かない。
+`design` の色・余白・適用ボタンは `dashboard` / `kpi_tree` を組むときに使うので、
+どちらも無い設定では届かない。
 
 ```python
 import logging
@@ -88,10 +96,12 @@ logging.basicConfig(level=logging.WARNING)
 | フィルターに「適用」ボタン | `build_report(filter_apply_button=)` |
 | リネーム・フォルダ | `apply_field_config()` |
 | リネーム（フォルダ未指定） | フィールドを解決して `field.update(name=)` |
-| 計算フィールド | `create_calculated_field()`。同名は式・型・役割・フォルダを上書き |
+| 計算フィールド | `create_calculated_field()`。同名は式・型・役割・フォルダを上書き。参照先から先に作るので表の並び順は問わない |
 | ダッシュボードのヘッダー | `build_report(header_title=, header_height=, ...)` |
 | 段とエリア | `draw_*()` でシートを作り `build_report()` で並べる |
 | エリアのアクション | `create_action()`。フィルターと URL の 2 種 |
+| KPI ツリーのノード | `draw_card()` でカードを作り `build_kpi_tree()` で並べる。余白は `content_style=` へ |
+| KPI ツリーの親ノードの位置 | `build_kpi_tree(align=)`。上端ならエッジも描き、エッジの .hyper は `save()` が .twb の隣へ置く（指定は要らない） |
 
 **アクションの実行方法は `on-select` しか実物で確かめていない。**
 `on-hover` / `on-menu` は Tableau で一般に使われる値だが未確認（`docs/backlog.md` H-1）。

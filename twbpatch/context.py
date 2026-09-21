@@ -65,6 +65,10 @@ class WorkbookContext:
         self.cache_epoch = 0
         self.is_dirty = False
         self.layout_weights: dict[tuple[str, str], float] = {}
+        #: `draw_*()` が描いたワークシート名 → 関数名。ダッシュボードへ置くときの
+        #: 余白をグラフごとに変えるために使う（2026-09-21）。.twb には残らないので、
+        #: 開き直した後や手で作ったシートでは既定の余白になる。
+        self.chart_kinds: dict[str, str] = {}
 
     def mark_dirty(self) -> None:
         self.revision += 1
@@ -82,6 +86,7 @@ class WorkbookContext:
         self.revision += 1
         self.is_dirty = False
         self.layout_weights.clear()
+        self.chart_kinds.clear()
 
 
 class ConnectedModel:

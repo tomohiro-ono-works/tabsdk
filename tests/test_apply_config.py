@@ -108,6 +108,57 @@ def test_apply_config_overwrites_existing_calculation() -> None:
     assert field.discrete is True
 
 
+def test_apply_config_creates_referenced_calculations_first() -> None:
+    """参照先の計算フィールドが YAML の後ろにあっても作れる（2026-09-14）。
+
+    画面の計算フィールドの表は行を途中に挿入できず、参照先を後から足すと末尾に入る。
+    以前は上から順に作っていたため `formula reference not found` で止まっていた。
+    """
+    workbook = TwbWorkbook.open(SAMPLE)
+    workbook.apply_config(
+        {
+            "datasources": {
+                "売上データ": {
+                    "calculations": [
+                        {"name": "利益率(差)", "formula": "[利益率] - [目標利益率]"},
+                        {"name": "区分", "formula": '"A"', "datatype": "string", "role": "dimension"},
+                        {"name": "利益率", "formula": "SUM([粗利]) / SUM([売上])"},
+                        {"name": "目標利益率", "formula": "[利益率] * 0 + 0.3"},
+                    ]
+                }
+            }
+        }
+    )
+
+    datasource = workbook.get_datasources(name="売上データ")[0]
+    assert datasource.get_fields(name="利益率(差)")[0].formula == "[利益率] - [目標利益率]"
+    # 参照し合っていないものは YAML の並び順のまま、参照先は参照する側より先
+    calculated = [field.name for field in datasource.get_fields() if field.is_calculated]
+    assert calculated == ["区分", "利益率", "目標利益率", "利益率(差)"]
+
+
+def test_apply_config_rejects_circular_calculations_before_creating_any() -> None:
+    workbook = TwbWorkbook.open(SAMPLE)
+
+    with pytest.raises(ValueError, match="cycle: A, B"):
+        workbook.apply_config(
+            {
+                "datasources": {
+                    "売上データ": {
+                        "calculations": [
+                            {"name": "合計", "formula": "SUM([売上])"},
+                            {"name": "A", "formula": "[B] + 1"},
+                            {"name": "B", "formula": "[A] + 1"},
+                        ]
+                    }
+                }
+            }
+        )
+
+    datasource = workbook.get_datasources(name="売上データ")[0]
+    assert [field.name for field in datasource.get_fields() if field.is_calculated] == []
+
+
 def test_apply_config_makes_dimension_discrete_and_measure_continuous() -> None:
     workbook = TwbWorkbook.open(SAMPLE)
     workbook.apply_config(

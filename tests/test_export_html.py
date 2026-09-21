@@ -30,13 +30,15 @@ def test_export_html_writes_self_contained_file(tmp_path) -> None:
     assert 'src="' not in html
 
 
-def test_export_html_contains_three_tabs(tmp_path) -> None:
+def test_export_html_contains_four_tabs(tmp_path) -> None:
     workbook = TwbWorkbook.open(SAMPLE)
     html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
 
     assert 'data-tab="tab-design"' in html
     assert 'data-tab="tab-datasource"' in html
     assert 'data-tab="tab-dashboard"' in html
+    assert 'data-tab="tab-kpi-tree"' in html
+    assert '<section id="tab-kpi-tree">' in html
     assert "リネーム後名称" in html
     assert "計算フィールド" in html
 
@@ -84,17 +86,39 @@ def test_export_html_design_tab_uses_pickers(tmp_path) -> None:
         assert f'<input type="color" id="{name}-pick">' in html
 
 
-def test_export_html_has_single_yaml_download(tmp_path) -> None:
+def test_export_html_downloads_yaml_per_tab(tmp_path) -> None:
+    """YAML のダウンロードはタブごと（2026-09-14）。そのタブで使う節だけを出す。
+
+    以前はナビ右端の 1 つで全タブを束ねていたため、ダッシュボードタブを使わなくても
+    dashboard: 節（段 0）が出て、適用すると空のダッシュボードが増えていた。
+    """
     workbook = TwbWorkbook.open(SAMPLE)
     html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
 
-    assert 'id="yaml-download"' in html
-    assert html.count('class="act"') == 3  # 行を追加 / 選択行を削除 / 段を追加
+    nav = html[html.index("<nav>"):html.index("</nav>")]
+    assert 'class="dl"' not in nav
+    assert 'id="yaml-download"' not in html
     for removed in ("rename-download", "calc-download", "design-download"):
         assert removed not in html
-    assert 'download("twbpatch_config.yaml"' in html
-    # design と datasources を 1 つの YAML にまとめる
-    assert '"\\ndatasources:\\n"' in html or "datasources:" in html
+    assert html.count('class="act"') == 3  # 行を追加 / 選択行を削除 / 段を追加
+
+    def section(section_id: str) -> str:
+        start = html.index(f'<section id="{section_id}"')
+        return html[start:html.index("</section>", start)]
+
+    assert 'id="yaml-download-datasources"' in section("tab-datasource")
+    assert 'id="yaml-download-dashboard"' in section("tab-dashboard")
+    assert 'id="yaml-download-kpi-tree"' in section("tab-kpi-tree")
+    assert 'class="dl"' not in section("tab-design")
+
+    assert 'downloadYaml("twbpatch_datasources.yaml", datasourceErrors(),' in html
+    assert 'yamlHeader(["datasources"]) + datasourcesYaml()' in html
+    assert 'downloadYaml("twbpatch_dashboard.yaml", errors, () =>' in html
+    assert 'yamlHeader(["design", "datasources", "dashboard"])' in html
+    assert 'downloadYaml("twbpatch_kpi_tree.yaml", errors, () =>' in html
+    assert 'yamlHeader(["design", "datasources", "kpi_tree"])' in html
+    # 段が 0 のダッシュボードは出さない
+    assert 'if (!DASH.rows.length) return ["ダッシュボード: 段がありません"];' in html
 
 
 def test_export_html_header_is_folded_into_sticky_nav(tmp_path) -> None:
@@ -103,9 +127,9 @@ def test_export_html_header_is_folded_into_sticky_nav(tmp_path) -> None:
 
     assert "<header>" not in html
     assert "nav { position: sticky" in html
-    # タイトルと件数はダウンロードボタンの右隣に置く
+    # タイトルと件数はタブの右隣に置く
     nav = html[html.index("<nav>"):html.index("</nav>")]
-    assert nav.index('id="yaml-download"') < nav.index('class="meta"')
+    assert nav.index('data-tab="tab-kpi-tree"') < nav.index('class="meta"')
     assert "データソース 1 件" in nav
 
 
@@ -378,11 +402,6 @@ def test_export_html_dashboard_can_generate_sheet_names(tmp_path) -> None:
     assert "function generateSheetName(area)" in html
     assert 'title: "グラフ種類と選んだ項目からシート名を生成"' in html
     assert 'draw_card: { label: "スコア", fields: [{ name: "main_metric" }] }' in html
-    assert 'draw_yoy: { label: "時系列", fields: [{ name: "metric" }] }' in html
-    assert (
-        'draw_colored_yoy_sheet: { label: "前年差", fields: [{ name: "metrics", limit: 1 }] }'
-        in html
-    )
 
 
 def test_export_html_dashboard_validates_required_params_before_download(tmp_path) -> None:
@@ -446,7 +465,7 @@ def test_export_html_draw_card_hides_value_color_and_mirrors_main_color(tmp_path
     assert "main_color" in names
 
     assert (
-        'if (area.chart === "draw_card" && params.main_color) {' in html
+        'if (chart === "draw_card" && params.main_color) {' in html
     )
     assert "params.value_color = params.main_color;" in html
     assert "params.title_background_color = params.main_color;" in html
@@ -775,3 +794,23 @@ def test_export_html_refuses_to_overwrite(tmp_path) -> None:
         workbook.export_html(target)
 
     workbook.export_html(target, overwrite=True)
+
+
+def test_export_html_lists_chart_types_in_the_configured_order(tmp_path) -> None:
+    """グラフ種類の選択肢は、よく使う順に固定する（2026-09-21）。
+
+    以前はメソッド名の名前順（draw_bar → draw_card → …）で、意味のない並びだった。
+    """
+    workbook = TwbWorkbook.open(SAMPLE)
+    html = workbook.export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    specs = json.loads(
+        re.search(r'id="draw-specs">(.*?)</script>', html, re.S).group(1)
+    )
+    assert [spec["label"] for spec in specs.values()] == [
+        "KPIカード",
+        "棒グラフ",
+        "帳票",
+        "クロス集計（ヒートマップ）",
+        "散布図（四象限）",
+    ]

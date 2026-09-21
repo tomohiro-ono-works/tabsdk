@@ -1,6 +1,9 @@
+import zipfile
+
 import pytest
 
 from twbpatch import KpiNode, TwbWorkbook
+from twbpatch.errors import SaveError
 
 
 DATASOURCE_ID = "federated.00vlmup0b8v7m212i5x9f03fouo2"
@@ -168,7 +171,8 @@ def test_build_kpi_tree_styles_cards_like_dashboard_tab(tmp_path) -> None:
     assert tree.style == tab_content.style
     cards = [zone for zone in _all_zones(tree) if zone.kind == "worksheet" and not zone.name.startswith("エッジ|")]
     assert [zone.style for zone in cards] == [tab_card.style, tab_card.style]
-    assert [zone.show_title for zone in cards] == [tab_card.show_title, tab_card.show_title] == [False, False]
+    # タイトルは文字なしの帯（背景色）だけ。show_title を落とすと帯ごと消える（2026-09-20）
+    assert [zone.show_title for zone in cards] == [tab_card.show_title, tab_card.show_title] == [True, True]
     # エッジのシートはワークシートとペインの背景を台紙と同じ色で塗る
     assert workbook.tree.xpath(
         "/workbook/worksheets/worksheet[@name='エッジ|利益']/table/style"
@@ -373,3 +377,61 @@ def test_build_kpi_tree_rejects_edge_datasource_with_other_hyper(tmp_path) -> No
         workbook.build_kpi_tree(dashboard_name="ツリー2", root=second, align="top", edge_hyper="other.hyper")
 
     assert _snapshot(workbook) == before
+
+
+BUNDLED_EDGE_FILENAME = "twbpatch_kpi_tree_edge.hyper"
+
+
+def test_build_kpi_tree_edges_uses_the_bundled_hyper_and_save_places_it(tmp_path) -> None:
+    """edges=True でパスを渡さなければ同梱の表を使い、save() が .twb の隣へ置く（2026-09-15）。"""
+    from twbpatch.kpi_tree import _BUNDLED_EDGE_HYPER
+
+    workbook = _superstore_workbook(tmp_path)
+    workbook.build_kpi_tree(dashboard_name="KPIツリー", root=_sample_tree(workbook), align="top", edges=True)
+
+    edges = workbook.get_datasources(name=EDGE_DATASOURCE_NAME)[0]
+    assert workbook.tree.xpath(
+        "/workbook/datasources/datasource[@name=$name]/extract/connection/@dbname", name=edges.id
+    ) == [BUNDLED_EDGE_FILENAME]
+
+    output = tmp_path / "out" / "tree.twb"
+    output.parent.mkdir()
+    workbook.save(str(output))
+    placed = output.parent / BUNDLED_EDGE_FILENAME
+    assert placed.read_bytes() == _BUNDLED_EDGE_HYPER.read_bytes()
+
+    # 同じ内容が既にあれば、そのまま上書き保存できる
+    workbook.save(str(output), overwrite=True)
+    # 別の内容のファイルがあるときは、overwrite=False なら .twb も書かずに止める
+    other = tmp_path / "other" / "tree.twb"
+    other.parent.mkdir()
+    (other.parent / BUNDLED_EDGE_FILENAME).write_bytes(b"not an extract")
+    with pytest.raises(SaveError, match="同梱ファイル"):
+        workbook.save(str(other))
+    assert not other.exists()
+
+
+def test_save_does_not_place_the_hyper_without_bundled_edges(tmp_path) -> None:
+    workbook = _superstore_workbook(tmp_path)
+    workbook.build_kpi_tree(dashboard_name="KPIツリー", root=_sample_tree(workbook), align="top", edge_hyper="edge.hyper")
+
+    output = tmp_path / "out" / "tree.twb"
+    output.parent.mkdir()
+    workbook.save(str(output))
+
+    assert [path.name for path in output.parent.iterdir()] == ["tree.twb"]
+
+
+def test_save_twbx_puts_the_bundled_hyper_inside_the_package(tmp_path) -> None:
+    _superstore_workbook(tmp_path)  # tmp_path/superstore.twb を書く
+    package = tmp_path / "tree.twbx"
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.write(tmp_path / "superstore.twb", "superstore.twb")
+
+    workbook = TwbWorkbook.open(str(package))
+    workbook.build_kpi_tree(dashboard_name="KPIツリー", root=_sample_tree(workbook), align="top", edges=True)
+    output = tmp_path / "saved.twbx"
+    workbook.save(str(output))
+
+    with zipfile.ZipFile(output) as archive:
+        assert set(archive.namelist()) >= {"superstore.twb", BUNDLED_EDGE_FILENAME}

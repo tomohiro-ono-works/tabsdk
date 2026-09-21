@@ -41,12 +41,6 @@ def test_draw_methods_with_a_datasource_accept_plain_field_names(tmp_path) -> No
         name="API_一覧",
         items=["カテゴリ", "サブカテゴリ"],
     )
-    yoy = workbook.draw_yoy(
-        datasource,
-        name="API_前年比",
-        item="注文日",
-        metric="売上",
-    )
     bar = workbook.draw_bar(
         datasource,
         name="API_棒",
@@ -67,7 +61,6 @@ def test_draw_methods_with_a_datasource_accept_plain_field_names(tmp_path) -> No
         f"[{DATASOURCE_ID}].[none:Category:nk]"
         f" / [{DATASOURCE_ID}].[none:Sub-Category:nk]"
     )
-    assert yoy.get_panes()[0].mark_type == "line"
     assert bar.get_panes()[0].mark_type == "bar"
     assert card.get_panes()[0].mark_type == "automatic"
     assert card.get_panes()[0].customized_label == {
@@ -100,13 +93,6 @@ def test_workbook_draw_methods_accept_datasource_field_tuples(tmp_path) -> None:
             (datasource_name, "サブカテゴリ"),
         ],
     )
-    yoy = workbook.draw_yoy(
-        name="API_タプル前年比",
-        item=(datasource_name, "注文日"),
-        metric=(datasource_name, "売上"),
-        color="#602FFF",
-        show_axes=False,
-    )
     bar = workbook.draw_bar(
         name="API_タプル棒",
         item=(datasource_name, "サブカテゴリ"),
@@ -119,17 +105,6 @@ def test_workbook_draw_methods_accept_datasource_field_tuples(tmp_path) -> None:
     )
 
     assert {field.shelf for field in sheet.get_fields()} == {"rows"}
-    assert yoy.get_panes()[0].mark_type == "line"
-    assert workbook.tree.xpath(
-        "/workbook/worksheets/worksheet[@name='API_タプル前年比']"
-        "/table/style/style-rule[@element='axis']"
-        "/format[@attr='display']/@value"
-    ) == ["false", "false"]
-    assert workbook.tree.xpath(
-        "string(/workbook/worksheets/worksheet[@name='API_タプル前年比']"
-        "/table/panes/pane/style/style-rule[@element='mark']"
-        "/format[@attr='mark-color']/@value)"
-    ) == "#602fff"
     assert bar.get_panes()[0].mark_type == "bar"
     assert card.get_panes()[0].customized_label["main_metric"] == "売上"
 
@@ -237,110 +212,6 @@ def test_workbook_draw_bar_resolves_fields_from_different_datasources(tmp_path) 
     )[0]
     assert sort.get("column").startswith("[products].")
     assert sort.get("using").startswith("[sales].")
-
-
-def test_draw_colored_yoy_sheet_builds_fixed_hidden_bar_axes_per_metric(tmp_path) -> None:
-    source = tmp_path / "colored-yoy.twb"
-    source.write_text(
-        """<?xml version='1.0' encoding='utf-8'?>
-<workbook>
-  <datasources>
-    <datasource name="ds1" caption="売上データ">
-      <column name="[Index]" caption="#" datatype="integer" role="measure" type="quantitative">
-        <calculation class="tableau" formula="index()" />
-      </column>
-      <column name="[Category]" caption="カテゴリ" datatype="string" role="dimension" type="nominal" />
-      <column name="[Sales]" caption="売上" datatype="real" role="measure" type="quantitative" />
-      <column name="[Profit]" caption="粗利" datatype="real" role="measure" type="quantitative" />
-      <column name="[YearCategory]" caption="当年昨年区分" datatype="string" role="dimension" type="nominal" />
-    </datasource>
-  </datasources>
-  <worksheets />
-</workbook>
-""",
-        encoding="utf-8",
-    )
-    workbook = TwbWorkbook.open(str(source))
-    datasource = workbook.get_datasources()[0]
-    datasource.create_yoy_calculated_fields(metric="売上", year_category="当年昨年区分")
-    datasource.create_yoy_calculated_fields(metric="粗利", year_category="当年昨年区分")
-
-    worksheet = workbook.draw_colored_yoy_sheet(
-        name="前年差帳票",
-        items=[("売上データ", "#"), ("売上データ", "カテゴリ")],
-        metrics=[("売上データ", "売上"), ("売上データ", "粗利")],
-        negative_color="#FF007F",
-        positive_color="#602FFF",
-        ratio_color="#555555",
-        mark_type="bar",
-        bar_color="#4E79A7",
-        axis_min=0,
-        axis_max=1,
-        show_axes=False,
-        bar_opacity=0.0,
-        index_partition_by=("売上データ", "カテゴリ"),
-    )
-
-    assert worksheet.name == "前年差帳票"
-    assert [(field.name, field.shelf) for field in worksheet.get_fields() if field.shelf] == [
-        ("#", "rows"),
-        ("カテゴリ", "rows"),
-        ("帳票配置用_MIN1", "columns"),
-        ("帳票配置用_MIN1", "columns"),
-    ]
-    assert worksheet.get_fields(name="#")[0].table_calculation == "table_down"
-    assert worksheet._resolve_element().xpath("string(./table/cols)").count("+") == 1
-    panes = worksheet.get_panes()
-    assert len(panes) == 3
-    assert [
-        [field.name for field in pane.get_fields()]
-        for pane in panes[1:]
-    ] == [
-        ["売上|昨年差<0", "売上|昨年差>=0", "売上比|昨年比"],
-        ["粗利|昨年差<0", "粗利|昨年差>=0", "粗利比|昨年比"],
-    ]
-    assert [pane.mark_type for pane in panes] == ["bar", "bar", "bar"]
-    axis_encodings = worksheet._resolve_element().xpath(
-        "./table/style/style-rule[@element='axis']/encoding[@attr='space']"
-    )
-    assert [
-        f"{encoding.get('class')}:{encoding.get('min')}:"
-        f"{encoding.get('max')}:{encoding.get('range-type')}"
-        for encoding in axis_encodings
-    ] == ["0:0:1:fixed", "1:0:1:fixed"]
-    assert worksheet._resolve_element().xpath(
-        "./table/style/style-rule[@element='axis']/format[@attr='display']/@value"
-    ) == ["false", "false"]
-    assert worksheet._resolve_element().xpath(
-        "./table/panes/pane[position() > 1]/style/style-rule[@element='mark']"
-        "/format[@attr='mark-color']/@value"
-    ) == ["#4e79a7", "#4e79a7"]
-    assert worksheet._resolve_element().xpath(
-        "./table/panes/pane[position() > 1]/style/style-rule[@element='mark']"
-        "/format[@attr='mark-transparency']/@value"
-    ) == ["0", "0"]
-    assert worksheet._resolve_element().xpath("string(./table/rows)").endswith(
-        ".[none:Category:nk]))"
-    )
-    assert ":ok:2]" in worksheet._resolve_element().xpath("string(./table/rows)")
-    assert worksheet._resolve_element().xpath(
-        "string(./table/view/slices/column)"
-    ).endswith(".[none:Category:nk]")
-    labels = worksheet._resolve_element().xpath(
-        "./table/panes/pane[position() > 1]/customized-label/formatted-text"
-    )
-    assert [[(run.get("fontcolor"), run.get("fontsize")) for run in label] for label in labels] == [
-        [("#ff007f", None), ("#602fff", None), ("#555555", "7")],
-        [("#ff007f", None), ("#602fff", None), ("#555555", "7")],
-    ]
-    assert worksheet.table_style == {
-        "header_background": "#f5f5f5",
-        "header_bold": True,
-        "header_color": "#555555",
-        "row_band": False,
-        "column_widths": {"#": 36},
-    }
-    assert not [message for message in workbook.validate() if message.severity == "error"]
 
 
 def test_draw_card_title_bar_shows_background_without_text(tmp_path) -> None:
@@ -605,3 +476,32 @@ def test_draw_crosstab_uses_color_and_label_metrics(tmp_path) -> None:
         "/encoding[@attr='color']/@palette)"
     ) == palette.get("name")
     assert not [message for message in workbook.validate() if message.severity == "error"]
+
+
+def test_draw_card_treats_calculation_referencing_aggregated_calculation_as_aggregated(tmp_path) -> None:
+    """集計済みの計算フィールドだけを参照する計算フィールドも、集計済みとして扱う（2026-09-20）。
+
+    式に集計関数が無くても、参照先が集計済みなら SUM をかけると Tableau でエラーになる。
+    行レベルの計算フィールド同士の式は従来どおり SUM をかける。
+    """
+    workbook = _superstore_workbook(tmp_path)
+    datasource = workbook.get_datasources(name=DATASOURCE_NAME)[0]
+    for name, formula in [
+        ("売上合計", "SUM([Sales])"),
+        ("売上比", "[売上合計] / [売上合計]"),
+        ("売上比の比", "[売上比] / 2"),
+        ("行レベル", "[Sales] * 2"),
+        ("行レベル比", "[行レベル] / 2"),
+    ]:
+        datasource.create_calculated_field(name=name, formula=formula, datatype="real", role="measure")
+
+    def derivations(metric: str) -> list[str]:
+        workbook.draw_card(datasource, name=f"カード|{metric}", main_metric=metric)
+        return workbook.tree.xpath(
+            f"/workbook/worksheets/worksheet[@name='カード|{metric}']//column-instance/@derivation"
+        )
+
+    assert derivations("売上合計") == ["User"]
+    assert derivations("売上比") == ["User"]
+    assert derivations("売上比の比") == ["User"]
+    assert derivations("行レベル比") == ["Sum"]

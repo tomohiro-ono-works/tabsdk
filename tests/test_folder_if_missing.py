@@ -158,16 +158,6 @@ def test_bulk_creation_makes_the_folder_once(tmp_path) -> None:
     ]
 
 
-def test_yoy_creation_can_make_the_folder(tmp_path) -> None:
-    _, datasource = _datasource(tmp_path)
-
-    datasource.create_yoy_calculated_fields(
-        metric="売上", year_category="年区分", folder="KPI", create_folder_if_missing=True
-    )
-
-    assert _folder_names(datasource) == ["KPI"]
-
-
 # --- 既存フォルダとオブジェクト渡し -------------------------------------------
 
 

@@ -72,14 +72,15 @@ def test_kpi_tree_draws_cards_and_places_them(tmp_path) -> None:
     workbook.apply_config({"design": DESIGN, "kpi_tree": _kpi_tree()})
 
     dashboard = workbook.get_dashboards(name="KPIツリー")[0]
-    assert set(_card_zones(dashboard)) == {"売上", "利益", "地域数"}
+    # 上端揃えなのでエッジ（幅 60）も入る
+    assert set(_card_zones(dashboard)) == {"売上", "エッジ|売上", "利益", "地域数"}
     # 既定の余白は「多め」: 台紙の外側 8 + 内側 16 の分だけダッシュボードが広がる
-    assert (dashboard.width, dashboard.height) == (400 + 2 * 24, 300 + 2 * 24)
+    assert (dashboard.width, dashboard.height) == (400 + 60 + 2 * 24, 300 + 2 * 24)
     assert dashboard.get_containers()[0].style["padding"] == "16"
     zones = _card_zones(dashboard)
     assert (zones["売上"].x, zones["売上"].y) == (24, 24)
-    assert (zones["利益"].x, zones["利益"].y) == (224, 24)
-    assert (zones["地域数"].x, zones["地域数"].y) == (224, 174)
+    assert (zones["利益"].x, zones["利益"].y) == (284, 24)
+    assert (zones["地域数"].x, zones["地域数"].y) == (284, 174)
 
     # デザインルールの色の参照（@main_color）が実際の色コードになってカードに入る
     assert "#2f3b52" in ET.tostring(
@@ -93,23 +94,28 @@ def test_kpi_tree_follows_design_spacing(tmp_path) -> None:
     workbook.apply_config({"design": {"main_color": "#2f3b52", "spacing": "narrow"}, "kpi_tree": _kpi_tree()})
 
     dashboard = workbook.get_dashboards(name="KPIツリー")[0]
-    assert (dashboard.width, dashboard.height) == (400 + 2 * 12, 300 + 2 * 12)
+    assert (dashboard.width, dashboard.height) == (400 + 60 + 2 * 12, 300 + 2 * 12)
     assert dashboard.get_containers()[0].style["margin"] == "4"
 
 
-def test_kpi_tree_draws_edges_when_edge_hyper_is_given(tmp_path) -> None:
+def test_kpi_tree_draws_edges_with_the_bundled_hyper_when_aligned_to_top(tmp_path) -> None:
+    """上端揃えならエッジを描く。.hyper は同梱のものを使い、YAML には書かない（2026-09-15）。"""
     workbook = _workbook(tmp_path)
 
-    workbook.apply_config({"design": DESIGN, "kpi_tree": _kpi_tree(edge_hyper="edge.hyper")})
+    workbook.apply_config({"design": DESIGN, "kpi_tree": _kpi_tree(align="top")})
 
-    assert workbook.get_datasources(name="KPIツリーのエッジ")
+    edges = workbook.get_datasources(name="KPIツリーのエッジ")
+    assert edges
+    assert workbook.tree.xpath(
+        "/workbook/datasources/datasource[@name=$name]/extract/connection/@dbname", name=edges[0].id
+    ) == ["twbpatch_kpi_tree_edge.hyper"]
     assert workbook.get_worksheets(name="エッジ|売上")
 
 
-def test_kpi_tree_without_edge_hyper_draws_no_edges(tmp_path) -> None:
+def test_kpi_tree_aligned_to_center_draws_no_edges(tmp_path) -> None:
     workbook = _workbook(tmp_path)
 
-    workbook.apply_config({"design": DESIGN, "kpi_tree": _kpi_tree(edge_hyper="")})
+    workbook.apply_config({"design": DESIGN, "kpi_tree": _kpi_tree(align="center")})
 
     assert workbook.get_datasources(name="KPIツリーのエッジ") == []
     assert workbook.get_worksheets(name="エッジ|売上") == []
@@ -167,3 +173,24 @@ def test_kpi_tree_rejects_malformed_section_before_drawing(tmp_path, override, m
 
     assert workbook.get_worksheets() == []
     assert workbook.get_dashboards() == []
+
+
+def test_kpi_tree_cards_have_no_inner_padding_and_rounded_corners(tmp_path) -> None:
+    """ノードは KPI カードなので内側の余白は 0、角の丸みは 8（2026-09-21）。"""
+    workbook = _workbook(tmp_path)
+
+    workbook.apply_config({"design": {"main_color": "#2f3b52", "spacing": "narrow"}, "kpi_tree": _kpi_tree()})
+
+    dashboard = workbook.get_dashboards(name="KPIツリー")[0]
+    card = _card_zones(dashboard)["売上"]
+    assert (card.style["padding"], card.style["margin"], card.style["corner_radius"]) == ("0", "4", "8")
+
+
+def test_kpi_tree_scales_card_spacing_when_the_design_asks_for_wide(tmp_path) -> None:
+    """余白「多め」ならカードの余白も 1.5 倍。0 は 0 のまま（2026-09-21）。"""
+    workbook = _workbook(tmp_path)
+
+    workbook.apply_config({"design": {"main_color": "#2f3b52", "spacing": "wide"}, "kpi_tree": _kpi_tree()})
+
+    card = _card_zones(workbook.get_dashboards(name="KPIツリー")[0])["売上"]
+    assert (card.style["margin"], card.style["padding"]) == ("6", "0")

@@ -3,7 +3,7 @@
 既にあるシート（通常は `draw_card()` で作った KPI カード）を親子関係のツリーとして受け取り、
 左から右へ展開するタイル配置で並べる。KPI カード自体は作らない。
 
-エッジ（線）は、座標だけを持つ .hyper（examples/edge.hyper）をデータソースとして足し、親ノードごとに
+エッジ（線）は、座標だけを持つ .hyper（パッケージ同梱の assets/edge.hyper）をデータソースとして足し、親ノードごとに
 折れ線のシートを作って描く。表の形は Tableau で手作りしたシートに合わせている: 線 E-k は
 O(0,0) → P-k(1,k) → P2-k(2,k) の 3 点で、階段補間により「親から横 → 縦 → 子へ横」になる。
 k は親の中心からの縦位置（ノードの高さの半分、75px 単位）。
@@ -12,14 +12,18 @@ k は親の中心からの縦位置（ノードの高さの半分、75px 単位�
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .connected import TwbDatasource, TwbField
 from .connected_dashboard import (
+    _CHART_ZONE_PADDING,
     _DEFAULT_REPORT_CONTENT_STYLE,
     _DEFAULT_REPORT_WORKSHEET_STYLE,
     TwbDashboard,
     TwbDashboardContainer,
+    _scaled_spacing,
+    _validate_spacing_scale,
 )
 from .connected_worksheet import (
     TwbWorksheet,
@@ -39,11 +43,17 @@ _ALIGNS = {"center", "top"}
 # 見た目はダッシュボードタブ（build_report()）の KPI カードに揃える: 灰色の台紙に白いカードを余白付きで置く。
 # 台紙は build_report() と同じく content_style= で上書きできる。台紙の外側・内側の余白の分だけ
 # 中身が内へ寄るので、ダッシュボードはその分大きくする。
-_CARD_STYLE = _DEFAULT_REPORT_WORKSHEET_STYLE
+# ノードは KPI カードなので、内側の余白はダッシュボードタブの KPI カードと同じ 0。
+_CARD_STYLE = {**_DEFAULT_REPORT_WORKSHEET_STYLE, "padding": _CHART_ZONE_PADDING["draw_card"]}
 _SIDES = ("left", "right", "top", "bottom")
 
 _EDGE_WIDTH = 60
 _EDGE_DATASOURCE_NAME = "KPIツリーのエッジ"
+#: パッケージに同梱したエッジの表（examples/edge.hyper と同じもの）。
+_BUNDLED_EDGE_HYPER = Path(__file__).resolve().parent / "assets" / "edge.hyper"
+#: 同梱の表を使うとき .twb から参照する名前。`save()` が .twb の隣（.twbx なら中）へ置く（2026-09-15）。
+#: 利用者のファイルとぶつからない名前にする。
+_BUNDLED_EDGE_FILENAME = "twbpatch_kpi_tree_edge.hyper"
 _EDGE_FIELDS = [
     {"name": "edge", "datatype": "string", "role": "dimension"},
     {"name": "point", "datatype": "string", "role": "dimension"},
@@ -70,12 +80,21 @@ def build_kpi_tree(
     dashboard_name: str,
     root: KpiNode,
     align: str = "center",
+    edges: bool = False,
     edge_hyper: str | None = None,
     content_style: dict[str, str | int | None] | None = None,
+    spacing_scale: float = 1.0,
 ) -> TwbDashboard:
+    _validate_spacing_scale(spacing_scale)
     if not isinstance(align, str) or align.lower() not in _ALIGNS:
         raise ValueError(f"align must be center or top: {align!r}")
     align = align.lower()
+    if not isinstance(edges, bool):
+        raise TypeError("edges must be bool")
+    # edges=True でパスを渡さなければ同梱の表を使い、save() が .twb の隣へ置く。
+    # edge_hyper を渡したときは、そのパスのファイルを利用者が用意する。
+    if edges and edge_hyper is None:
+        edge_hyper = _BUNDLED_EDGE_FILENAME
     tree_style = _tree_style(content_style)
     inset = {side: _inset(tree_style, side) for side in _SIDES}
     _validate_tree(workbook, root, set())
@@ -93,7 +112,7 @@ def build_kpi_tree(
     )
     row = dashboard.create_container(direction="horizontal")
     row.update(style=tree_style)
-    _place(workbook, row, root, depth, align, edge_fields)
+    _place(workbook, row, root, depth, align, edge_fields, _scaled_spacing(_CARD_STYLE, spacing_scale))
     background = tree_style.get("background_color")
     if edge_fields is not None and background is not None:
         for parent in _parents(root):
@@ -245,6 +264,7 @@ def _place(
     columns: int,
     align: str,
     edge_fields: dict[str, TwbField] | None,
+    card_style: dict[str, str | int | None],
 ) -> None:
     """`row` は `columns` 列ぶんの幅、高さ 末端数 × ノードの高さ の横コンテナ。
 
@@ -258,9 +278,11 @@ def _place(
     card = column.add_worksheet(
         node.worksheet,
         fixed_size=_NODE_HEIGHT,
-        show_title=node.worksheet.title is not None,
+        # 文字が無くても、背景色があるタイトルは帯として出す（KPI カード）
+        show_title=node.worksheet.title is not None
+        or node.worksheet.title_style["background_color"] is not None,
     )
-    card.update(style=dict(_CARD_STYLE))
+    card.update(style=dict(card_style))
     if stretches:
         column.add_spacer()
 
@@ -280,7 +302,7 @@ def _place(
             direction="horizontal",
             fixed_size=_leaf_count(child) * _NODE_HEIGHT,
         )
-        _place(workbook, child_row, child, columns - 1, align, edge_fields)
+        _place(workbook, child_row, child, columns - 1, align, edge_fields, card_style)
 
 
 def _draw_edge_sheet(
@@ -319,3 +341,17 @@ def _fill_background(sheet: TwbWorksheet, color: str) -> None:
     for element in ("pane", "table"):
         _set_style_value(style, element, "background-color", color)
     sheet._context.mark_dirty()
+
+
+def bundled_attachments(root: object) -> list[tuple[str, Path]]:
+    """`save()` が .twb と一緒に置くファイル。同梱のエッジの表を参照するデータソースがあるときだけ返す。
+
+    保存のたびに XML から判定するので、KPI ツリーを作ったセッションに限らず、作った .twb を
+    開き直して別の場所へ保存したときも .hyper が付いていく。
+    """
+    dbnames = root.xpath(  # type: ignore[attr-defined]
+        "/workbook/datasources/datasource/*[local-name()='extract']/*[local-name()='connection']/@dbname"
+    )
+    if _BUNDLED_EDGE_FILENAME in {str(value) for value in dbnames}:
+        return [(_BUNDLED_EDGE_FILENAME, _BUNDLED_EDGE_HYPER)]
+    return []
