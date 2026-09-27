@@ -63,16 +63,53 @@ _DEFAULT_REPORT_WORKSHEET_STYLE = {
 #: `WorkbookContext.chart_kinds` へ記録する。記録が無いシートは既定の 16。
 _CHART_ZONE_PADDING = {
     "draw_card": 0,
-    "draw_bar": 16,
-    "draw_crosstab": 0,
-    "draw_quadrant": 0,
+    # 棒グラフは向きで種類名を分けている（下の _CHART_ZOOM 参照）が、余白は共通
+    "draw_bar_h": 16,
+    "draw_bar_v": 16,
+    # クロス集計と散布図は 2026-09-21 に 0 から 16 へ変更
+    "draw_crosstab": 16,
+    "draw_quadrant": 16,
     "draw_sheet": 8,
+    # ウォーターフォール（2026-09-23）。他のマーク系グラフと同じ内側の余白にそろえる
+    "build_waterfall_chart": 16,
+    # インフォメーション（2026-09-23）。実測した手作業の "info" シートは余白の無い
+    # 小さいアイコンだけのゾーンだったので、KPI カードと同じ 0 にする
+    "draw_info": 0,
 }
 
 # build_report() の段の高さの既定。段ごとの height= か container_sizes= で変える。
 # 以前はコンテナ名に「フィルタ」「スコア」が含まれるかで 50 / 250 / 300 を切り替えて
 # いたが、名前でも中身でも挙動を変えないと決めたため 1 つに統一した（K-1、2026-09-07）。
 _CONTAINER_HEIGHT = 300
+
+#: テキストの文字揃えと、Tableau が `run/@fontalignment` へ書く値
+#: （2026-09-22 に実ダッシュボードで確認）。
+_TEXT_ALIGNMENTS = {"left": "0", "center": "1", "right": "2"}
+
+#: 帳票の項目名を浮動テキストで置くときの見た目（2026-09-22）。
+#: 表ヘッダーと同じ薄い灰色に合わせる。
+_SHEET_TITLE_HEIGHT = 20
+#: 細めで小さく（2026-09-22 指定）。太字にはしない
+_SHEET_TITLE_FONT_SIZE = 9
+_SHEET_TITLE_PADDING = 8
+_SHEET_TITLE_BACKGROUND = "#f0f0f0"
+#: シートのタイトルが出ているときの、その帯の高さ（概算）。
+_SHEET_TITLE_BAR_HEIGHT = 18
+#: 四象限のパラメータコントロール（右上に浮動で横並び）の大きさと余白（px）。
+#: RETAIL の実ダッシュボードのコントロールに近い値（概算、2026-09-24）。
+_QUADRANT_CONTROL_WIDTH = 160
+_QUADRANT_CONTROL_HEIGHT = 48
+_QUADRANT_CONTROL_GAP = 4
+_QUADRANT_CONTROL_MARGIN = 4
+#: ヘッダーの帯へ重ねるための下げ幅。実際に Tableau で開いて合わせた値
+#: （2026-09-22 指定）。
+_SHEET_TITLE_Y_OFFSET = 25
+
+#: ダッシュボードに置くフィルタカードの名称（タイトル）の書式（2026-09-22 指定）。
+#: 太字で文字は 10。フィルタを持つワークシートの書式として書く
+#: （`TwbWorksheet._apply_filter_title_style()`）。
+_FILTER_TITLE_BOLD = True
+_FILTER_TITLE_FONT_SIZE = 10
 
 
 #: 角の丸みだけは、Tableau が接頭辞付きの要素名で書き、ファイル先頭の
@@ -118,11 +155,21 @@ def _validate_border_color(color: str | None) -> None:
         raise ValueError("border_color must be a non-empty string or None")
 
 
+#: 枠線の太さ。Tableau が実ファイルへ書く値は 0 / 1 / 2 の整数で、2 が 1 段階太い
+#: （2026-09-22 に実ワークブックで実測）。細すぎて見えないので 1 から 2 へ上げた。
+_BORDER_WIDTH = 2
+
+
 def _bordered(style: dict[str, Any], border_color: str | None) -> dict[str, Any]:
     """枠線は色を指定したときだけ引く。指定が無ければ既定どおり枠線なし。"""
     if border_color is None:
         return style
-    return {**style, "border_style": "solid", "border_width": 1, "border_color": border_color}
+    return {
+        **style,
+        "border_style": "solid",
+        "border_width": _BORDER_WIDTH,
+        "border_color": border_color,
+    }
 
 
 def _worksheet_zone_style(
@@ -206,16 +253,24 @@ def _filter_item(container_name: str, item: dict[str, Any]) -> tuple[str, Any]:
     return "filter", field
 
 
-def _container_spec(container_name: str, value: Any) -> tuple[list[tuple[str, Any]], int | None]:
-    """`struct` の値から段の項目と高さを取り出す。
+def _container_spec(
+    container_name: str, value: Any
+) -> tuple[list[tuple[str, Any]], int | None, bool | None]:
+    """`struct` の値から段の項目・高さ・幅の割り方を取り出す。
 
     **区分値 `kind` は項目ごとに持つ**（2026-09-07）。1 つの段にグラフとフィルタを
     混ぜられるようにするため。設定画面もエリアごとに種別を選ばせている。
+
+    `distribute_evenly` は段の幅の割り方（2026-09-21）。`True` なら Tableau の
+    「均等に配布」で、エリアごとの `fixed_size` は効かない（Tableau もこの組み合わせを
+    書かない）。`False` なら `fixed_size` の px がそのまま幅になる。`None`（既定）は
+    これまでどおり、幅指定が無くグラフが 2 つ以上並ぶときだけ均等割りにする。
 
     ```python
     struct={
         "上段": {
             "height": 50,
+            "distribute_evenly": False,
             "items": [
                 {"kind": "filter", "field": ("売上データ", "地域")},
                 {"kind": "worksheet", "sheet": "売上推移"},
@@ -234,14 +289,17 @@ def _container_spec(container_name: str, value: Any) -> tuple[list[tuple[str, An
         raise TypeError(
             'container must be {"items": [...]}: ' + container_name
         )
-    unknown = set(value) - {"items", "height"}
+    unknown = set(value) - {"items", "height", "distribute_evenly"}
     if unknown:
         raise ValueError(
-            "container supports only items and height: " + container_name
+            "container supports only items, height and distribute_evenly: " + container_name
         )
     height = value.get("height")
     if height is not None:
         _validate_fixed_size(height)
+    distribute_evenly = value.get("distribute_evenly")
+    if distribute_evenly is not None and not isinstance(distribute_evenly, bool):
+        raise TypeError("distribute_evenly must be bool or None: " + container_name)
     items = value.get("items", [])
     if not isinstance(items, list):
         raise TypeError("container items must be a list: " + container_name)
@@ -261,7 +319,7 @@ def _container_spec(container_name: str, value: Any) -> tuple[list[tuple[str, An
             normalized.append(_worksheet_item(container_name, item))
         else:
             normalized.append(_filter_item(container_name, item))
-    return normalized, height
+    return normalized, height, distribute_evenly
 
 
 def _set_show_apply(zone_el: ET._Element, show_apply: bool) -> None:
@@ -293,6 +351,7 @@ def _zone_kind(zone_el: ET._Element, worksheet_ids: set[str]) -> str:
         "empty": "spacer",
         "dashboard-object": "dashboard_object",
         "filter": "filter",
+        "paramctrl": "parameter_control",
     }.get(zone_el.get("type-v2") or zone_el.get("type") or "", "unknown")
 
 
@@ -366,6 +425,16 @@ def _int_attr(element: ET._Element, name: str, default: int = 0) -> int:
 
 def _round(value: float) -> int:
     return math.floor(value + 0.5) if value >= 0 else math.ceil(value - 0.5)
+
+
+def _spacer_style(content_style: dict[str, Any]) -> dict[str, Any]:
+    """余りを埋める空きゾーンの書式。台紙と同じ色にして見えなくする（2026-09-21）。"""
+    return {
+        "background_color": content_style.get("background_color")
+        or _DEFAULT_REPORT_CONTENT_STYLE["background_color"],
+        "border_style": "none",
+        "margin": 0,
+    }
 
 
 def _validate_fixed_size(value: int | None) -> int | None:
@@ -609,7 +678,10 @@ def _layout_container(
         if not zone_id:
             raise UnsupportedFeatureError("dashboard zone has no id")
         child_axis_size = sizes.get(zone_id, 0)
-        if index == len(children) - 1:
+        # 末尾は端数を吸って枠をぴったり埋める。ただし固定サイズの子は伸ばさない
+        # （2026-09-21。伸ばしていたため、段に 1 つだけ置いた固定幅が効かなかった）。
+        # 全部が固定サイズのときは吸わせる相手がいないので、今までどおり末尾が吸う。
+        if index == len(children) - 1 and (zone_id not in fixed_sizes or not flexible):
             child_axis_size = max(0, axis_size - consumed)
         if zone_id not in fixed_sizes:
             weights[(dashboard_id, zone_id)] = child_weights[zone_id]
@@ -684,6 +756,22 @@ def _next_zone_id(dashboard_el: ET._Element) -> str:
     return str(candidate)
 
 
+#: グラフの種類ごとの表示倍率（2026-09-21）。帳票は列が右へ伸びて横スクロールに
+#: なるため「幅を合わせる」。ほかは今までどおり「ビュー全体」。
+#: 棒グラフは向きで分ける（2026-09-22）: 縦棒（item が列）は「高さを合わせる」、
+#: 横棒（item が行、既定）は「幅を合わせる」。
+#: 種類は `draw_*` が `WorkbookContext.chart_kinds` へ記録する（.twb には残らない）。
+_CHART_ZOOM = {
+    "draw_sheet": "fit-width",
+    "draw_bar_h": "fit-width",
+    "draw_bar_v": "fit-height",
+}
+
+
+def _ZOOM_TYPE(context: WorkbookContext, sheet_name: str) -> str:
+    return _CHART_ZOOM.get(context.chart_kinds.get(sheet_name, ""), "entire-view")
+
+
 def _sync_dashboard_window(context: WorkbookContext, dashboard_id: str) -> None:
     root = context.tree.getroot()
     dashboards = root.xpath(
@@ -726,7 +814,7 @@ def _sync_dashboard_window(context: WorkbookContext, dashboard_id: str) -> None:
             continue
         seen.add(name)
         viewpoint = ET.SubElement(viewpoints, "viewpoint", attrib={"name": name})
-        ET.SubElement(viewpoint, "zoom", attrib={"type": "entire-view"})
+        ET.SubElement(viewpoint, "zoom", attrib={"type": _ZOOM_TYPE(context, name)})
     ET.SubElement(window, "active", attrib={"id": worksheet_zones[0].get("id") or "1"})
     ET.SubElement(
         window,
@@ -1278,11 +1366,11 @@ class TwbDashboard(ConnectedModel):
 
         sheet_names: list[str] = []
         filter_specs: list[tuple[str, str]] = []
-        specs: dict[str, tuple[list[tuple[str, Any]], int | None]] = {
+        specs: dict[str, tuple[list[tuple[str, Any]], int | None, bool | None]] = {
             container_name: _container_spec(container_name, value)
             for container_name, value in struct.items()
         }
-        for items, _ in specs.values():
+        for items, _, _ in specs.values():
             for kind, payload in items:
                 if kind == "filter":
                     filter_specs.append(payload)
@@ -1360,20 +1448,27 @@ class TwbDashboard(ConnectedModel):
         effective_content_style.update(content_style or {})
         root.update(style=effective_content_style)
         pending_filters: list[tuple[TwbDashboardContainer, int, tuple[str, str]]] = []
-        for container_name, (items, height) in specs.items():
+        for container_name, (items, height, distribute_evenly) in specs.items():
             fixed_size = height
             if fixed_size is None:
                 fixed_size = container_sizes.get(container_name, _CONTAINER_HEIGHT)
             worksheet_items = [item for kind, item in items if kind == "worksheet"]
-            # 均等配分は「並べたワークシートが 2 つ以上あり、フィルタが無い」とき。
-            # フィルタは幅を食わせない（Tableau で作った既存レイアウトに合わせる）。
+            widths = [item[1] for item in worksheet_items]
+            if distribute_evenly is None:
+                # 既定の均等配分は「並べたワークシートが 2 つ以上あり、フィルタが無く、
+                # 幅の指定が 1 つも無い」とき。フィルタは幅を食わせない（Tableau で
+                # 作った既存レイアウトに合わせる）。均等配分の段では Tableau が
+                # エリアごとの固定幅を見ないので、幅を指定したら均等配分はしない。
+                distribute_evenly = (
+                    len(worksheet_items) > 1
+                    and len(worksheet_items) == len(items)
+                    and not any(width is not None for width in widths)
+                )
             container = root.create_container(
                 direction="horizontal",
                 fixed_size=fixed_size,
                 friendly_name=container_name,
-                distribute_evenly=(
-                    len(worksheet_items) > 1 and len(worksheet_items) == len(items)
-                ),
+                distribute_evenly=distribute_evenly,
             )
             column_index = 0
             for index, (kind, payload) in enumerate(items):
@@ -1413,6 +1508,15 @@ class TwbDashboard(ConnectedModel):
                             zone_style["padding_top"] = 0
                             zone_style["margin_top"] = 0
                     zone.update(style=zone_style)
+            # 幅を全部指定した段は、余りを吸う相手がいないと最後のエリアが
+            # 伸びてしまう（段の並びの末尾と同じく、空きゾーンに吸わせる）。
+            if (
+                not distribute_evenly
+                and worksheet_items
+                and len(worksheet_items) == len(items)
+                and all(width is not None for width in widths)
+            ):
+                container.add_spacer(style=_spacer_style(effective_content_style))
 
         for container, index, payload in pending_filters:
             worksheet, reference = filter_fields[payload]
@@ -1427,10 +1531,105 @@ class TwbDashboard(ConnectedModel):
                     "padding": 4,
                 }
             )
-        root.add_spacer(
-            style={"background_color": "#f5f5f5", "border_style": "none", "margin": 0}
-        )
+            worksheet._apply_filter_title_style(
+                bold=_FILTER_TITLE_BOLD, font_size=_FILTER_TITLE_FONT_SIZE
+            )
+        root.add_spacer(style=_spacer_style(effective_content_style))
+        self._add_sheet_column_titles()
+        self._add_quadrant_parameter_controls()
         return self
+
+    def _add_quadrant_parameter_controls(self) -> None:
+        """四象限のフィルター用パラメータを、シートの右上へ浮動で横に並べる（2026-09-24）。
+
+        左が中央比率、右が売上閾値。対象は `draw_quadrant()` で描いたシート
+        （`{シート名}_中央比率` / `{シート名}_売上閾値` を持つもの）。
+        """
+        try:
+            _canvas_or_error(self._resolve_element())
+        except UnsupportedFeatureError:
+            # 自動サイズのダッシュボードには浮動で置けない
+            return
+        for zone in self.get_zones():
+            sheet = zone.worksheet_id or ""
+            if self._context.chart_kinds.get(sheet) != "draw_quadrant":
+                continue
+            if zone.x is None or zone.y is None or zone.width is None:
+                continue
+            title_bar = _SHEET_TITLE_BAR_HEIGHT if zone.show_title else 0
+            y = zone.y + title_bar + _QUADRANT_CONTROL_MARGIN
+            right = zone.x + zone.width - _QUADRANT_CONTROL_MARGIN
+            for index, suffix in enumerate(("売上閾値", "中央比率")):
+                self.add_floating_parameter_control(
+                    f"{sheet}_{suffix}",
+                    x=right - (index + 1) * _QUADRANT_CONTROL_WIDTH - index * _QUADRANT_CONTROL_GAP,
+                    y=y,
+                    width=_QUADRANT_CONTROL_WIDTH,
+                    height=_QUADRANT_CONTROL_HEIGHT,
+                )
+
+    def _add_sheet_column_titles(self) -> None:
+        """帳票の消えた項目名を、浮動テキストでヘッダーの帯へ重ねる（2026-09-22）。
+
+        **Tableau は行に置いた項目の名前は出すが、棒・色帯の列の名前だけ出さない。**
+        その空いている分にだけ文字を置く。
+
+        列幅は**ゾーンの幅から余白を引いて列数で割った暫定値**（2026-09-22 指定）。
+        同じ幅をワークシートの列にも書き込むので、文字の位置と実際の列が揃う。
+        **位置も幅も概算で、置いたあと Tableau で人が直す前提。**
+        """
+        columns = self._context.sheet_columns
+        if not columns:
+            return
+        try:
+            _canvas_or_error(self._resolve_element())
+        except UnsupportedFeatureError:
+            # 自動サイズのダッシュボードには浮動で置けない
+            return
+        for zone in self.get_zones():
+            layout = columns.get(zone.worksheet_id or "")
+            if layout is None or zone.x is None or zone.y is None or zone.width is None:
+                continue
+            items, titles = layout
+            if not titles:
+                continue
+            inner = zone.width - _SHEET_TITLE_PADDING * 2
+            width = max(1, int(inner / (len(items) + len(titles))))
+            self._set_sheet_column_widths(zone.worksheet_id or "", items, titles, width)
+            # ヘッダーの帯はシートのタイトルの下。タイトルが無ければその分は空けない
+            title_bar = _SHEET_TITLE_BAR_HEIGHT if zone.show_title else 0
+            offset = zone.x + _SHEET_TITLE_PADDING + len(items) * width
+            for title in titles:
+                self.add_floating_text(
+                    title,
+                    x=offset,
+                    y=zone.y + _SHEET_TITLE_PADDING + title_bar + _SHEET_TITLE_Y_OFFSET,
+                    width=width,
+                    height=_SHEET_TITLE_HEIGHT,
+                    font_size=_SHEET_TITLE_FONT_SIZE,
+                    align="center",
+                    style={"background_color": _SHEET_TITLE_BACKGROUND},
+                )
+                offset += width
+
+    def _set_sheet_column_widths(
+        self, sheet: str, items: list[str], titles: list[str], width: int
+    ) -> None:
+        """帳票の列幅を、浮動テキストと同じ暫定値でそろえる（2026-09-22）。
+
+        行に置いた項目は表の列幅（`style-rule element="header"` の `width`）、
+        棒・色帯の列はペインの `minwidth`/`maxwidth`。
+        """
+        matches = get_worksheets(self._context, name=sheet)
+        if len(matches) != 1:
+            return
+        worksheet = matches[0]
+        if items:
+            worksheet._apply_header_widths({reference: width for reference in items})
+        panes = worksheet.get_panes()
+        # 軸が 2 本以上あると、先頭に軸名を持たない土台のペインが付く
+        for pane in (panes[1:] if len(titles) > 1 else panes):
+            pane._apply_pane_width(width)
 
     def create_container(
         self,
@@ -1512,6 +1711,129 @@ class TwbDashboard(ConnectedModel):
             },
         )
         zones_el.append(zone_el)
+        _replace_if_changed(dashboard_el, updated, self._context)
+        _sync_dashboard_window(self._context, self._id)
+        return TwbDashboardZone(self._context, self._id, zone_id)
+
+    def add_floating_text(
+        self,
+        text: str,
+        *,
+        x: float = 0,
+        y: float = 0,
+        width: float = 200,
+        height: float = 24,
+        font_size: int = 12,
+        font_color: str = "#333333",
+        bold: bool = False,
+        align: str = "left",
+        style: dict[str, str | int] | None = None,
+    ) -> TwbDashboardZone:
+        """テキストを**浮動**でダッシュボードへ置く（2026-09-22 追加）。
+
+        位置と大きさは px で受け、Tableau の座標（ダッシュボードの幅・高さを
+        100000 とした比率）へ直して書く。`add_floating_worksheet()` と同じ扱いで、
+        **固定サイズのダッシュボードでのみ使える**。
+
+        Tableau は浮動のオブジェクトを、レイアウトのコンテナの中ではなく
+        `<zones>` の直下へ `x` / `y` / `w` / `h` 付きで置く（実ダッシュボードで確認）。
+        """
+        if not isinstance(text, str):
+            raise TypeError("text must be a string")
+        if isinstance(font_size, bool) or not isinstance(font_size, int) or font_size <= 0:
+            raise ValueError("font_size must be a positive integer")
+        if not isinstance(font_color, str) or not font_color.strip():
+            raise ValueError("font_color must be a non-empty string")
+        if not isinstance(bold, bool):
+            raise TypeError("bold must be bool")
+        if align not in _TEXT_ALIGNMENTS:
+            raise ValueError("align must be left, center, or right")
+        style = _validate_style_group("style", style)
+        x = _validate_pixel(x, "x")
+        y = _validate_pixel(y, "y")
+        width = _validate_pixel(width, "width", positive=True)
+        height = _validate_pixel(height, "height", positive=True)
+
+        dashboard_el = self._resolve_element()
+        canvas_width, canvas_height = _canvas_or_error(dashboard_el)
+        updated = copy.deepcopy(dashboard_el)
+        zones_el = _default_zones(updated, create=True)
+        assert zones_el is not None
+        zone_id = _next_zone_id(updated)
+        zone_el = ET.Element(
+            "zone",
+            attrib={
+                "forceUpdate": "true",
+                "id": zone_id,
+                "type-v2": "text",
+                "x": str(_px_to_raw(x, canvas_width)),
+                "y": str(_px_to_raw(y, canvas_height)),
+                "w": str(_px_to_raw(width, canvas_width)),
+                "h": str(_px_to_raw(height, canvas_height)),
+            },
+        )
+        formatted = ET.SubElement(zone_el, "formatted-text")
+        run_attrs = {
+            "fontalignment": _TEXT_ALIGNMENTS[align],
+            "fontcolor": font_color,
+            "fontsize": str(font_size),
+        }
+        if bold:
+            run_attrs["bold"] = "true"
+        ET.SubElement(formatted, "run", attrib=run_attrs).text = text
+        if style:
+            _set_zone_styles(zone_el, style, self._context)
+        zones_el.append(zone_el)
+        _replace_if_changed(dashboard_el, updated, self._context)
+        _sync_dashboard_window(self._context, self._id)
+        return TwbDashboardZone(self._context, self._id, zone_id)
+
+    def add_floating_parameter_control(
+        self,
+        parameter: str,
+        *,
+        x: float = 0,
+        y: float = 0,
+        width: float = 160,
+        height: float = 48,
+    ) -> TwbDashboardZone:
+        """パラメータコントロールを**浮動**でダッシュボードへ置く（2026-09-24 追加）。
+
+        `parameter` はパラメータ名。`<zones>` 直下へ `type-v2="paramctrl"`・
+        `param="[Parameters].[…]"`・`mode="compact"` の zone を置く（RETAIL の
+        実ダッシュボードで確認。`add_floating_text()` と同じ座標の扱い）。
+        """
+        from .connected_parameter import get_parameters
+
+        matches = get_parameters(self._context, name=parameter)
+        if len(matches) != 1:
+            raise ValueError(f"parameter not found: {parameter}")
+        x = _validate_pixel(x, "x")
+        y = _validate_pixel(y, "y")
+        width = _validate_pixel(width, "width", positive=True)
+        height = _validate_pixel(height, "height", positive=True)
+
+        dashboard_el = self._resolve_element()
+        canvas_width, canvas_height = _canvas_or_error(dashboard_el)
+        updated = copy.deepcopy(dashboard_el)
+        zones_el = _default_zones(updated, create=True)
+        assert zones_el is not None
+        zone_id = _next_zone_id(updated)
+        zones_el.append(
+            ET.Element(
+                "zone",
+                attrib={
+                    "id": zone_id,
+                    "mode": "compact",
+                    "param": f"[Parameters].{matches[0].id}",
+                    "type-v2": "paramctrl",
+                    "x": str(_px_to_raw(x, canvas_width)),
+                    "y": str(_px_to_raw(y, canvas_height)),
+                    "w": str(_px_to_raw(width, canvas_width)),
+                    "h": str(_px_to_raw(height, canvas_height)),
+                },
+            )
+        )
         _replace_if_changed(dashboard_el, updated, self._context)
         _sync_dashboard_window(self._context, self._id)
         return TwbDashboardZone(self._context, self._id, zone_id)

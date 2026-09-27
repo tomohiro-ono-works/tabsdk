@@ -25,6 +25,7 @@ def _workbook(tmp_path):
     <datasource name="ds1" caption="売上データ">
       <column name="[Region]" caption="地域" datatype="string" role="dimension" type="nominal" />
       <column name="[Sales]" caption="売上" datatype="real" role="measure" type="quantitative" />
+      <column name="[連番]" caption="連番" datatype="integer" role="dimension" type="ordinal" />
     </datasource>
   </datasources>
   <worksheets />
@@ -93,6 +94,30 @@ def test_filter_update_replaces_selected_values(tmp_path) -> None:
     assert worksheet._resolve_element().xpath(
         ".//*[local-name()='filter']/*[local-name()='groupfilter'][@function='level-members']"
     )
+
+
+def test_filter_update_writes_integer_values_without_quotes(tmp_path) -> None:
+    """`member` 属性は、文字列型なら引用符付き、整数型なら引用符なしで書く
+    （2026-09-23 実測。整数型フィールドをダブルクォートで囲むと Tableau 側で
+    実際の値と一致せず、フィルタが効かなかった）。
+    """
+    workbook = _workbook(tmp_path)
+    datasource = workbook.get_datasources()[0]
+    worksheet = workbook.create_worksheet(name="Sheet1")
+    worksheet.add_field(field=datasource.get_fields(name="売上")[0], shelf="rows")
+    worksheet.add_filter(field=datasource.get_fields(name="連番")[0])
+    filter_ = worksheet.get_filters()[0]
+
+    filter_.update(values=["1", "2"])
+
+    filter_el = worksheet._resolve_element().xpath(".//*[local-name()='filter']")[0]
+    members = filter_el.xpath(".//*[local-name()='groupfilter'][@function='member']")
+    assert [item.get("member") for item in members] == ["1", "2"]
+
+    # 単一値でも引用符なし
+    filter_.update(values=["1"])
+    filter_el = worksheet._resolve_element().xpath(".//*[local-name()='filter']")[0]
+    assert filter_el.xpath("./*[local-name()='groupfilter']")[0].get("member") == "1"
 
 
 def test_filter_update_without_arguments_is_a_no_op(tmp_path) -> None:

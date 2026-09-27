@@ -179,7 +179,9 @@ def test_build_report_places_vertical_worksheet_groups_in_columns(tmp_path) -> N
     row = content.get_containers(name="スコア・時系列コンテナ")[0]
     columns = row.get_containers()
     assert row.fixed_size == 206
-    assert row.distribute_evenly is True
+    # 幅を指定した列があるので均等割りにしない（2026-09-21。均等割りの段では
+    # Tableau がエリアごとの固定幅を見ないため、200 が捨てられていた）
+    assert row.distribute_evenly is False
     assert [column.direction for column in columns] == ["vertical", "vertical"]
     assert [column.distribute_evenly for column in columns] == [True, False]
     assert [column.fixed_size for column in columns] == [200, None]
@@ -206,8 +208,9 @@ def test_build_report_places_vertical_worksheet_groups_in_columns(tmp_path) -> N
         tuple(int(zone.get(attr) or 0) for attr in ("x", "y", "w", "h"))
         for zone in row_el.xpath("./zone")
     ] == [
-        (2000, 6875, 48000, 25750),
-        (50000, 6875, 48000, 25750),
+        # 幅 200px は 200/1200 = 16667。残りは幅指定の無い列が取る（2026-09-21）
+        (2000, 6875, 16667, 25750),
+        (18667, 6875, 79333, 25750),
     ]
 
 
@@ -367,6 +370,55 @@ def test_floating_worksheet_uses_pixels_and_explicit_update_rules(tmp_path) -> N
     zone.delete()
     assert dashboard.get_zones() == []
     assert workbook.get_worksheets(id="SheetA")[0].name == "SheetA"
+
+
+def test_floating_text_is_placed_by_pixels(tmp_path) -> None:
+    """テキストを浮動で置く（2026-09-22 追加）。
+
+    Tableau は浮動のオブジェクトを、レイアウトのコンテナの中ではなく `<zones>` の
+    直下へ `x` / `y` / `w` / `h` 付きで置く（実ダッシュボードで確認）。
+    帳票の項目名のように、シートの外へ文字を重ねたいときに使う。
+    """
+    workbook = TwbWorkbook.open(str(_write_workbook(tmp_path)))
+    dashboard = workbook.create_dashboard(name="Dashboard")
+
+    zone = dashboard.add_floating_text(
+        "売上",
+        x=120,
+        y=80,
+        width=300,
+        height=20,
+        font_size=10,
+        font_color="#333333",
+        bold=True,
+        align="center",
+        style={"background_color": "#f0f0f0"},
+    )
+
+    assert (zone.placement_mode, zone.x, zone.y, zone.width, zone.height) == (
+        "floating", 120, 80, 300, 20,
+    )
+    zone_el = workbook.tree.getroot().xpath(
+        f"/workbook/dashboards/dashboard/zones/zone[@id='{zone.id}']"
+    )[0]
+    assert zone_el.get("type-v2") == "text"
+    # 1200 x 800 の台紙に対する比率（幅も高さも 100000 とする）
+    assert tuple(zone_el.get(attr) for attr in ("x", "y", "w", "h")) == (
+        "10000", "10000", "25000", "2500",
+    )
+    run = zone_el.xpath("./formatted-text/run")[0]
+    assert run.text == "売上"
+    # 文字揃えは fontalignment（0=左 / 1=中央 / 2=右）
+    assert (run.get("fontalignment"), run.get("fontsize"), run.get("bold")) == (
+        "1", "10", "true",
+    )
+    assert zone_el.xpath(
+        "./zone-style/format[@attr='background-color']/@value"
+    ) == ["#f0f0f0"]
+
+    with pytest.raises(ValueError, match="align must be"):
+        dashboard.add_floating_text("x", align="middle")
+    assert not [m for m in workbook.validate() if m.severity == "error"]
 
 
 def test_automatic_dashboard_rejects_floating_pixel_layout(tmp_path) -> None:
@@ -534,6 +586,10 @@ def test_build_report_uses_chart_specific_padding_and_rounded_corners(tmp_path) 
     workbook.draw_card(datasource, name="カード", main_metric=metric)
     workbook.draw_bar(datasource, name="棒", item=item, metric=metric)
     workbook.draw_sheet(datasource, name="帳票", items=[item])
+    workbook.draw_crosstab(
+        datasource, name="クロス", x_item=item, y_item=item,
+        color_metric=metric, label_metric=metric,
+    )
     dashboard = workbook.create_dashboard(name="D")
 
     dashboard.build_report(
@@ -544,6 +600,7 @@ def test_build_report_uses_chart_specific_padding_and_rounded_corners(tmp_path) 
                     {"kind": "worksheet", "sheets": ["カード"]},
                     {"kind": "worksheet", "sheets": ["棒"]},
                     {"kind": "worksheet", "sheets": ["帳票"]},
+                    {"kind": "worksheet", "sheets": ["クロス"]},
                     {"kind": "worksheet", "sheets": ["SheetA"]},
                 ]
             }
@@ -552,8 +609,11 @@ def test_build_report_uses_chart_specific_padding_and_rounded_corners(tmp_path) 
 
     zones = _worksheet_zones(dashboard)
     padding = {zone.name: zone.style["padding"] for zone in zones}
-    # 手で作った SheetA は種類が分からないので既定の 16
-    assert padding == {"カード": "0", "棒": "16", "帳票": "8", "SheetA": "16"}
+    # 手で作った SheetA は種類が分からないので既定の 16。
+    # クロス集計と散布図は 2026-09-21 に 0 から 16 へ変更
+    assert padding == {
+        "カード": "0", "棒": "16", "帳票": "8", "クロス": "16", "SheetA": "16",
+    }
     assert {zone.style["corner_radius"] for zone in zones} == {"8"}
     assert workbook.tree.xpath(
         "/workbook/document-format-change-manifest"
@@ -596,3 +656,106 @@ def test_build_report_rejects_a_bad_spacing_scale(tmp_path) -> None:
     with pytest.raises(TypeError, match="spacing_scale must be a number"):
         dashboard.build_report(dashboard_name="D", struct=struct, spacing_scale="wide")
     assert dashboard.get_containers() == []
+
+
+def test_build_report_fits_the_sheet_chart_to_width(tmp_path) -> None:
+    """帳票と横棒は「幅を合わせる」、縦棒は「高さを合わせる」で置く。
+
+    帳票は列が右へ伸びるため、ビュー全体だと横スクロールになる。
+    棒グラフは向きで表示倍率を分ける（2026-09-22）: item がロー（既定、横棒）なら
+    幅を合わせる、item がカラム（縦棒）なら高さを合わせる。
+    表示倍率はダッシュボードの window の viewpoint に書く。
+    """
+    workbook = _chart_workbook(tmp_path)
+    datasource = workbook.get_datasources()[0]
+    workbook.draw_sheet(datasource, name="帳票", items=["カテゴリ"])
+    workbook.draw_bar(datasource, name="横棒", item="カテゴリ", metric="売上")
+    workbook.draw_bar(
+        datasource, name="縦棒", item="カテゴリ", metric="売上", item_shelf="columns"
+    )
+    dashboard = workbook.create_dashboard(name="D")
+
+    dashboard.build_report(
+        dashboard_name="D",
+        struct={
+            "段": {
+                "items": [
+                    {"kind": "worksheet", "sheet": "帳票"},
+                    {"kind": "worksheet", "sheet": "横棒"},
+                    {"kind": "worksheet", "sheet": "縦棒"},
+                ]
+            }
+        },
+    )
+
+    assert [
+        (viewpoint.get("name"), viewpoint[0].get("type"))
+        for viewpoint in workbook.tree.xpath(
+            "/workbook/windows/window[@class='dashboard']/viewpoints/viewpoint"
+        )
+    ] == [("帳票", "fit-width"), ("横棒", "fit-width"), ("縦棒", "fit-height")]
+
+
+def test_floating_parameter_control_is_placed_by_pixels(tmp_path) -> None:
+    """パラメータコントロールを浮動で置く（2026-09-24 追加）。
+
+    RETAIL の実ダッシュボードの `type-v2="paramctrl"` に合わせ、
+    `param="[Parameters].[…]"`・`mode="compact"` の zone を `<zones>` 直下へ置く。
+    """
+    workbook = TwbWorkbook.open(str(_write_workbook(tmp_path)))
+    workbook.create_parameter(name="閾値", value=0.0, datatype="real")
+    dashboard = workbook.create_dashboard(name="Dashboard")
+
+    zone = dashboard.add_floating_parameter_control(
+        "閾値", x=120, y=80, width=300, height=40
+    )
+
+    assert (zone.kind, zone.placement_mode, zone.x, zone.y, zone.width, zone.height) == (
+        "parameter_control", "floating", 120, 80, 300, 40,
+    )
+    zone_el = workbook.tree.getroot().xpath(
+        f"/workbook/dashboards/dashboard/zones/zone[@id='{zone.id}']"
+    )[0]
+    assert (zone_el.get("type-v2"), zone_el.get("param"), zone_el.get("mode")) == (
+        "paramctrl", "[Parameters].[閾値]", "compact",
+    )
+    with pytest.raises(ValueError, match="parameter not found"):
+        dashboard.add_floating_parameter_control("存在しない")
+    assert not [m for m in workbook.validate() if m.severity == "error"]
+
+
+def test_build_report_places_quadrant_parameters_at_the_top_right(tmp_path) -> None:
+    """四象限のシートには、パラメータコントロールが右上へ浮動で横に並ぶ（2026-09-24）。
+    左が中央比率、右が売上閾値。
+    """
+    workbook = _chart_workbook(tmp_path)
+    datasource = workbook.get_datasources()[0]
+    workbook.draw_quadrant(
+        datasource, name="象限", item="カテゴリ", x_metric="売上",
+        y_metric="売上", size_metric="売上",
+    )
+    dashboard = workbook.create_dashboard(name="D")
+
+    dashboard.build_report(
+        dashboard_name="D",
+        struct={"段": {"items": [{"kind": "worksheet", "sheets": ["象限"]}]}},
+    )
+
+    sheet = next(zone for zone in dashboard.get_zones() if zone.worksheet_id == "象限")
+    controls = {
+        zone.get("param"): zone
+        for zone in workbook.tree.xpath(
+            "/workbook/dashboards/dashboard/zones/zone[@type-v2='paramctrl']"
+        )
+    }
+    assert set(controls) == {"[Parameters].[象限_中央比率]", "[Parameters].[象限_売上閾値]"}
+    center = controls["[Parameters].[象限_中央比率]"]
+    threshold = controls["[Parameters].[象限_売上閾値]"]
+    # 台紙の幅・高さに対する比率。中央比率が左、売上閾値が右で、y は同じ
+    assert int(center.get("x")) < int(threshold.get("x"))
+    assert center.get("y") == threshold.get("y")
+    canvas_width = dashboard.width
+    right_edge = (int(threshold.get("x")) + int(threshold.get("w"))) * canvas_width / 100000
+    assert right_edge <= sheet.x + sheet.width
+    assert sheet.x + sheet.width - right_edge < 10
+    assert not [m for m in workbook.validate() if m.severity == "error"]

@@ -760,9 +760,11 @@ viewpoint が増える）。それも別テストで固定した。
 
 ### C-1 【完了】サンプルスクリプト 20 本が実 Tableau リポジトリを上書きする
 
-ルート直下の `*_sample.py` / `*_build.py` は全 20 本が
-`C:\Users\...\マイ Tableau リポジトリ\ワークブック\` を読み書きし、
-全 20 本が `save(..., overwrite=True)` を呼ぶ。git 管理外のため復元できない。
+ルート直下の `*_sample.py` / `*_build.py` は全 20 本が Tableau Repository の
+ワークブックを読み書きし、全 20 本が `save(..., overwrite=True)` を呼ぶ。
+その場所は git 管理外のため、上書きすると復元できない。現在のサンプル
+`examples/build_dashboard.py` は `examples/sample_ec.twb` を読み、
+`outputs/example_dashboard.twb` へ保存する。
 
 **現状**: PreToolUse フックが Claude による実行を阻止している。
 **根本対応**: `SOURCE` / `OUTPUT` を `outputs/` 配下へ変更する。フックは「うっかり」を
@@ -852,8 +854,7 @@ Remove-Item -Recurse -Force .pytest_cache
 
 **すでに対処済みのこと（2026-09-06）**
 
-- リポジトリ単位で `git config user.email` を
-  `59932056+tomohiro-ono-works@users.noreply.github.com` に変更した。**以降のコミットは露出しない**
+- リポジトリ単位で `git config user.email` を GitHub の noreply アドレスに変更した。**以降のコミットは実アドレスが露出しない**
 - 未 push の 25 コミットは `git filter-branch` で author / committer を書き換え済み。
   内容の差分はゼロであることを確認した（`backup/pre-email-rewrite` との比較が空）
 

@@ -11,6 +11,7 @@ YAML の形は `docs/html_screen_spec.md` の「出力する設定ファイル�
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +29,11 @@ _LOGGER = logging.getLogger(__name__)
 # 最上位に置ける節。ここに無いキーは読み飛ばす。
 _SECTIONS = ("design", "datasources", "dashboard", "kpi_tree")
 
+# `draw_` 以外の名前で画面のグラフ種類として使うメソッド（2026-09-23、ウォーターフォール）。
+# `getattr(workbook, chart)` は任意のメソッド名を呼べてしまうので、プレフィックスだけで
+# 許可しない名前は明示的にここへ加える（ホワイトリスト）。
+_EXTRA_CHARTS = frozenset({"build_waterfall"})
+
 #: `design` のうち、ワークブック全体へ直接書けるもの。
 _DESIGN_APPLIED = ("font",)
 
@@ -37,8 +43,10 @@ _DESIGN_FOR_DASHBOARD = (
     "sub_color_1",
     "sub_color_2",
     "sub_color_3",
+    "accent_color",
     "text_color_1",
     "text_color_2",
+    "background_color",
     "border_color",
     "min_color",
     "mid_color",
@@ -61,8 +69,11 @@ _DESIGN_TOKENS = (
     "sub_color_1",
     "sub_color_2",
     "sub_color_3",
+    "accent_color",
     "text_color_1",
     "text_color_2",
+    #: 台紙（ダッシュボードの地）の色。ヘッダーの文字色からも参照する（2026-09-21）
+    "background_color",
     "border_color",
     "min_color",
     "mid_color",
@@ -77,6 +88,20 @@ def _design_border_color(design: dict[str, Any]) -> str | None:
     """枠線の色。空なら枠線を引かない（2026-09-21）。"""
     color = str(design.get("border_color") or "").strip()
     return color or None
+
+
+def _design_content_style(
+    spacing: dict[str, int], design: dict[str, Any]
+) -> dict[str, Any]:
+    """台紙の書式。余白に、デザインルールの背景色を重ねる（2026-09-21）。
+
+    色を省いたときはライブラリ側の既定（灰色）のままにする。
+    """
+    style: dict[str, Any] = dict(spacing)
+    color = str(design.get("background_color") or "").strip()
+    if color:
+        style["background_color"] = color
+    return style
 
 
 #: `design.spacing` の既定。画面の既定と揃える（2026-09-21 に wide から変更）。
@@ -143,12 +168,32 @@ def _resolve_folder(datasource: TwbDatasource, name: str) -> TwbFolder:
     return existing[0] if existing else datasource.create_folder(name=name)
 
 
+_FIELD_REF_RE = re.compile(r"\[([^\]]+)\]")
+
+
+def _missing_formula_refs(datasource: TwbDatasource, formula: str) -> list[str]:
+    missing: list[str] = []
+    for ref in {match.group(1) for match in _FIELD_REF_RE.finditer(formula)}:
+        matches = datasource.get_fields(name=ref) or datasource.get_fields(id=f"[{ref}]")
+        if not matches:
+            missing.append(ref)
+    return missing
+
+
 def _apply_calculations(datasource: TwbDatasource, calculations: Any) -> None:
     """計算フィールドを、式が参照する計算フィールドから先に作る。
 
     表示名で参照するには参照先が先に存在している必要がある。YAML の並び順には頼らない
     （`_calculation_order()`）。同名のフィールドが既にあれば上書きする。2 周方式では同じ
     YAML を 2 度通すため、2 度目にエラーで止まると往復が回らない。
+
+    **式が参照するフィールドがまだ無ければ、その計算フィールドごと読み飛ばす**
+    （2026-09-23、`_apply_renames` と同じ理由。`build_waterfall()` の連番のように
+    `dashboard:` 節が後から動的に作るフィールドを、`datasources:` の計算式が先に
+    参照していると `create_calculated_field()` / `update()` の `strict=True` で
+    `NotFoundError` になり止まっていた）。読み飛ばした計算フィールドを他の式が
+    参照していれば、それも連鎖して読み飛ばす（順番に作りながら存在チェックするため
+    自然にそうなる）。
     """
     if not isinstance(calculations, list):
         raise ValueError("calculations must be a list")
@@ -167,6 +212,7 @@ def _apply_calculations(datasource: TwbDatasource, calculations: Any) -> None:
         if role not in {"measure", "dimension"}:
             raise ValueError(f"calculation role must be 'measure' or 'dimension': {name.strip()}")
 
+    skipped: list[str] = []
     for entry in _calculation_order(calculations):
         name = entry["name"].strip()
         formula = entry["formula"]
@@ -174,6 +220,11 @@ def _apply_calculations(datasource: TwbDatasource, calculations: Any) -> None:
         role = entry.get("role") or _DEFAULT_ROLE
         # ディメンションは不連続、メジャーは連続。画面では指定しない。
         discrete = role == "dimension"
+
+        missing_refs = _missing_formula_refs(datasource, formula)
+        if missing_refs:
+            skipped.append(name)
+            continue
 
         unknown = [key for key in entry if key not in _CALCULATION_KEYS]
         if unknown:
@@ -215,6 +266,9 @@ def _apply_calculations(datasource: TwbDatasource, calculations: Any) -> None:
             folder=folder,
         )
 
+    if skipped:
+        _skip(f"datasources[{datasource.name}].calculations", skipped)
+
 
 def _calculation_order(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """式が `[名前]` で参照する計算フィールドを、参照する側より先に並べる。
@@ -247,16 +301,61 @@ def _calculation_order(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return ordered
 
 
+def _drop_missing_fields(
+    datasource: TwbDatasource, folders: Any
+) -> dict[str, dict[str, str]]:
+    """`folders`（フォルダ名 → {元カラム名: 表示名}）から、まだ存在しないフィールドを
+    除いた形を返す。`apply_field_config()` へ渡す前のフィルタ（2026-09-23）。
+
+    `_apply_renames()` と同じ理由——`build_waterfall()` の連番のように `dashboard:` 節が
+    後から動的に作るフィールドを、まだ作られていない `.twb` へ適用すると
+    `NotFoundError` で止まっていた。あれば流用（フォルダへ入れる）、なければ
+    黙って読み飛ばす。
+    """
+    if not isinstance(folders, dict):
+        raise ValueError("folders must be a mapping")
+    filtered: dict[str, dict[str, str]] = {}
+    missing: list[str] = []
+    for folder_name, rename_map in folders.items():
+        if not isinstance(rename_map, dict):
+            raise ValueError(f"folder fields must be a mapping: {folder_name}")
+        kept: dict[str, str] = {}
+        for original_name, display_name in rename_map.items():
+            if not isinstance(original_name, str) or not original_name.strip():
+                raise ValueError("field name must be a non-empty string")
+            matches = datasource.get_fields(name=original_name) or datasource.get_fields(
+                id=f"[{original_name}]"
+            )
+            if matches:
+                kept[original_name] = display_name
+            else:
+                missing.append(original_name)
+        if kept:
+            filtered[folder_name] = kept
+    if missing:
+        _skip(f"datasources[{datasource.name}].folders", missing)
+    return filtered
+
+
 def _apply_renames(datasource: TwbDatasource, renames: Any) -> None:
     """フォルダへは入れず、表示名だけを変更する。
 
     `folders` は最上位がフォルダ名の3階層 YAML なのでフォルダなしを表現できない
     （§ apply_field_config）。「リネームはしたいがフォルダには入れたくない」場合の
     入口として別セクションにした。
+
+    **まだ存在しないフィールド名は読み飛ばす**（2026-09-23、ユーザーの指摘で変更。
+    以前は `NotFoundError`）。`build_waterfall()` の連番のように `dashboard:` 節が
+    後から動的に作るフィールドを、画面が前回開いた `.twb`（既にそのフィールドがある
+    状態）から書き出してしまうことがあり、それを「まだ連番を持たない別の .twb」へ
+    適用すると必ず止まっていた。あれば名前を変え、なければ黙って無視する
+    （後段の `dashboard:` がそのフィールドを作れば、次にこの YAML を当てたときに
+    はじめてリネームされる）。
     """
     if not isinstance(renames, dict):
         raise ValueError("renames must be a mapping")
 
+    missing: list[str] = []
     for original_name, display_name in renames.items():
         if not isinstance(original_name, str) or not original_name.strip():
             raise ValueError("field name must be a non-empty string")
@@ -268,10 +367,13 @@ def _apply_renames(datasource: TwbDatasource, renames: Any) -> None:
         if not matches:
             matches = datasource.get_fields(id=f"[{original_name}]")
         if not matches:
-            raise NotFoundError(f"field not found: {original_name}")
+            missing.append(original_name)
+            continue
         if len(matches) > 1:
             raise AmbiguousCaptionError(f"field name is ambiguous: {original_name}")
         matches[0].update(name=display_name.strip())
+    if missing:
+        _skip(f"datasources[{datasource.name}].renames", missing)
 
 
 def _apply_datasources(
@@ -301,7 +403,9 @@ def _apply_datasources(
         # フォルダを先に作る。計算フィールドの folder: に指定できるようにするため。
         folders = section.get("folders")
         if folders:
-            datasource.apply_field_config(folders, field_grouping=field_grouping)
+            folders = _drop_missing_fields(datasource, folders)
+            if folders:
+                datasource.apply_field_config(folders, field_grouping=field_grouping)
 
         renames = section.get("renames")
         if renames:
@@ -311,11 +415,110 @@ def _apply_datasources(
         if calculations:
             _apply_calculations(datasource, calculations)
 
+        # 階層は最後。改名後の名前や、ここで作った計算フィールドも指せるようにする。
+        hierarchies = section.get("hierarchies")
+        if hierarchies:
+            _apply_hierarchies(datasource, hierarchies)
+
         unknown = [
-            key for key in section if key not in {"folders", "renames", "calculations"}
+            key
+            for key in section
+            if key not in {"folders", "renames", "calculations", "hierarchies"}
         ]
         if unknown:
             _skip(f"datasources[{datasource.name}]", unknown)
+
+
+def _apply_hierarchies(datasource: TwbDatasource, hierarchies: Any) -> None:
+    """階層（ドリルパス）を作る。同じ名前の階層があれば作り直す（2 回適用しても同じ結果）。
+
+    画面は「階層」列から組み立てるので、値は `{fields: [...], folder: ...}`。
+    フィールドの並びがそのままドリルの順になる。
+    """
+    if not isinstance(hierarchies, dict):
+        raise ValueError("hierarchies must be a mapping")
+
+    plans: list[tuple[str, list[str], str | None]] = []
+    for name, entry in hierarchies.items():
+        label = f"hierarchy {name}"
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("hierarchy needs a name")
+        if isinstance(entry, list):
+            entry = {"fields": entry}
+        if not isinstance(entry, dict):
+            raise ValueError(f"{label} must be a mapping or a list of fields")
+        fields = entry.get("fields")
+        if not isinstance(fields, list) or len(fields) < 2:
+            raise ValueError(f"{label} needs at least two fields")
+        names = []
+        for field in fields:
+            if not isinstance(field, str) or not field.strip():
+                raise ValueError(f"{label} has an empty field name")
+            names.append(field.strip())
+        folder = entry.get("folder")
+        if folder is not None and (not isinstance(folder, str) or not folder.strip()):
+            raise ValueError(f"{label} folder must be a name")
+        unknown = [key for key in entry if key not in {"fields", "folder"}]
+        if unknown:
+            _skip(label, unknown)
+        plans.append((name.strip(), names, folder.strip() if folder else None))
+
+    for name, fields, folder in plans:
+        for existing in datasource.get_drill_paths(name=name):
+            existing.delete()
+        datasource.create_drill_path(
+            name=name, fields=fields, folder=folder, create_folder_if_missing=folder is not None
+        )
+
+
+#: KPI カードのモードごとに使う引数（2026-09-21）。`draw_card()` は両モードの
+#: 引数を同時に渡されると例外にする。画面はモードに合う方だけを書き出すが、
+#: 全部の引数を並べていた頃の YAML も読めるように、ここで落とす。
+_CARD_MODE_PARAMS = {
+    "sub_metric": ("sub_metric", "sub_aggregation"),
+    "budget": ("budget_metric", "budget_threshold", "achieved_color",
+               "missed_color", "budget_aggregation", "budget_value_color"),
+}
+
+
+def _card_mode_params(chart: str, params: dict[str, Any]) -> dict[str, Any]:
+    if chart != "draw_card":
+        return params
+    mode = str(params.get("mode") or "sub_metric")
+    drop = {
+        name
+        for key, names in _CARD_MODE_PARAMS.items()
+        if key != mode
+        for name in names
+    }
+    return {key: value for key, value in params.items() if key not in drop}
+
+
+def _numeric_params(
+    method: Any, params: dict[str, Any], sheet: str
+) -> dict[str, Any]:
+    """数値の引数を文字列から数へ戻す（2026-09-21）。
+
+    画面は数の入力欄も文字列で書き出すため（`opacity: "0.4"`）、そのまま渡すと
+    `draw_*()` が型で弾く。どれが数かは `draw_*()` の注釈から読む。
+    """
+    import inspect
+
+    signature = inspect.signature(method)
+    out = dict(params)
+    for name, parameter in signature.parameters.items():
+        annotation = str(parameter.annotation)
+        if "float" not in annotation and "int" not in annotation:
+            continue
+        value = out.get(name)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        try:
+            out[name] = int(value) if "int" in annotation and "float" not in annotation \
+                else float(value)
+        except ValueError:
+            raise ValueError(f"{name} must be a number: {value!r} ({sheet})") from None
+    return out
 
 
 def _resolve_token(value: Any, design: dict[str, Any]) -> Any:
@@ -360,7 +563,7 @@ def _draw_area(workbook: TwbWorkbook, area: dict[str, Any], design: dict[str, An
     if not isinstance(sheet, str) or not sheet.strip():
         raise ValueError("worksheet area needs a sheet name")
     chart = area.get("chart")
-    if not isinstance(chart, str) or not chart.startswith("draw_"):
+    if not isinstance(chart, str) or not (chart.startswith("draw_") or chart in _EXTRA_CHARTS):
         raise ValueError(f"unknown chart: {chart!r}")
     method = getattr(workbook, chart, None)
     if method is None or not callable(method):
@@ -369,14 +572,68 @@ def _draw_area(workbook: TwbWorkbook, area: dict[str, Any], design: dict[str, An
     params = area.get("params") or {}
     if not isinstance(params, dict):
         raise ValueError(f"params must be a mapping: {sheet}")
+    params = _card_mode_params(chart, params)
     resolved = {
         key: [_resolve_token(item, design) for item in value]
         if isinstance(value, list)
         else _resolve_token(value, design)
         for key, value in params.items()
     }
-    method(_area_datasource(workbook, area), name=sheet.strip(), **resolved)
+    method(_area_datasource(workbook, area), name=sheet.strip(),
+           **_numeric_params(method, resolved, sheet))
     return sheet.strip()
+
+
+#: インフォメーションアイコンの浮動ゾームの一辺（px）とゾーンの角からの余白。
+#: ユーザー承認の固定値（2026-09-23）。
+_INFO_ICON_SIZE = 30
+_INFO_ICON_MARGIN = 4
+
+
+def _apply_info(
+    workbook: TwbWorkbook,
+    dashboard: Any,
+    sheet: str,
+    area: dict[str, Any],
+    design: dict[str, Any],
+) -> None:
+    """エリアの `info:` から、対象シートのゾームの右上へ浮動でインフォメーション
+    アイコンを重ねる（2026-09-23）。`build_report()` が Tiled 配置を組んだ**後**に
+    呼ぶ必要がある——対象ゾーンの実際の px 位置（`TwbDashboardZone.x`/`.y`/`.width`）は
+    レイアウト計算が終わるまで決まらないため。
+    """
+    info = area["info"]
+    if not isinstance(info, dict):
+        raise ValueError(f"area info must be a mapping: {sheet}")
+    text = str(info.get("text") or "").strip()
+    if not text:
+        raise ValueError(f"info needs text: {sheet}")
+
+    zone = next(
+        (z for z in dashboard.get_zones() if z.worksheet_id == sheet), None
+    )
+    if zone is None or zone.x is None:
+        raise ValueError(f"cannot place info icon for sheet: {sheet}")
+
+    params: dict[str, Any] = {"text": text}
+    if info.get("icon"):
+        params["icon"] = info["icon"]
+    if info.get("heading"):
+        params["heading"] = info["heading"]
+    if info.get("color"):
+        params["color"] = _resolve_token(info["color"], design)
+
+    icon_worksheet = workbook.draw_info(
+        _area_datasource(workbook, area), name=f"info|{sheet}", **params
+    )
+    dashboard.add_floating_worksheet(
+        icon_worksheet,
+        x=zone.x + zone.width - _INFO_ICON_SIZE - _INFO_ICON_MARGIN,
+        y=zone.y + _INFO_ICON_MARGIN,
+        width=_INFO_ICON_SIZE,
+        height=_INFO_ICON_SIZE,
+        show_title=False,
+    )
 
 
 def _area_field(area: dict[str, Any]) -> tuple[str, str]:
@@ -422,6 +679,7 @@ def _apply_dashboard(
     struct: dict[str, dict[str, Any]] = {}
     actions: list[tuple[str, str, dict[str, Any]]] = []
     filter_fields: list[tuple[str, str]] = []
+    infos: list[tuple[str, dict[str, Any]]] = []
     for row_name, row in zip(names, rows):
         items: list[dict[str, Any]] = []
         for area in row.get("areas") or []:
@@ -447,10 +705,19 @@ def _apply_dashboard(
                 )
             if area.get("action"):
                 actions.append((sheet, area["datasource"], area["action"]))
+            if area.get("info"):
+                infos.append((sheet, area))
         item_spec: dict[str, Any] = {"items": items}
         height = _int_or_none(row.get("height"), "row height")
         if height is not None:
             item_spec["height"] = height
+        # 幅の割り方は段ごとに選ぶ（2026-09-21）。均等割りの段では Tableau が
+        # エリアごとの幅を見ないので、幅を効かせたい段は false にする。
+        if "distribute_evenly" in row:
+            distribute = row.get("distribute_evenly")
+            if not isinstance(distribute, bool):
+                raise ValueError("row distribute_evenly must be true or false")
+            item_spec["distribute_evenly"] = distribute
         struct[row_name] = item_spec
 
     for field in filter_fields:
@@ -470,7 +737,7 @@ def _apply_dashboard(
         height=_int_or_none(dashboard.get("height"), "dashboard height") or 800,
     )
     build_options: dict[str, Any] = {
-        "content_style": dict(content_style),
+        "content_style": _design_content_style(content_style, design),
         "spacing_scale": _SPACING_SCALE[_spacing_name(design)],
         "border_color": _design_border_color(design),
     }
@@ -479,15 +746,23 @@ def _apply_dashboard(
     header_height = _int_or_none(header.get("height"), "header height")
     if header_height is not None:
         build_options["header_height"] = header_height
+    # ヘッダーの色はデザインルールを参照できる（2026-09-21。画面の既定は
+    # 背景＝@main_color、文字＝@background_color）
     if header.get("background_color"):
-        build_options["header_background_color"] = header["background_color"]
+        build_options["header_background_color"] = _resolve_token(
+            header["background_color"], design
+        )
     if header.get("font_color"):
-        build_options["header_font_color"] = header["font_color"]
+        build_options["header_font_color"] = _resolve_token(header["font_color"], design)
     if design.get("filter_apply_button"):
         build_options["filter_apply_button"] = True
 
     connected.build_report(dashboard_name=name, struct=struct, **build_options)
     _apply_actions(connected, actions)
+    # インフォメーションアイコンは build_report() が Tiled 配置を組んだ後でないと
+    # 対象ゾーンの実際の px 位置が決まらないため、最後に浮動で重ねる（2026-09-23）。
+    for sheet, area in infos:
+        _apply_info(workbook, connected, sheet, area, design)
 
 
 def _apply_actions(
@@ -554,17 +829,24 @@ def _apply_kpi_tree(
         raise ValueError(f"design.spacing must be one of {tuple(_SPACING)}")
 
     align = str(kpi_tree.get("align") or "center").strip().lower()
+    infos: list[tuple[str, dict[str, Any]]] = []
     workbook.build_kpi_tree(
         dashboard_name=name,
-        root=_draw_kpi_node(workbook, root, datasource, design),
+        root=_draw_kpi_node(workbook, root, datasource, design, infos),
         align=align,
         # エッジは上端揃えのときだけ描ける。上端なら必ず描く。.hyper はライブラリ同梱のものを使い、
         # save() が .twb の隣へ置く（2026-09-15。画面や YAML でパスを指定させない）。
         edges=align == "top",
-        content_style=dict(content_style),
+        content_style=_design_content_style(content_style, design),
         spacing_scale=_SPACING_SCALE[_spacing_name(design)],
         border_color=_design_border_color(design),
     )
+    # インフォメーションアイコンは build_kpi_tree() がノードを並べた後でないと
+    # 対象ゾーンの実際の px 位置が決まらない（ダッシュボードタブと同じ理由、2026-09-23）。
+    if infos:
+        dashboard = workbook.get_dashboards(name=name)[0]
+        for sheet, area in infos:
+            _apply_info(workbook, dashboard, sheet, area, design)
 
 
 def _check_kpi_node(node: Any) -> None:
@@ -583,6 +865,7 @@ def _draw_kpi_node(
     node: dict[str, Any],
     datasource: str,
     design: dict[str, Any],
+    infos: list[tuple[str, dict[str, Any]]],
 ) -> KpiNode:
     area = {
         "sheet": node.get("sheet"),
@@ -591,7 +874,13 @@ def _draw_kpi_node(
         "params": node.get("params"),
     }
     sheet = _draw_area(workbook, area, design)
-    children = [_draw_kpi_node(workbook, child, datasource, design) for child in node.get("children") or []]
+    if node.get("info"):
+        area["info"] = node["info"]
+        infos.append((sheet, area))
+    children = [
+        _draw_kpi_node(workbook, child, datasource, design, infos)
+        for child in node.get("children") or []
+    ]
     return KpiNode(workbook.get_worksheets(name=sheet)[0], children)
 
 

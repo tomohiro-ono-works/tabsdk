@@ -23,7 +23,11 @@ from .dashboard_action import list_actions_from_tree
 from .dashboard_zone import list_zones_from_dashboard
 from .worksheet import list_worksheet_fields_from_tree
 from .errors import AmbiguousCaptionError, NotFoundError, SaveError, ValidationError
-from .connected import TwbDatasource as ConnectedDatasource, get_datasources as get_connected_datasources
+from .connected import (
+    TwbDatasource as ConnectedDatasource,
+    TwbField as ConnectedField,
+    get_datasources as get_connected_datasources,
+)
 from .connected_worksheet import (
     TwbWorksheet as ConnectedWorksheet,
     TwbWorksheetField as ConnectedWorksheetField,
@@ -46,8 +50,10 @@ from .config_apply import apply_workbook_config
 from .html_export import render_workbook_html
 
 if TYPE_CHECKING:
+    from .connected import TwbFolder as ConnectedFolder
     from .draw import FieldInput
     from .kpi_tree import KpiNode
+    from .waterfall import WaterfallMetric
 
 
 class TwbWorkbook:
@@ -149,11 +155,27 @@ class TwbWorkbook:
         *,
         title: str = "twbpatch 設定",
         overwrite: bool = False,
+        config: str | Path | dict[str, Any] | None = None,
     ) -> Path:
+        """設定画面の html を書き出す。
+
+        `config` に設定 YAML（パスか読み込んだ辞書）を渡すと、**`.twb` に残らない
+        デザインルール・ダッシュボード・KPI ツリーを画面へ戻す**（2026-09-21）。
+        データソースは `.twb` から読み直すので戻さない。
+        """
         target = Path(path)
         if target.exists() and not overwrite:
             raise FileExistsError(f"file already exists: {target}")
-        html = render_workbook_html(serialize_workbook(self), title=title)
+        if isinstance(config, (str, Path)):
+            import yaml
+
+            with Path(config).open(encoding="utf-8") as file:
+                config = yaml.safe_load(file)
+        if config is not None and not isinstance(config, dict):
+            raise TypeError("config must be a mapping or a path to a YAML file")
+        html = render_workbook_html(
+            serialize_workbook(self), title=title, config=config
+        )
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(html, encoding="utf-8")
         return target
@@ -351,6 +373,11 @@ class TwbWorkbook:
         *,
         name: str,
         items: list[FieldInput] | None = None,
+        bar_metrics: list[FieldInput] | None = None,
+        color_metrics: list[FieldInput] | None = None,
+        bar_colors: list[str] | None = None,
+        color_starts: list[str] | None = None,
+        color_ends: list[str] | None = None,
         item_shelf: str = "rows",
         title: str | None = None,
         visible: bool = True,
@@ -362,6 +389,11 @@ class TwbWorkbook:
             datasource,
             name=name,
             items=items,
+            bar_metrics=bar_metrics,
+            color_metrics=color_metrics,
+            bar_colors=bar_colors,
+            color_starts=color_starts,
+            color_ends=color_ends,
             item_shelf=item_shelf,
             title=title,
             visible=visible,
@@ -372,12 +404,16 @@ class TwbWorkbook:
         datasource: ConnectedDatasource | None = None,
         *,
         name: str,
-        item: FieldInput,
+        item: FieldInput | None = None,
         metric: FieldInput,
+        sub_metric: FieldInput | None = None,
+        line_metric: FieldInput | None = None,
         item_shelf: str = "rows",
-        aggregation: str = "sum",
+        aggregation: str | None = "auto",
         descending: bool = True,
         bar_color: str | None = None,
+        sub_bar_color: str | None = None,
+        line_color: str | None = None,
         title: str | None = None,
         visible: bool = True,
     ) -> ConnectedWorksheet:
@@ -387,12 +423,16 @@ class TwbWorkbook:
             self,
             datasource,
             name=name,
-            item=item,
             metric=metric,
+            item=item,
+            sub_metric=sub_metric,
+            line_metric=line_metric,
             item_shelf=item_shelf,
             aggregation=aggregation,
             descending=descending,
             bar_color=bar_color,
+            sub_bar_color=sub_bar_color,
+            line_color=line_color,
             title=title,
             visible=visible,
         )
@@ -403,15 +443,23 @@ class TwbWorkbook:
         *,
         name: str,
         main_metric: FieldInput,
+        mode: str = "sub_metric",
         sub_metric: FieldInput | None = None,
+        budget_metric: FieldInput | None = None,
+        budget_threshold: float = 1.0,
+        achieved_color: str = "#2f9e44",
+        missed_color: str = "#e03131",
         main_color: str = "#602fff",
         value_color: str = "#333333",
+        budget_value_color: str = "#666666",
         title_background_color: str | None = None,
         vertical_alignment: str = "center",
         aggregation: str | None = "auto",
         main_aggregation: str | None = "auto",
         sub_aggregation: str | None = "auto",
+        budget_aggregation: str | None = "auto",
         visible: bool = True,
+        folder: "str | ConnectedFolder | None" = None,
     ) -> ConnectedWorksheet:
         from .draw import draw_card
 
@@ -420,14 +468,22 @@ class TwbWorkbook:
             datasource,
             name=name,
             main_metric=main_metric,
+            mode=mode,
             sub_metric=sub_metric,
+            budget_metric=budget_metric,
+            budget_threshold=budget_threshold,
+            achieved_color=achieved_color,
+            missed_color=missed_color,
             main_color=main_color,
             value_color=value_color,
+            budget_value_color=budget_value_color,
             title_background_color=title_background_color,
             vertical_alignment=vertical_alignment,
             aggregation=aggregation,
             main_aggregation=main_aggregation,
             sub_aggregation=sub_aggregation,
+            budget_aggregation=budget_aggregation,
+            folder=folder,
             visible=visible,
         )
 
@@ -455,6 +511,144 @@ class TwbWorkbook:
             content_style=content_style,
             spacing_scale=spacing_scale,
             border_color=border_color,
+        )
+
+    def add_index_relation(
+        self,
+        datasource: ConnectedDatasource,
+        *,
+        join_to: "FieldInput",
+        path: str,
+        column: str = "連番",
+        max_index: int = 20,
+        folder: "str | ConnectedFolder | None" = None,
+        overwrite: bool = False,
+    ) -> ConnectedField:
+        from .waterfall import add_index_relation
+
+        return add_index_relation(
+            self,
+            datasource,
+            join_to=join_to,
+            path=path,
+            column=column,
+            max_index=max_index,
+            folder=folder,
+            overwrite=overwrite,
+        )
+
+    def build_waterfall_metric(
+        self,
+        datasource: ConnectedDatasource | None = None,
+        *,
+        name: str,
+        index: "FieldInput",
+        metrics: list["FieldInput"],
+        aggregation: str | None = "auto",
+        folder: "str | ConnectedFolder | None" = None,
+        connectors: bool = False,
+        landing: bool = False,
+    ) -> "WaterfallMetric":
+        from .waterfall import build_waterfall_metric
+
+        return build_waterfall_metric(
+            self,
+            datasource,
+            name=name,
+            index=index,
+            metrics=metrics,
+            aggregation=aggregation,
+            folder=folder,
+            connectors=connectors,
+            landing=landing,
+        )
+
+    def build_waterfall_chart(
+        self,
+        datasource: ConnectedDatasource | None = None,
+        *,
+        name: str,
+        index: "FieldInput",
+        metric: "WaterfallMetric",
+        increase_color: str = "#2f9e44",
+        decrease_color: str = "#e03131",
+        connector_color: str = "#cccccc",
+        landing_color: str = "#4263eb",
+        title: str | None = None,
+        visible: bool = True,
+    ) -> ConnectedWorksheet:
+        from .waterfall import build_waterfall_chart
+
+        return build_waterfall_chart(
+            self,
+            datasource,
+            name=name,
+            index=index,
+            metric=metric,
+            increase_color=increase_color,
+            decrease_color=decrease_color,
+            connector_color=connector_color,
+            landing_color=landing_color,
+            title=title,
+            visible=visible,
+        )
+
+    def draw_info(
+        self,
+        datasource: ConnectedDatasource | None = None,
+        *,
+        name: str,
+        text: str,
+        icon: str = "info",
+        heading: str = "説明",
+        color: str = "#e15759",
+        visible: bool = True,
+        folder: "str | ConnectedFolder | None" = None,
+    ) -> ConnectedWorksheet:
+        from .info import draw_info
+
+        return draw_info(
+            self,
+            datasource,
+            name=name,
+            text=text,
+            icon=icon,
+            heading=heading,
+            color=color,
+            visible=visible,
+            folder=folder,
+        )
+
+    def build_waterfall(
+        self,
+        datasource: ConnectedDatasource | None = None,
+        *,
+        name: str,
+        metrics: list[FieldInput],
+        connectors: bool = False,
+        landing: bool = False,
+        increase_color: str = "#2f9e44",
+        decrease_color: str = "#e03131",
+        landing_color: str = "#4263eb",
+        title: str | None = None,
+        visible: bool = True,
+        folder: "str | ConnectedFolder | None" = None,
+    ) -> ConnectedWorksheet:
+        from .waterfall import build_waterfall
+
+        return build_waterfall(
+            self,
+            datasource,
+            name=name,
+            metrics=metrics,
+            connectors=connectors,
+            landing=landing,
+            increase_color=increase_color,
+            decrease_color=decrease_color,
+            landing_color=landing_color,
+            title=title,
+            visible=visible,
+            folder=folder,
         )
 
     def draw_quadrant(

@@ -176,6 +176,25 @@ def serialize_workbook(workbook: Any) -> dict[str, Any]:
                     "field_ids": [field.id for field in folder.get_fields()],
                 }
             )
+        # 階層（ドリルパス）。フォルダには `type="drillpath"` の項目として入るので、
+        # どのフォルダに置かれているかは folder-item をたどって決める（2026-09-21）。
+        folder_of_drill_path = {
+            str(item.get("name")): folder_el.get("name")
+            for folder_el in datasource._resolve_element().xpath(
+                ".//*[local-name()='folder']"
+            )
+            for item in folder_el
+            if item.get("type") == "drillpath" and item.get("name")
+        }
+        datasource_record["drill_paths"] = [
+            {
+                "id": drill_path.id,
+                "name": drill_path.name,
+                "field_ids": list(drill_path.field_ids),
+                "folder_name": folder_of_drill_path.get(drill_path.name),
+            }
+            for drill_path in datasource.get_drill_paths()
+        ]
         datasources.append(datasource_record)
 
     parameters = [

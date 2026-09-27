@@ -168,7 +168,8 @@ def test_an_unknown_container_key_is_rejected(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     dashboard = workbook.create_dashboard(name="レポート")
 
-    with pytest.raises(ValueError, match="only items and height"):
+    # distribute_evenly は 2026-09-21 追加
+    with pytest.raises(ValueError, match="only items, height and distribute_evenly"):
         _build(
             dashboard,
             {"上段": {"items": [{"kind": "worksheet", "sheet": "SheetA"}], "kind": "x"}},

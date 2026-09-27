@@ -217,7 +217,8 @@ def test_worksheet_field_update_and_delete_only_change_placement(tmp_path) -> No
     assert placement.update(aggregation="avg", discrete=True) is placement
     assert placement.aggregation == "avg"
     assert placement.discrete is True
-    assert workbook.tree.getroot().xpath("string(//*[local-name()='rows'])") == "[ds1].[avg:Sales:nk]"
+    # 数値を不連続で置くと順序（:ok）。文字列なら名義（:nk）（2026-09-22）
+    assert workbook.tree.getroot().xpath("string(//*[local-name()='rows'])") == "[ds1].[avg:Sales:ok]"
 
     placement.delete()
     with pytest.raises(DetachedModelError):

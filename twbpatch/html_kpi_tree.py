@@ -123,6 +123,7 @@ function cloneKpiNode(node) {
   return Object.assign({}, node, {
     id: ++ktSeq,
     params: Object.assign({}, node.params),
+    info: node.info ? Object.assign({}, node.info) : undefined,
     children: node.children.map(cloneKpiNode),
   });
 }
@@ -233,9 +234,11 @@ function kpiNodeCard(node, number) {
     labeled("グラフ種類", chart),
   ]));
 
-  const specs = (DRAW_SPECS.draw_card || {}).params || [];
-  const required = specs.filter(spec => spec.required);
-  const optional = specs.filter(spec => !spec.required);
+  // モードで使わない引数は出さない（2026-09-21。ダッシュボードタブと同じ）
+  const specs = visibleParams(node, "draw_card");
+  const front = frontParams(node, "draw_card");
+  const required = specs.filter(spec => spec.required || front.indexOf(spec.name) >= 0);
+  const optional = specs.filter(spec => !spec.required && front.indexOf(spec.name) < 0);
   if (required.length) {
     card.appendChild(el("div", { class: "params" }, required.map(spec => paramControl(node, spec))));
   }
@@ -248,6 +251,7 @@ function kpiNodeCard(node, number) {
     more.addEventListener("toggle", () => { node.moreOpen = more.open; drawKpiEdges(); });
     card.appendChild(more);
   }
+  card.appendChild(infoControl(node));
 
   card.addEventListener("dragover", event => {
     if (!DRAG || DRAG.kind !== "kpi-node" || kpiContains(DRAG.node, node)) return;
@@ -319,6 +323,7 @@ function drawKpiEdges() {
 }
 
 function renderKpiTree() {
+  closeCombos();  // 開いたままの候補一覧が <body> に取り残されないように（2026-09-21）
   const root = document.getElementById("kt-root");
   root.innerHTML = "";
   root.classList.toggle("kt-align-top", KT.align === "top");
@@ -338,6 +343,7 @@ function renderKpiTree() {
 function kpiNodeYaml(node, pad) {
   let out = pad + "sheet: " + yamlKey(node.sheet) + "\n";
   out += paramsYaml("draw_card", node.params, pad);
+  out += infoYaml(node, pad);
   if (node.children.length) {
     out += pad + "children:\n";
     node.children.forEach(child => {
@@ -378,6 +384,9 @@ function validateKpiTree() {
     required.forEach(spec => {
       if (!node.params[spec.name]) errors.push(label + ": " + (spec.label || spec.name) + " が未選択");
     });
+    if (node.info && node.info.enabled && !(node.info.text || "").trim()) {
+      errors.push(label + ": インフォメーションの本文が空");
+    }
     // 上端揃えでの最後の子の縦位置は 2 ×（それより前の子の末端数）。表の上限を超えると描けない
     if (edges && node.children.length) {
       const offset = 2 * node.children.slice(0, -1).reduce((sum, child) => sum + kpiLeafCount(child), 0);
@@ -428,5 +437,35 @@ document.getElementById("kt-name").addEventListener("input", renderKpiYaml);
 document.querySelector('nav button[data-tab="tab-kpi-tree"]').addEventListener("click", () => {
   requestAnimationFrame(drawKpiEdges);
 });
+
+/* 設定 YAML から戻す（2026-09-21）。KPI ツリーは .twb に残らないため、
+   画面を作り直すときは YAML の kpi_tree 節から組み直す。 */
+function restoreKpiNode(source) {
+  const node = newKpiNode();
+  node.sheet = source.sheet || "";
+  node.params = Object.assign({}, source.params || {});
+  node.children = (source.children || []).map(restoreKpiNode);
+  return node;
+}
+function restoreKpiTree(tree) {
+  if (!tree) return;
+  if (tree.name) document.getElementById("kt-name").value = tree.name;
+  if (tree.datasource) {
+    ktDatasourceSelect.value = String(datasourceIndexOf(tree.datasource));
+  }
+  if (tree.align) {
+    KT.align = tree.align;
+    document.querySelectorAll("#kt-align button").forEach(button => {
+      button.classList.toggle("on", button.dataset.align === KT.align);
+    });
+  }
+  if (tree.root) {
+    KT.root = restoreKpiNode(tree.root);
+    kpiNodes(KT.root, []).forEach(node => { node.datasource = ktDatasource(); });
+  }
+}
+restoreKpiTree(CONFIG.kpi_tree);
+// 段の描画は KPI ツリーの状態を見るので、両方そろったここで最初の描画をする
+renderRows();
 renderKpiTree();
 """

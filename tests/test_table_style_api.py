@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from twbpatch import TwbWorkbook
 
 
@@ -102,6 +104,117 @@ def test_worksheet_supports_explicit_table_down_calculation(tmp_path) -> None:
     assert not [message for message in workbook.validate() if message.severity == "error"]
 
 
+def test_worksheet_supports_running_total(tmp_path) -> None:
+    """累計（クイック表計算）。`examples/ウォーターフォール.twb` の手作業のシートを実測すると、
+
+    別の計算フィールドではなく、行に置いたピル自体へ `<table-calc type="CumTotal">` が
+    掛かっているだけだった（`[cum:usr:...:qk]` という参照）。
+    """
+    workbook = _workbook(tmp_path)
+    datasource = workbook.get_datasources()[0]
+    amount = datasource.create_calculated_field(
+        name="額", formula="SUM([売上]) - SUM([利益])", datatype="real", role="measure",
+    )
+    worksheet = workbook.create_worksheet(name="ウォーターフォール")
+
+    worksheet.add_field(
+        field=amount,
+        shelf="rows",
+        aggregation="agg",
+        running_total=True,
+    )
+
+    token = amount.id[1:-1]  # 内部 id（[Calculation_xxx]）から角括弧を外す
+    instance_name = f"[cum:usr:{token}:qk]"
+    root = workbook.tree.getroot()
+    assert root.xpath("string(/workbook/worksheets/worksheet[@name='ウォーターフォール']/table/rows)") == (
+        f"[ds1].{instance_name}"
+    )
+    instance = root.xpath(
+        "/workbook/worksheets/worksheet[@name='ウォーターフォール']/table/view/"
+        "datasource-dependencies/column-instance[@name=$name]",
+        name=instance_name,
+    )[0]
+    assert instance.get("derivation") == "User"
+    assert instance.get("type") == "quantitative"
+    table_calc = instance.find("table-calc")
+    assert table_calc.get("type") == "CumTotal"
+    assert table_calc.get("aggregation") == "Sum"
+    assert table_calc.get("ordering-type") == "Rows"
+    assert not [message for message in workbook.validate() if message.severity == "error"]
+
+
+def test_worksheet_supports_running_total_with_specific_dimensions(tmp_path) -> None:
+    """「特定のディメンション」で累計の計算対象を明示する（2026-09-23、実機で確認）。
+
+    `running_total_fields` を渡すと参照に `:2` が付き、`<table-calc ordering-type="Field">`
+    の下へ対象の数だけ `<order field=...>` を並べる。物理フィールド（カテゴリ）は
+    集計なし・不連続の通常のディメンション参照、計算フィールド（項目名）は素の
+    `[id]` と、実機での書き方の違いをそのまま反映する。
+    """
+    workbook = _workbook(tmp_path)
+    datasource = workbook.get_datasources()[0]
+    amount = datasource.create_calculated_field(
+        name="額", formula="SUM([売上]) - SUM([利益])", datatype="real", role="measure",
+    )
+    label = datasource.create_calculated_field(
+        name="項目名", formula='"売上"', datatype="string", role="dimension",
+    )
+    category = datasource.get_fields(name="カテゴリ")[0]
+    worksheet = workbook.create_worksheet(name="ウォーターフォール")
+    worksheet.add_field(field=category, shelf="columns", discrete=True)
+
+    worksheet.add_field(
+        field=amount,
+        shelf="rows",
+        aggregation="agg",
+        running_total=True,
+        running_total_fields=[category, label],
+    )
+
+    token = amount.id[1:-1]
+    instance_name = f"[cum:usr:{token}:qk:2]"
+    root = workbook.tree.getroot()
+    assert root.xpath("string(/workbook/worksheets/worksheet[@name='ウォーターフォール']/table/rows)") == (
+        f"[ds1].{instance_name}"
+    )
+    instance = root.xpath(
+        "/workbook/worksheets/worksheet[@name='ウォーターフォール']/table/view/"
+        "datasource-dependencies/column-instance[@name=$name]",
+        name=instance_name,
+    )[0]
+    assert instance.get("derivation") == "User"
+    assert instance.get("type") == "quantitative"
+    table_calc = instance.find("table-calc")
+    assert table_calc.get("type") == "CumTotal"
+    assert table_calc.get("aggregation") == "Sum"
+    assert table_calc.get("ordering-type") == "Field"
+    orders = table_calc.findall("order")
+    assert [order.get("field") for order in orders] == [
+        "[ds1].[none:Category:nk]",
+        f"[ds1].{label.id}",
+    ]
+    assert not [message for message in workbook.validate() if message.severity == "error"]
+
+
+def test_running_total_rejects_unsupported_combinations(tmp_path) -> None:
+    workbook = _workbook(tmp_path)
+    datasource = workbook.get_datasources()[0]
+    worksheet = workbook.create_worksheet(name="一覧")
+
+    with pytest.raises(ValueError, match="running_total requires aggregation"):
+        worksheet.add_field(
+            field=datasource.get_fields(name="売上")[0], shelf="rows", running_total=True,
+        )
+    with pytest.raises(ValueError, match="running_total requires shelf rows or columns"):
+        worksheet.add_field(
+            field=datasource.get_fields(name="売上")[0],
+            shelf="filters",
+            aggregation="sum",
+            running_total=True,
+        )
+
+
 def test_draw_sheet_allows_omitted_and_empty_items(tmp_path) -> None:
     workbook = _workbook(tmp_path)
     datasource = workbook.get_datasources()[0]
@@ -163,8 +276,9 @@ def test_draw_card_builds_formatted_main_and_sub_metrics(tmp_path) -> None:
     runs = worksheet._resolve_element().xpath(
         "./table/panes/pane/customized-label/formatted-text/run"
     )
+    # メイン指標は 16（2026-09-22 に 18 から変更）
     assert [(run.get("fontsize"), run.get("fontcolor")) for run in runs] == [
-        ("12", "#602fff"), (None, None), ("18", "#333333"),
+        ("12", "#602fff"), (None, None), ("16", "#333333"),
         (None, None), ("10", "#555555"),
     ]
     assert worksheet._resolve_element().xpath(

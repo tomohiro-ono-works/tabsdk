@@ -51,7 +51,8 @@ def test_kpi_tree_node_inputs_come_from_draw_card_signature(tmp_path) -> None:
     )
 
     assert {spec["name"] for spec in specs["draw_card"]["params"]} >= {"main_metric", "sub_metric", "main_color"}
-    assert "const specs = (DRAW_SPECS.draw_card || {}).params || [];" in html
+    # モードで使わない引数は出さない（2026-09-21。ダッシュボードタブと同じ）
+    assert 'const specs = visibleParams(node, "draw_card");' in html
     assert "required.map(spec => paramControl(node, spec))" in html
     assert "optional.map(spec => paramControl(node, spec))" in html
     assert 'chart: "draw_card"' in html
@@ -168,7 +169,9 @@ def test_sheet_names_are_numbered_on_collision(tmp_path) -> None:
     assert 'return stem + " (" + n + ")";' in html
     assert 'base + "_" + n' not in html
     # 重複を見る相手は両タブと .twb に既にあるシート
-    assert "const used = new Set((DATA.worksheets || []).map(ws => ws.name));" in html
+    # （2026-09-21: 読み込んだ設定 YAML が作るシートは除くので existingSheetNames() 経由）
+    assert "const used = existingSheetNames();" in html
+    assert "function existingSheetNames()" in html
     assert "kpiTreeSheetNames(except).forEach(name => used.add(name));" in html
     # 複製したエリア・ノードにも番号を付ける
     assert "if (copy.sheet) copy.sheet = uniqueName(copy.sheet, usedSheetNames(copy));" in html

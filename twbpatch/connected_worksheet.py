@@ -44,6 +44,8 @@ class LabelStyle(TypedDict, total=False):
 
     show: bool
     cull: bool
+    #: ラベルの文字の揃え。ペインの `style-rule element="cell"` に書く（2026-09-22）
+    align: str
 
 
 class TitleStyle(TypedDict, total=False):
@@ -107,6 +109,8 @@ _MARK_TYPES = {
     "shape": "Shape",
     "area": "Area",
     "pie": "Pie",
+    # 帳票の色帯で使う（2026-09-22）。長さを持つ細い帯
+    "gantt": "GanttBar",
 }
 _TABLE_CALCULATIONS = {
     "automatic": (None, None),
@@ -167,6 +171,12 @@ _MULTI_VALUE_UI_ATTRS = {
     f"{{{_USER_NAMESPACE}}}ui-marker": "enumerate",
 }
 _LINE_INTERPOLATIONS = {"linear", "step"}
+#: スコアカードのラベルの文字の大きさ（2026-09-22 指定）。
+#: 指標名は見出し、メイン指標は大きな数値、予実比較の行は率と文言。
+_CARD_TITLE_FONT_SIZE = 12
+_CARD_VALUE_FONT_SIZE = 16
+_CARD_SUB_FONT_SIZE = 10
+_CARD_BUDGET_FONT_SIZE = 12
 
 
 def _local_name(element: ET._Element) -> str:
@@ -325,6 +335,46 @@ def _field_details(
     )
 
 
+#: この型は member 属性を引用符なしで書く（`connected_parameter.py` の `_serialize_value`
+#: と同じ規約。数値をダブルクォートで囲むと Tableau 側で一致しない、2026-09-23 実測）。
+#: `boolean` も引用符なしの `true`（2026-09-25、Tableau で動作を確認）。
+_UNQUOTED_FILTER_DATATYPES = {"integer", "real", "boolean"}
+
+
+def _filter_field_datatype(
+    context: WorkbookContext, worksheet_el: ET._Element, reference: str
+) -> str | None:
+    match = _FIELD_REF.match(reference)
+    if match is None:
+        return None
+    datasource_id, token = match.groups()
+    field_token = field_name_from_token(token)
+    candidate_ids = {field_token, f"[{field_token}]"}
+
+    columns = context.tree.getroot().xpath(
+        "/workbook/datasources/datasource[@name=$datasource_id]/column[@name]",
+        datasource_id=datasource_id,
+    )
+    column_el = next((column for column in columns if column.get("name") in candidate_ids), None)
+    if column_el is None:
+        dependency_columns = worksheet_el.xpath(
+            ".//*[local-name()='datasource-dependencies'][@datasource=$datasource_id]"
+            "/*[local-name()='column'][@name]",
+            datasource_id=datasource_id,
+        )
+        column_el = next(
+            (column for column in dependency_columns if column.get("name") in candidate_ids),
+            None,
+        )
+    return column_el.get("datatype") if column_el is not None else None
+
+
+def _format_filter_member(datatype: str | None, value: str) -> str:
+    if datatype in _UNQUOTED_FILTER_DATATYPES:
+        return value
+    return f'"{value}"'
+
+
 def _aggregation_from_reference(reference: str) -> str | None:
     match = _FIELD_REF.match(reference)
     if match is None:
@@ -335,6 +385,16 @@ def _aggregation_from_reference(reference: str) -> str | None:
     if parts[0] == "usr":
         return "agg" if len(parts) == 3 and parts[-1] in {"qk", "nk"} else None
     return _STORED_AGGREGATIONS.get(parts[0], parts[0])
+
+
+#: ピルのトークンの末尾（`nk` / `ok` / `qk`）と `column-instance/@type` の対応。
+_INSTANCE_TYPES = {"n": "nominal", "o": "ordinal", "q": "quantitative"}
+
+
+def _number_text(value: float) -> str:
+    """Tableau が書く数の形。整数でも `1` ではなく `1` のまま、小数は小数のまま。"""
+    number = float(value)
+    return str(int(number)) if number.is_integer() else str(number)
 
 
 def _discrete_from_token(token: str) -> bool | None:
@@ -376,7 +436,27 @@ def _build_reference(
     table_calculation: str | None = None,
     table_calculation_field: TwbField | None = None,
     date_level: str | None = None,
+    running_total: bool = False,
+    running_total_fields: list[TwbField] | None = None,
 ) -> str:
+    if not isinstance(running_total, bool):
+        raise TypeError("running_total must be bool")
+    if running_total:
+        if table_calculation is not None:
+            raise ValueError("running_total cannot be combined with table_calculation")
+        if date_level is not None:
+            raise ValueError("running_total cannot be combined with date_level")
+        if aggregation is None:
+            raise ValueError("running_total requires aggregation")
+    if running_total_fields is not None:
+        if not running_total:
+            raise ValueError("running_total_fields requires running_total")
+        if not isinstance(running_total_fields, list) or not running_total_fields:
+            raise ValueError("running_total_fields must be a non-empty list")
+        for item in running_total_fields:
+            _validate_field(item, field._context)
+            if item.datasource_id != field.datasource_id:
+                raise ValueError("running_total_fields must use the same datasource")
     if table_calculation is not None:
         table_calculation = table_calculation.lower()
         if table_calculation not in _TABLE_CALCULATIONS:
@@ -424,8 +504,28 @@ def _build_reference(
         kind = "nk" if effective_discrete else "qk"
         return f"[{field.datasource_id}].[{prefix}:{field_token}:{kind}]"
     prefix = _AGGREGATIONS[aggregation] if aggregation is not None else "none"
-    kind = "nk" if effective_discrete else "qk"
-    return f"[{field.datasource_id}].[{prefix}:{field_token}:{kind}]"
+    local = f"{prefix}:{field_token}:{_kind(field, effective_discrete)}"
+    if running_total:
+        # 累計（クイック表計算）は集計の前へ `cum:` を足すだけ（examples/ウォーターフォール.twb
+        # の実測どおり。例: [cum:usr:Calculation_XXX:qk]）。
+        local = f"cum:{local}"
+        if running_total_fields is not None:
+            # 「特定のディメンション」で計算対象を明示すると `:2` が付く
+            # （table_calculation="field" と同じ接尾辞。実機で再測定）。
+            local = f"{local}:2"
+    return f"[{field.datasource_id}].[{local}]"
+
+
+#: 不連続のトークン。**数値は `ok`（順序）、それ以外は `nk`（名義）**。
+#: Tableau は帳票の数値をこう書く（2026-09-22 に examples/サンプル.twb で確認）。
+#: `nk` にすると数値が文字として扱われ、並び順も揃えも文字列のものになる。
+_ORDINAL_DATATYPES = {"integer", "real"}
+
+
+def _kind(field: TwbField, discrete: bool) -> str:
+    if not discrete:
+        return "qk"
+    return "ok" if (field.datatype or "").lower() in _ORDINAL_DATATYPES else "nk"
 
 
 def _ensure_table(worksheet_el: ET._Element) -> ET._Element:
@@ -656,12 +756,27 @@ def _style_field_name(
         return reference
 
 
+def _order_field_reference(field: TwbField) -> str:
+    """`<order field=...>` の値（「特定のディメンション」で計算する累計の対象）。
+
+    計算フィールドは素の `[datasource].[id]`、物理フィールドは集計なし・不連続の
+    通常のディメンション参照（`_build_reference` と同じ形）。実機で再測定した
+    2 種類の書き方の違いをそのまま反映する。
+    """
+    if field.is_calculated:
+        return f"[{field.datasource_id}].{field.id}"
+    return _build_reference(field, aggregation=None, discrete=True)
+
+
 def _ensure_dependency(
     worksheet_el: ET._Element,
     field: TwbField,
     reference: str,
     table_calculation: str | None = None,
     table_calculation_field: TwbField | None = None,
+    running_total: bool = False,
+    shelf: str | None = None,
+    running_total_fields: list[TwbField] | None = None,
 ) -> None:
     view = _ensure_view(worksheet_el)
     datasources = _direct_child(view, "datasources")
@@ -727,8 +842,11 @@ def _ensure_dependency(
         "./*[local-name()='column-instance'][@name=$instance_name]",
         instance_name=instance_name,
     ):
-        aggregation = token.split(":", 1)[0]
-        derivation = "User" if table_calculation is not None or aggregation == "usr" else {
+        # 累計（running_total）は先頭に `cum:` が付くだけで、集計そのものの読み取りは
+        # それを外してから行う（examples/ウォーターフォール.twb の実測どおり）。
+        aggregation_token = token[len("cum:"):] if running_total else token
+        aggregation = aggregation_token.split(":", 1)[0]
+        derivation = "User" if table_calculation is not None or running_total or aggregation == "usr" else {
             "none": "None", "sum": "Sum", "avg": "Avg", "min": "Min",
             "max": "Max", "cnt": "Count", "ctd": "CountD", "attr": "Attribute",
             **{token: derivation for token, derivation in _DATE_LEVELS.values()},
@@ -738,9 +856,14 @@ def _ensure_dependency(
             "derivation": derivation,
             "name": instance_name,
             "pivot": "key",
+            # 不連続のトークンに合わせる。`:ok` は ordinal、`:nk` は nominal
+            # （2026-09-22。数値を不連続で置くと `:ok` になる）。
+            # running_total は集計したメジャーなので常に quantitative
+            # （`:2` が付く「特定のディメンション」のときも同じ、実機で確認）。
             "type": "nominal" if table_calculation == "field" else (
                 "ordinal" if table_calculation is not None else
-                "nominal" if _discrete_from_token(token) else "quantitative"
+                "quantitative" if running_total else
+                _INSTANCE_TYPES[token.split(":")[-1].lower()[:1]]
             ),
         })
         if table_calculation == "field":
@@ -758,6 +881,32 @@ def _ensure_dependency(
             )
         elif table_calculation is not None and instance_order is not None:
             ET.SubElement(instance, "table-calc", attrib={"ordering-type": instance_order})
+        elif running_total and running_total_fields is not None:
+            # 「特定のディメンション」で計算対象を明示する場合（2026-09-23、実機で確認）。
+            # `ordering-type="Field"` の下に `<order field=...>` を対象の数だけ並べる。
+            table_calc = ET.SubElement(
+                instance,
+                "table-calc",
+                attrib={"type": "CumTotal", "aggregation": "Sum", "ordering-type": "Field"},
+            )
+            for order_field in running_total_fields:
+                ET.SubElement(
+                    table_calc, "order", attrib={"field": _order_field_reference(order_field)}
+                )
+        elif running_total:
+            # `examples/ウォーターフォール.twb` の実測どおり: 累計（Running Total）は
+            # 合計（Sum）で、置いたシェルフを軸に計算する（ordering-type はシェルフ名）。
+            ET.SubElement(
+                instance,
+                "table-calc",
+                attrib={
+                    "type": "CumTotal",
+                    "aggregation": "Sum",
+                    "ordering-type": {"rows": "Rows", "columns": "Columns"}.get(
+                        shelf or "", "Rows"
+                    ),
+                },
+            )
         dependency.append(instance)
 
 
@@ -771,6 +920,17 @@ def _format_shelf_references(references: list[str]) -> str:
     if len(references) > 1 and ".[usr:" in references[0]:
         return f"({references[0]} / ({' / '.join(references[1:])}))"
     return " / ".join(references)
+
+
+def _format_overlay_references(references: list[str]) -> str:
+    """二重軸のシェルフ。`+` で連結し、右へ入れ子にする（2026-09-22 に実測）。
+
+    `/` は入れ子（横に並ぶ別々の軸）、`+` が同じ場所に重ねる軸。
+    2 本なら `(A + B)`、3 本なら `(A + (B + C))`。
+    """
+    if len(references) == 1:
+        return references[0]
+    return f"({references[0]} + {_format_overlay_references(references[1:])})"
 
 
 def _reference_targets_field(reference: str, datasource_id: str, field_id: str) -> bool:
@@ -1270,6 +1430,183 @@ class TwbWorksheet(ConnectedModel):
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
 
+    def _apply_axis_format(
+        self,
+        field: TwbWorksheetField,
+        *,
+        display: bool = True,
+        minimum: float | None = None,
+        maximum: float | None = None,
+    ) -> TwbWorksheet:
+        """連続のピルの軸を隠したり、範囲を固定したりする。
+
+        Tableau は `<table><style><style-rule element="axis">` に書く
+        （2026-09-22 に examples/サンプル.twb で確認）。軸の表示は
+        `<format attr="display" …>`、範囲は `<encoding attr="space"
+        range-type="fixed" min max>`。帳票の中に棒や色帯を足すとき、
+        列に置いた軸を隠し、色帯の軸を 0〜1 に固定するために使う。
+        """
+        if not isinstance(field, TwbWorksheetField):
+            raise TypeError("field must be TwbWorksheetField")
+        if field._context is not self._context or field._worksheet_id != self._id:
+            raise ValueError("field must belong to the worksheet")
+        placement = field._resolve_placement()
+        if placement.shelf not in {"rows", "columns"}:
+            raise ValueError("field must be placed on rows or columns")
+        if (minimum is None) != (maximum is None):
+            raise ValueError("minimum and maximum must be given together")
+        reference = placement.reference
+        scope = "cols" if placement.shelf == "columns" else "rows"
+
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        rule = _style_rule(_ensure_table_style(_ensure_table(updated)), "axis", create=True)
+        assert rule is not None
+        _set_style_value(
+            _ensure_table_style(_ensure_table(updated)),
+            "axis",
+            "display",
+            None if display else "false",
+            **{"class": "0", "field": reference, "scope": scope},
+        )
+        for existing in rule.xpath(
+            "./*[local-name()='encoding'][@attr='space'][@field=$field][@range-type='fixed']",
+            field=reference,
+        ):
+            rule.remove(existing)
+        if minimum is not None:
+            ET.SubElement(rule, "encoding", attrib={
+                "attr": "space",
+                "class": "0",
+                "field": reference,
+                "field-type": "quantitative",
+                "max": _number_text(maximum),
+                "min": _number_text(minimum),
+                "range-type": "fixed",
+                "scope": scope,
+                "type": "space",
+            })
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def _apply_continuous_color(
+        self, field: TwbWorksheetField, *, palette: str
+    ) -> TwbWorksheet:
+        """色に載せた連続のメジャーへ、段階のないパレットを当てる。
+
+        Tableau は `<table><style><style-rule element="mark">` に
+        `<encoding attr="color" field="…" palette="…" type="interpolated"/>`
+        と書く（2026-09-22 に examples/サンプル.twb で確認）。
+        """
+        if not isinstance(palette, str) or not palette.strip():
+            raise ValueError("palette must be a non-empty string")
+        if not isinstance(field, TwbWorksheetField):
+            raise TypeError("field must be TwbWorksheetField")
+        if field._context is not self._context or field._worksheet_id != self._id:
+            raise ValueError("field must belong to the worksheet")
+        reference = field._resolve_placement().reference
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        rule = _style_rule(_ensure_table_style(_ensure_table(updated)), "mark", create=True)
+        assert rule is not None
+        for existing in rule.xpath(
+            "./*[local-name()='encoding'][@attr='color'][@field=$field]", field=reference
+        ):
+            rule.remove(existing)
+        ET.SubElement(rule, "encoding", attrib={
+            "attr": "color",
+            "field": reference,
+            "palette": palette,
+            "type": "interpolated",
+        })
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def _apply_header_widths(self, widths: dict[str, int]) -> TwbWorksheet:
+        """行・列の見出しの幅を、ピルの参照を指定して px で書く（2026-09-22）。
+
+        `update(table_style={"column_widths": ...})` は表示名で引くため、帳票の
+        ように**同じメジャーが行にも列にも居る**と名前が一意に決まらない。
+        こちらは参照をそのまま使う。
+        """
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        style_el = _ensure_table_style(_ensure_table(updated))
+        for reference, width in widths.items():
+            if isinstance(width, bool) or not isinstance(width, int) or width <= 0:
+                raise ValueError("widths must be positive integers")
+            _set_style_value(style_el, "header", "width", str(width), field=reference)
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def _apply_field_text_align(
+        self, field: TwbWorksheetField, align: str
+    ) -> TwbWorksheet:
+        """置いたフィールドごとの文字の揃え。
+
+        Tableau は不連続のピルの揃えを `<table><style>` の
+        `<style-rule element="label">` に `field` 付きで書く（2026-09-22 に
+        examples/サンプル.twb と実ダッシュボード 2 本で確認）。
+        """
+        if align not in {"left", "center", "right"}:
+            raise ValueError("align must be left, center, or right")
+        if not isinstance(field, TwbWorksheetField):
+            raise TypeError("field must be TwbWorksheetField")
+        if field._context is not self._context or field._worksheet_id != self._id:
+            raise ValueError("field must belong to the worksheet")
+        reference = field._resolve_placement().reference
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        style_el = _ensure_table_style(_ensure_table(updated))
+        _set_style_value(style_el, "label", "text-align", align, field=reference)
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def _apply_field_header_display(
+        self, field: TwbWorksheetField, *, show: bool
+    ) -> TwbWorksheet:
+        """置いたフィールドの見出し（ヘッダー行のラベル）を隠す。
+
+        Tableau は不連続のピルの見出し表示を `<table><style>` の
+        `<style-rule element="label">` に `field` 付きで `attr="display"` として書く
+        （`examples/ウォーターフォール.twb` で実測。ウォーターフォールの列に置いた
+        連番の数字ラベルを消すために使う、2026-09-23）。
+        """
+        if not isinstance(show, bool):
+            raise TypeError("show must be bool")
+        if not isinstance(field, TwbWorksheetField):
+            raise TypeError("field must be TwbWorksheetField")
+        if field._context is not self._context or field._worksheet_id != self._id:
+            raise ValueError("field must belong to the worksheet")
+        reference = field._resolve_placement().reference
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        style_el = _ensure_table_style(_ensure_table(updated))
+        _set_style_value(
+            style_el, "label", "display", None if show else "false", field=reference
+        )
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
+    def _apply_filter_title_style(self, *, bold: bool, font_size: int) -> TwbWorksheet:
+        """ダッシュボードに置いたフィルタカードの名称（タイトル）の書式。
+
+        Tableau はワークシートの `<table><style>` に
+        `<style-rule element='quick-filter-title'>` として書く（2026-09-22 に
+        実ワークブックで確認。`parameter-ctrl-title` と同じ書き方）。
+        フィルタは置いた先のダッシュボードではなく、フィルタを持つワークシートの
+        書式に従うため、ここで設定する。
+        """
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        style_el = _ensure_table_style(_ensure_table(updated))
+        _set_style_value(
+            style_el, "quick-filter-title", "font-weight", "bold" if bold else None
+        )
+        _set_style_value(style_el, "quick-filter-title", "font-size", str(font_size))
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
+
     def _apply_title_style(self, *, background_color: str) -> TwbWorksheet:
         if not isinstance(background_color, str) or not background_color.strip():
             raise ValueError("background_color must be a non-empty string")
@@ -1494,15 +1831,24 @@ class TwbWorksheet(ConnectedModel):
         table_calculation: str | None | _UnsetType = UNSET,
         table_calculation_field: FieldInput | None = None,
         date_level: str | None = None,
+        running_total: bool = False,
+        running_total_fields: list[FieldInput] | None = None,
     ) -> TwbWorksheetField:
         field = self._resolve_field(field)
         if table_calculation_field is not None:
             table_calculation_field = self._resolve_field(
                 table_calculation_field, argument="table_calculation_field"
             )
+        if running_total_fields is not None:
+            running_total_fields = [
+                self._resolve_field(item, argument="running_total_fields")
+                for item in running_total_fields
+            ]
         shelf = shelf.lower()
         if shelf not in {*_SHELVES, "filters"}:
             raise ValueError(f"unsupported shelf: {shelf}")
+        if running_total and shelf not in ("rows", "columns"):
+            raise ValueError("running_total requires shelf rows or columns")
         if table_calculation is UNSET:
             table_calculation = _table_calculation_kind(field)
         reference = _build_reference(
@@ -1512,6 +1858,8 @@ class TwbWorksheet(ConnectedModel):
             table_calculation=table_calculation,
             table_calculation_field=table_calculation_field,
             date_level=date_level,
+            running_total=running_total,
+            running_total_fields=running_total_fields,
         )
 
         worksheet_el = self._resolve_element()
@@ -1533,6 +1881,9 @@ class TwbWorksheet(ConnectedModel):
             reference,
             table_calculation,
             table_calculation_field,
+            running_total,
+            shelf,
+            running_total_fields,
         )
         if shelf == "filters":
             view = _ensure_view(updated)
@@ -1553,6 +1904,229 @@ class TwbWorksheet(ConnectedModel):
         )
         _replace_if_changed(worksheet_el, updated, self._context)
         return TwbWorksheetField(self._context, self._id, created.id)
+
+    def add_measure_values(
+        self,
+        *,
+        shelf: str,
+        fields: list[FieldInput],
+        aggregation: str | None = None,
+        aggregations: list[str | None] | None = None,
+        color: bool = True,
+    ) -> TwbWorksheetField:
+        """メジャーバリューを 1 本のピルとして置く（2026-09-22 追加）。
+
+        1 つの軸へメジャーを何本でも並べるための仕組み。Tableau は 3 か所に書く
+        （実ワークブックで確認）。
+
+        - シェルフのピルは `[<データソース>].[Multiple Values]` の 1 本だけ
+        - 中身は `[:Measure Names]` へのカテゴリフィルタで、
+          `<groupfilter function="union">` に集計済みの参照を並べる
+        - `[:Measure Names]` を `<slices>` へ足し、色に載せて描き分ける
+
+        集計は `aggregation` で全体に、`aggregations` で 1 つずつ指定する
+        （式の中に集計関数があるフィールドだけ `agg` にする、など）。
+        戻り値は置いたピルなので、そのまま `set_dual_axis()` へ渡せる。
+        """
+        shelf = shelf.lower()
+        if shelf not in {"rows", "columns"}:
+            raise ValueError("shelf must be rows or columns")
+        if not isinstance(fields, list) or len(fields) < 2:
+            raise ValueError("measure values needs at least two fields")
+        if not isinstance(color, bool):
+            raise TypeError("color must be bool")
+        resolved = [self._resolve_field(field) for field in fields]
+        datasource_ids = {field.datasource_id for field in resolved}
+        if len(datasource_ids) != 1:
+            raise ValueError("measure values fields must share one datasource")
+        datasource_id = datasource_ids.pop()
+        if aggregations is None:
+            aggregations = [aggregation] * len(resolved)
+        elif len(aggregations) != len(resolved):
+            raise ValueError("aggregations must match fields")
+        references = [
+            _build_reference(field, aggregation=chosen, discrete=False)
+            for field, chosen in zip(resolved, aggregations)
+        ]
+        if len(set(references)) != len(references):
+            raise ValueError("measure values fields must be different")
+        pill = f"[{datasource_id}].[Multiple Values]"
+        names = f"[{datasource_id}].[:Measure Names]"
+
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        for field, reference in zip(resolved, references):
+            _ensure_dependency(updated, field, reference)
+
+        table = _ensure_table(updated)
+        shelf_el = _ensure_shelf(table, _SHELVES[shelf])
+        shelf_references = _shelf_references(shelf_el)
+        if pill not in shelf_references:
+            shelf_references.append(pill)
+            shelf_el.text = _format_shelf_references(shelf_references)
+
+        view = _ensure_view(updated)
+        for existing in view.xpath(
+            "./*[local-name()='filter'][@column=$column]", column=names
+        ):
+            view.remove(existing)
+        # `user:op="manual"` は Tableau が書く画面の状態で、スキーマでも任意。
+        # 名前空間の宣言が要るので書かない（2026-09-22）。
+        filter_el = ET.Element(
+            "filter", attrib={"class": "categorical", "column": names}
+        )
+        union = ET.SubElement(filter_el, "groupfilter", attrib={"function": "union"})
+        for reference in references:
+            ET.SubElement(
+                union,
+                "groupfilter",
+                attrib={
+                    "function": "member",
+                    "level": "[:Measure Names]",
+                    "member": f'"{reference}"',
+                },
+            )
+        _insert_in_order(view, filter_el, _VIEW_CHILD_ORDER)
+
+        slices = _direct_child(view, "slices")
+        if slices is None:
+            slices = ET.Element("slices")
+            _insert_in_order(view, slices, _VIEW_CHILD_ORDER)
+        if not slices.xpath("./*[local-name()='column'][text()=$reference]", reference=names):
+            ET.SubElement(slices, "column").text = names
+
+        if color:
+            for pane in _pane_elements(updated):
+                encodings = _direct_child(pane, "encodings")
+                if encodings is None:
+                    encodings = ET.Element("encodings")
+                    _insert_in_order(pane, encodings, _PANE_CHILD_ORDER)
+                if not encodings.xpath(
+                    "./*[local-name()='color'][@column=$reference]", reference=names
+                ):
+                    ET.SubElement(encodings, "color", attrib={"column": names})
+
+        created = next(
+            placement
+            for placement in reversed(_placements(updated))
+            if placement.shelf == shelf and placement.reference == pill
+        )
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return TwbWorksheetField(self._context, self._id, created.id)
+
+    def set_dual_axis(
+        self,
+        *,
+        shelf: str,
+        fields: list[TwbWorksheetField],
+        synchronized: bool = True,
+        overlay: bool = True,
+    ) -> TwbWorksheet:
+        """同じシェルフに置いたメジャーを軸ごとに分ける（2026-09-22 追加）。
+
+        Tableau の書き方は実ワークブックで確認した。
+
+        - シェルフのピルを `+` で連結する（`/` は入れ子で、横に並ぶ別の軸になる）
+        - 軸の書式へ 2 本目以降の `<encoding attr="space" … fold="true">` を足す。
+          `fold` が「重ねる」、`synchronized="true"` が「軸の同期」
+        - 描画は軸ごとに分かれ、`<pane x-axis-name="<ピル>">`（行に置いたなら
+          `y-axis-name`）がマークの種類・色・太さをそれぞれ持つ
+
+        ペインは軸の数だけ作り、先頭に軸名を持たない土台のペインが 1 つ付く。
+        `get_panes()` は土台・各軸の順に返すので、マークの指定は軸ごとに
+        `TwbPane.update()` で行う。`synchronized=False` のときは属性を書かない
+        （Tableau も同期していない軸には書かない）。
+
+        `overlay=False` にすると `fold` を書かない。軸は重ならず**横に並ぶ**
+        （帳票の中に棒や色帯の列を足すときの形。examples/サンプル.twb で確認）。
+        """
+        shelf = shelf.lower()
+        if shelf not in {"rows", "columns"}:
+            raise ValueError("shelf must be rows or columns")
+        if not isinstance(fields, list) or len(fields) < 2:
+            raise ValueError("fields must list at least two placements")
+        if not isinstance(synchronized, bool):
+            raise TypeError("synchronized must be bool")
+        if not isinstance(overlay, bool):
+            raise TypeError("overlay must be bool")
+        references: list[str] = []
+        for field in fields:
+            if not isinstance(field, TwbWorksheetField):
+                raise TypeError("fields must be TwbWorksheetField")
+            if field._context is not self._context or field._worksheet_id != self._id:
+                raise ValueError("fields must belong to the worksheet")
+            placement = field._resolve_placement()
+            if placement.shelf != shelf:
+                raise ValueError(f"fields must be placed on {shelf}")
+            # メジャーバリュー（`[Multiple Values]`）も軸になる（2026-09-22）
+            if not placement.reference.endswith((":qk]", ".[Multiple Values]")):
+                raise ValueError("dual axis needs continuous measures")
+            references.append(placement.reference)
+        if len(set(references)) != len(references):
+            raise ValueError("fields must be different placements")
+
+        worksheet_el = self._resolve_element()
+        updated = copy.deepcopy(worksheet_el)
+        table = _ensure_table(updated)
+        shelf_el = _ensure_shelf(table, _SHELVES[shelf])
+        if set(_shelf_references(shelf_el)) != set(references):
+            raise ValueError(f"{shelf} must hold exactly the given fields")
+        shelf_el.text = _format_overlay_references(references)
+
+        scope = "cols" if shelf == "columns" else "rows"
+        rule = _style_rule(_ensure_table_style(table), "axis", create=True)
+        for item in list(rule):
+            if (
+                _local_name(item) == "encoding"
+                and item.get("attr") == "space"
+                and item.get("fold") == "true"
+            ):
+                rule.remove(item)
+        for reference in references[1:]:
+            if not overlay:
+                continue
+            attributes = {
+                "attr": "space",
+                "class": "0",
+                "field": reference,
+                "field-type": "quantitative",
+                "fold": "true",
+                "scope": scope,
+            }
+            if synchronized:
+                attributes["synchronized"] = "true"
+            attributes["type"] = "space"
+            ET.SubElement(rule, "encoding", attrib=attributes)
+
+        panes = _direct_child(table, "panes")
+        if panes is None:
+            panes = ET.Element("panes")
+            _insert_in_order(table, panes, _TABLE_CHILD_ORDER)
+        existing = [child for child in panes if _local_name(child) == "pane"]
+        base = (
+            copy.deepcopy(existing[0])
+            if existing
+            else ET.Element(
+                "pane",
+                attrib={"selection-relaxation-option": "selection-relaxation-allow"},
+            )
+        )
+        for attribute in ("x-axis-name", "y-axis-name", "x-index", "y-index"):
+            base.attrib.pop(attribute, None)
+        for child in list(panes):
+            panes.remove(child)
+        ground = copy.deepcopy(base)
+        ground.set("id", "1")
+        panes.append(ground)
+        axis_attribute = "x-axis-name" if shelf == "columns" else "y-axis-name"
+        for index, reference in enumerate(references):
+            pane = copy.deepcopy(base)
+            pane.set("id", str(index + 2))
+            pane.set(axis_attribute, reference)
+            panes.append(pane)
+
+        _replace_if_changed(worksheet_el, updated, self._context)
+        return self
 
     def _set_table_calculation_partition(
         self,
@@ -1833,12 +2407,21 @@ class TwbWorksheet(ConnectedModel):
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
 
-    def add_filter(self, *, field: FieldInput) -> TwbWorksheetField:
+    def add_filter(
+        self,
+        *,
+        field: FieldInput,
+        aggregation: str | None = None,
+        table_calculation: str | None = None,
+        table_calculation_field: FieldInput | None = None,
+    ) -> TwbWorksheetField:
         placement = self.add_field(
             field=field,
             shelf="filters",
+            aggregation=aggregation,
             discrete=True,
-            table_calculation=None,
+            table_calculation=table_calculation,
+            table_calculation_field=table_calculation_field,
         )
         reference = placement._resolve_placement().reference
         worksheet_el = self._resolve_element()
@@ -2310,6 +2893,7 @@ class TwbWorksheetFilter(ConnectedModel):
         level = f"[{token.group(2)}]"
 
         worksheet_el = self._resolve_worksheet_element()
+        datatype = _filter_field_datatype(self._context, worksheet_el, self._id)
         updated = copy.deepcopy(worksheet_el)
         filter_el = updated.xpath(
             ".//*[local-name()='filter'][@column=$column]",
@@ -2346,7 +2930,11 @@ class TwbWorksheetFilter(ConnectedModel):
                 ET.SubElement(
                     union,
                     "groupfilter",
-                    attrib={"function": "member", "level": level, "member": f'"{value}"'},
+                    attrib={
+                        "function": "member",
+                        "level": level,
+                        "member": _format_filter_member(datatype, value),
+                    },
                 )
         else:
             for value in values:
@@ -2360,7 +2948,7 @@ class TwbWorksheetFilter(ConnectedModel):
                     child.set("level", level)
                 if template is not None:
                     filter_el.append(child)
-                child.set("member", f'"{value}"')
+                child.set("member", _format_filter_member(datatype, value))
 
         _replace_if_changed(worksheet_el, updated, self._context)
         return self
@@ -2469,12 +3057,21 @@ class TwbPane(ConnectedModel):
             _field_details(self._context, worksheet_el, reference)[2]
             for reference in references
         ]
+        # 見出しと予実比較の行は同じ大きさなので、先頭（見出し）を取る
         label_color = next(
-            (run.get("fontcolor") for run in runs if run.get("fontsize") == "12"),
+            (
+                run.get("fontcolor")
+                for run in runs
+                if run.get("fontsize") == str(_CARD_TITLE_FONT_SIZE)
+            ),
             None,
         )
         value_color = next(
-            (run.get("fontcolor") for run in runs if run.get("fontsize") == "18"),
+            (
+                run.get("fontcolor")
+                for run in runs
+                if run.get("fontsize") == str(_CARD_VALUE_FONT_SIZE)
+            ),
             None,
         )
         return {
@@ -2491,19 +3088,58 @@ class TwbPane(ConnectedModel):
         sub_metric: TwbWorksheetField | None,
         main_color: str,
         value_color: str = "#333333",
+        sub_metrics: list[tuple[list[TwbWorksheetField], str]] | None = None,
+        sub_value_color: str = "#666666",
         vertical_alignment: str = "center",
     ) -> TwbPane:
+        """カードのラベル（見出し・主な値・下段の値）を組み立てる。
+
+        `sub_metrics` は下段に並べる「値と文字色の組」（2026-09-21 追加）。
+        ラベルの文字色は run ごとに書き込むため、**1 つの run に 1 色しか当てられない。**
+        条件で色を変えたいときは、条件に合わないと NULL になる計算フィールドを
+        条件の数だけ作り、それぞれに色を付けてここへ並べる（`draw_card` の予実比較）。
+        組の先頭は値 1 つでも、同じ色で横に並べる値の一覧でもよい（`[達成率, 達成判定]`）。
+        **組の先頭だけは値（達成率）として `sub_value_color`・太字なしで書き、
+        2 つ目以降を文言（達成/未達）として組の色・太字で書く**（2026-09-22 指定）。
+        `sub_metric` は色 `#555555` 固定の 1 つだけを置く従来の形で、併用はできない。
+        """
         if not isinstance(main_metric, TwbWorksheetField):
             raise TypeError("main_metric must be TwbWorksheetField")
         if sub_metric is not None and not isinstance(sub_metric, TwbWorksheetField):
             raise TypeError("sub_metric must be TwbWorksheetField or None")
+        if sub_metrics is not None and sub_metric is not None:
+            raise ValueError("sub_metric and sub_metrics cannot be used together")
+        pairs: list[tuple[list[TwbWorksheetField], str]] = []
+        if sub_metrics is not None:
+            if not isinstance(sub_metrics, list) or not sub_metrics:
+                raise TypeError("sub_metrics must be a non-empty list of (fields, color)")
+            for pair in sub_metrics:
+                if (
+                    not isinstance(pair, tuple)
+                    or len(pair) != 2
+                    or not isinstance(pair[1], str)
+                    or not pair[1].strip()
+                ):
+                    raise TypeError("sub_metrics items must be (fields, color)")
+                fields = pair[0] if isinstance(pair[0], list) else [pair[0]]
+                if not fields or not all(
+                    isinstance(field, TwbWorksheetField) for field in fields
+                ):
+                    raise TypeError("sub_metrics fields must be TwbWorksheetField")
+                pairs.append((fields, pair[1]))
         if not isinstance(main_color, str) or not main_color.strip():
             raise ValueError("main_color must be a non-empty string")
         if not isinstance(value_color, str) or not value_color.strip():
             raise ValueError("value_color must be a non-empty string")
+        if not isinstance(sub_value_color, str) or not sub_value_color.strip():
+            raise ValueError("sub_value_color must be a non-empty string")
         if vertical_alignment not in {"top", "center", "bottom"}:
             raise ValueError("vertical_alignment must be top, center, or bottom")
-        metrics = [main_metric, *([] if sub_metric is None else [sub_metric])]
+        metrics = [
+            main_metric,
+            *([] if sub_metric is None else [sub_metric]),
+            *[field for fields, _ in pairs for field in fields],
+        ]
         placements = []
         for metric in metrics:
             if metric._context is not self._context:
@@ -2522,20 +3158,43 @@ class TwbPane(ConnectedModel):
         formatted = ET.SubElement(customized, "formatted-text")
 
         run = ET.SubElement(formatted, "run", attrib={
-            "bold": "true", "fontalignment": "0", "fontcolor": main_color, "fontsize": "12",
+            "bold": "true", "fontalignment": "0", "fontcolor": main_color,
+            "fontsize": str(_CARD_TITLE_FONT_SIZE),
         })
-        run.text = main_metric.name
+        # 指標名の前に全角スペースを 1 つ入れて左端から離す（2026-09-21）
+        run.text = "　" + main_metric.name
         ET.SubElement(formatted, "run").text = "Æ\n"
         run = ET.SubElement(formatted, "run", attrib={
-            "bold": "true", "fontcolor": value_color, "fontsize": "18",
+            "bold": "true", "fontcolor": value_color, "fontsize": str(_CARD_VALUE_FONT_SIZE),
         })
         run.text = ET.CDATA(f"<{placements[0].reference}>")
         if sub_metric is not None:
             ET.SubElement(formatted, "run").text = "Æ\n"
             run = ET.SubElement(formatted, "run", attrib={
-                "bold": "true", "fontcolor": "#555555", "fontsize": "10",
+                "bold": "true", "fontcolor": "#555555", "fontsize": str(_CARD_SUB_FONT_SIZE),
             })
             run.text = ET.CDATA(f"({sub_metric.name} <{placements[1].reference}>)")
+        offset = 1
+        for index, (fields, color) in enumerate(pairs):
+            # 条件に合わない値は NULL になり、その run は何も出ない（2026-09-21）
+            ET.SubElement(formatted, "run").text = "Æ\n" if index == 0 else " "
+            # 組の先頭は値（達成率）で太字なし・sub_value_color、
+            # 2 つ目以降は文言（達成/未達）で太字・組の色（2026-09-22 指定）
+            value_run = ET.SubElement(formatted, "run", attrib={
+                "fontcolor": sub_value_color, "fontsize": str(_CARD_BUDGET_FONT_SIZE),
+            })
+            value_run.text = ET.CDATA(f"<{placements[offset].reference}>")
+            labels = [
+                f"<{placements[offset + position].reference}>"
+                for position in range(1, len(fields))
+            ]
+            if labels:
+                label_run = ET.SubElement(formatted, "run", attrib={
+                    "bold": "true", "fontcolor": color,
+                    "fontsize": str(_CARD_BUDGET_FONT_SIZE),
+                })
+                label_run.text = ET.CDATA(" " + " ".join(labels))
+            offset += len(fields)
         _insert_in_order(updated, customized, _PANE_CHILD_ORDER)
 
         style = _direct_child(updated, "style")
@@ -2554,9 +3213,12 @@ class TwbPane(ConnectedModel):
         *,
         show: bool = True,
         cull: bool = False,
+        align: str | None = None,
     ) -> TwbPane:
         if not isinstance(show, bool) or not isinstance(cull, bool):
             raise TypeError("show and cull must be bool")
+        if align is not None and align not in {"left", "center", "right"}:
+            raise ValueError("align must be left, center, or right")
         pane_el = self._resolve_element()
         updated = copy.deepcopy(pane_el)
         style = _direct_child(updated, "style")
@@ -2565,6 +3227,9 @@ class TwbPane(ConnectedModel):
             _insert_in_order(updated, style, _PANE_CHILD_ORDER)
         _set_style_value(style, "mark", "mark-labels-show", str(show).lower())
         _set_style_value(style, "mark", "mark-labels-cull", str(cull).lower())
+        if align is not None:
+            # ペインの中のラベルの揃え。Tableau は cell に書く（2026-09-22 実測）
+            _set_style_value(style, "cell", "text-align", align)
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
@@ -2630,6 +3295,79 @@ class TwbPane(ConnectedModel):
         return self
 
     @property
+    def stacked(self) -> str:
+        """マークの積み上げ。`<view><breakdown value>` の `on` / `off` / `auto`。"""
+        view = _direct_child(self._resolve_element(), "view")
+        breakdown = None if view is None else _direct_child(view, "breakdown")
+        return (None if breakdown is None else breakdown.get("value")) or "auto"
+
+    def _add_column_encoding(self, *, encoding: str, column: str) -> TwbPane:
+        """このペインだけにエンコードを足す。
+
+        `[:Measure Names]` のように、データソースの列ではない擬似フィールドを
+        載せるために使う（2026-09-22）。二重軸ではペインごとにマークカードが
+        分かれるので、載せる先を選べる必要がある。
+        """
+        if encoding not in _ENCODINGS:
+            raise ValueError(f"unsupported encoding: {encoding}")
+        pane_el = self._resolve_element()
+        updated = copy.deepcopy(pane_el)
+        encodings = _direct_child(updated, "encodings")
+        if encodings is None:
+            encodings = ET.Element("encodings")
+            _insert_in_order(updated, encodings, _PANE_CHILD_ORDER)
+        tag = _ENCODINGS[encoding]
+        if not encodings.xpath(
+            f"./*[local-name()='{tag}'][@column=$column]", column=column
+        ):
+            ET.SubElement(encodings, tag, attrib={"column": column})
+        _replace_if_changed(pane_el, updated, self._context)
+        return self
+
+    def _apply_pane_width(self, width: int) -> TwbPane:
+        """ペイン（＝列）の幅を px で固定する。
+
+        Tableau はペインの `<style-rule element="pane">` へ `minwidth` と
+        `maxwidth` を同じ値で書く（2026-09-22 に examples/サンプル.twb で確認）。
+        帳票の項目名を浮動テキストで置くとき、位置を出すために使う。
+        """
+        if isinstance(width, bool) or not isinstance(width, int) or width <= 0:
+            raise ValueError("width must be a positive integer")
+        pane_el = self._resolve_element()
+        updated = copy.deepcopy(pane_el)
+        style = _direct_child(updated, "style")
+        if style is None:
+            style = ET.Element("style")
+            _insert_in_order(updated, style, _PANE_CHILD_ORDER)
+        _set_style_value(style, "pane", "minwidth", str(width))
+        _set_style_value(style, "pane", "maxwidth", str(width))
+        _replace_if_changed(pane_el, updated, self._context)
+        return self
+
+    def _apply_stacked(self, stacked: bool) -> TwbPane:
+        """マークの積み上げ（分析 > スタック マーク）。
+
+        公式スキーマ（tableau/tableau-document-schemas の `StackingMode-ST`）では
+        `<view><breakdown value="on|off|auto"/>` の 3 値。既定の `auto` は
+        「Tableau に任せる」で、棒は積み上がる。重ねて描きたいときは `off`
+        （2026-09-22 に公式スキーマで確認）。
+        """
+        if not isinstance(stacked, bool):
+            raise TypeError("stacked must be bool")
+        pane_el = self._resolve_element()
+        updated = copy.deepcopy(pane_el)
+        view = _direct_child(updated, "view")
+        if view is None:
+            view = ET.Element("view")
+            _insert_in_order(updated, view, _PANE_CHILD_ORDER)
+        breakdown = _direct_child(view, "breakdown")
+        if breakdown is None:
+            breakdown = ET.SubElement(view, "breakdown")
+        breakdown.set("value", "on" if stacked else "off")
+        _replace_if_changed(pane_el, updated, self._context)
+        return self
+
+    @property
     def line_interpolation(self) -> str:
         """線マークの補間。書式が無ければ Tableau の既定の `"linear"`。"""
         style = _direct_child(self._resolve_element(), "style")
@@ -2664,6 +3402,52 @@ class TwbPane(ConnectedModel):
             style = ET.Element("style")
             _insert_in_order(updated, style, _PANE_CHILD_ORDER)
         _set_style_value(style, "mark", "mark-color", color.lower())
+        _replace_if_changed(pane_el, updated, self._context)
+        return self
+
+    def _apply_mark_shape(self, shape: str) -> TwbPane:
+        """マークの固定シェイプ（画像）。`draw_info()` のアイコン用（2026-09-23）。
+
+        Tableau は `<pane><style><style-rule element="mark">` に
+        `<format attr="shape" value="パレット名/ファイル名.png">` と書く
+        （`outputs/waterfall_chart_test10.twb` の手作業の "info" シートで実測）。
+        画像そのものはワークブックに埋め込まれず、Tableau 側のシェイプパレット
+        （`形状/<パレット名>/` フォルダ）を参照するだけ。
+        """
+        if not isinstance(shape, str) or not shape.strip():
+            raise ValueError("shape must be a non-empty string")
+        pane_el = self._resolve_element()
+        updated = copy.deepcopy(pane_el)
+        style = _direct_child(updated, "style")
+        if style is None:
+            style = ET.Element("style")
+            _insert_in_order(updated, style, _PANE_CHILD_ORDER)
+        _set_style_value(style, "mark", "shape", shape)
+        _replace_if_changed(pane_el, updated, self._context)
+        return self
+
+    def _apply_customized_tooltip(self, *, heading: str, text: str) -> TwbPane:
+        """マークのカスタムツールヒント。`draw_info()` 用（2026-09-23）。
+
+        Tableau は `<pane>` の直下に `<customized-tooltip><formatted-text>` を置き、
+        見出しは太字の `<run bold="true">`、本文は別の `<run>` に分ける
+        （`outputs/waterfall_chart_test10.twb` の手作業の "info" シートで実測）。
+        見出しがあるときは本文の run の先頭に改行を 1 つ入れる（実測どおり）。
+        """
+        pane_el = self._resolve_element()
+        updated = copy.deepcopy(pane_el)
+        existing = _direct_child(updated, "customized-tooltip")
+        if existing is not None:
+            updated.remove(existing)
+        tooltip = ET.Element("customized-tooltip")
+        formatted = ET.SubElement(tooltip, "formatted-text")
+        heading = heading.strip()
+        if heading:
+            heading_run = ET.SubElement(formatted, "run", attrib={"bold": "true"})
+            heading_run.text = heading
+        body_run = ET.SubElement(formatted, "run")
+        body_run.text = f"\n{text}" if heading else text
+        _insert_in_order(updated, tooltip, _PANE_CHILD_ORDER)
         _replace_if_changed(pane_el, updated, self._context)
         return self
 
@@ -2838,9 +3622,15 @@ class TwbPane(ConnectedModel):
         field: TwbWorksheetField,
         *,
         min_color: str,
-        mid_color: str,
         max_color: str,
+        mid_color: str | None = None,
     ) -> TwbPane:
+        """色に載せた連続のメジャーへ、独自の配色を当てる。
+
+        `<preferences>` に `<color-palette custom="true">` を書き、マークの色の
+        エンコードからその名前を参照する。色を 3 つ渡すと発散（中間色あり）、
+        **2 つなら濃淡**（`ordered-sequential`、2026-09-22 追加。帳票の色帯で使う）。
+        """
         if not isinstance(field, TwbWorksheetField):
             raise TypeError("field must be TwbWorksheetField")
         if (
@@ -2853,7 +3643,9 @@ class TwbPane(ConnectedModel):
             raise ValueError("field must belong to the pane")
         if field.encoding != "color":
             raise ValueError("field must use the color encoding")
-        colors = (min_color, mid_color, max_color)
+        colors = (min_color, max_color) if mid_color is None else (
+            min_color, mid_color, max_color
+        )
         if any(
             not isinstance(color, str)
             or re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None
@@ -2892,7 +3684,8 @@ class TwbPane(ConnectedModel):
             attrib={
                 "custom": "true",
                 "name": palette_name,
-                "type": "ordered-diverging",
+                # 2 色は濃淡、3 色は発散（公式スキーマの PaletteType-ST）
+                "type": "ordered-sequential" if len(colors) == 2 else "ordered-diverging",
             },
         )
         for color in colors:
@@ -2935,12 +3728,15 @@ class TwbPane(ConnectedModel):
         mark_size: float | _UnsetType = UNSET,
         mark_opacity: float | _UnsetType = UNSET,
         mark_scaling: bool | _UnsetType = UNSET,
+        stacked: bool | _UnsetType = UNSET,
         label_style: LabelStyle | _UnsetType = UNSET,
         line_interpolation: str | _UnsetType = UNSET,
     ) -> TwbPane:
         label_style = _validate_style_group(
             "label_style", label_style, _LABEL_STYLE_KEYS
         )
+        if stacked is not UNSET:
+            self._apply_stacked(stacked)
         if line_interpolation is not UNSET and line_interpolation not in _LINE_INTERPOLATIONS:
             raise ValueError("line_interpolation must be linear or step")
         if mark_color is not UNSET:

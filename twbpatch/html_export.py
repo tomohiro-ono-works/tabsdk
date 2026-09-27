@@ -49,9 +49,43 @@ input[type=text], input[type=search], input[type=number], select { font: inherit
          padding: 4px 8px; border: 1px solid #c3cad6; border-radius: 4px; }
 input[type=number] { width: 96px; }
 label.f input[type=number] { width: 88px; font-size: 12px; padding: 3px 6px; }
-/* 文字入力で絞り込めるプルダウン（2026-09-21）。元の select は隠して値だけ持たせる */
+/* AI 用プロンプトのダイアログ（2026-09-21） */
+dialog#prompt-dialog { width: min(900px, 90vw); border: 1px solid #c3cad6; border-radius: 6px; }
+dialog#prompt-dialog h3 { margin: 0 0 8px; font-size: 14px; }
+#prompt-text { width: 100%; height: 50vh; font: 12px/1.5 Consolas, monospace;
+               padding: 8px; border: 1px solid #c3cad6; border-radius: 4px; }
+/* 行のドラッグ＆ドロップ（2026-09-21） */
+td.grip-cell { text-align: center; padding: 0; cursor: grab; }
+tr.picked > td { background: #e8f0ff; }
+td.grip-cell .grip { display: block; padding: 3px 0; }
+tr.dragging-src { opacity: .4; }
+tr.drop-row > td { border-top: 2px solid #4a7dff; }
+/* 検索つきプルダウン（2026-09-21）。押すと下に検索欄 → 候補一覧が開く */
+.combo-wrap { position: relative; display: inline-block; }
 .combo-wrap select { display: none; }
-input.combo { min-width: 120px; }
+.combo-box { font: inherit; text-align: left; width: 100%; min-width: 140px;
+             padding: 4px 20px 4px 6px; border: 1px solid #c3cad6; border-radius: 4px;
+             background: #fff; cursor: pointer; }
+.combo-box::after { content: "▾"; position: absolute; right: 6px; color: #6b7280; }
+/* 開いている間は <body> 直下へ移し、画面に対して固定で置く。位置は開くときに
+   計算する（2026-09-21）。重なり順はモーダル（100）の下、それ以外の上 */
+.combo-menu { position: fixed; z-index: 90; padding: 4px; background: #fff;
+              border: 1px solid #c3cad6; border-radius: 4px;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, .16); }
+.combo-group { padding: 4px 6px 2px; font-size: 10px; font-weight: 600; color: #6b7280;
+               border-top: 1px solid #edf0f5; }
+.combo-list > .combo-group:first-child { border-top: 0; }
+.combo-group ~ .combo-item { padding-left: 14px; }
+input.combo { box-sizing: border-box; width: 100%; font: inherit; font-size: 11px;
+              padding: 3px 5px; border: 1px solid #c3cad6; border-radius: 3px; }
+/* overscroll-behavior: 一覧の端まで送ったとき、ページ側へスクロールを送らない
+   （送るとページが動いて一覧が閉じてしまう。2026-09-21） */
+.combo-list { max-height: 220px; overflow-y: auto; overscroll-behavior: contain;
+              margin-top: 4px; }
+.combo-item { padding: 3px 6px; white-space: nowrap; cursor: pointer; }
+.combo-item:hover { background: #eef3ff; }
+.combo-item.on { background: #dbe6ff; }
+.combo-empty { padding: 3px 6px; color: #888; }
 /* 空・重複など、そのままでは適用できない入力（2026-09-21） */
 input.bad { background: #ffe0e0; border-color: #e09090; }
 button.act { font: inherit; padding: 5px 12px; border: 1px solid #c3cad6;
@@ -110,7 +144,9 @@ details.more > summary:hover { color: #2f3b52; }
 details.more > .params { border-top: 0; }
 label.f { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #555; }
 label.f input[type=text], label.f select { font-size: 12px; padding: 3px 6px; max-width: 190px; }
+label.f textarea { font-size: 12px; padding: 3px 6px; width: 260px; font-family: inherit; }
 .color2 { display: flex; gap: 4px; align-items: center; }
+.info-control { border-top: 1px dashed #d8dde5; padding-top: 8px; margin-bottom: 6px; }
 .color2 select { max-width: 118px; font-size: 12px; padding: 3px 6px; }
 .color2 input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid #c3cad6;
                             border-radius: 4px; background: none; cursor: pointer; }
@@ -158,6 +194,14 @@ label.f input[type=text], label.f select { font-size: 12px; padding: 3px 6px; ma
 .modal-item.drop-top { box-shadow: inset 0 2px 0 #4a7dff; }
 .modal-item.drop-bottom { box-shadow: inset 0 -2px 0 #4a7dff; }
 .modal-foot { padding: 10px 14px; border-top: 1px solid #e3e7ee; text-align: right; }
+/* 帳票の表示方法（2026-09-22）。選択済みの行の「×」の手前に置く小さなボタン。
+   数値のときは控えめ、棒・色付けを選んでいるときは色を付けて分かるようにする */
+.modal-item .display-pick { min-width: 44px; color: #6b7688; }
+.modal-item .display-pick.on { border-color: #4a7dff; color: #2f5fd0; font-weight: bold; }
+/* 表示方法の左に出す色。棒は 1 つ、色付けは 2 つ並ぶ */
+.modal-item .display-colors { display: flex; gap: 3px; }
+.modal-item .display-color { width: 22px; height: 20px; padding: 0; border: 1px solid #c8cfda;
+                             border-radius: 3px; background: none; cursor: pointer; }
 """
 
 _SCRIPT = r"""
@@ -173,50 +217,265 @@ function el(tag, attrs, children) {
   return node;
 }
 
-/* ---- プルダウンの文字入力による絞り込み（2026-09-21） ----
-   <select> を隠して <input list> + <datalist> を前に出す。打った文字で候補が絞られ、
-   呼び出し側は今までどおり select.value と change イベントで扱える。
-   新しく作られた <select> も拾えるように MutationObserver で見張る。 */
-let comboSeq = 0;
+/* ---- 検索つきプルダウン（2026-09-21） ----
+   はじめは <select> を隠して <input list> + <datalist> の一体型にしたが、
+   選択中の値が入力欄に残るため Chrome の datalist がその値を含む候補しか出さず、
+   一覧を見られなくなった（フィールドは候補 25 件でも 1 件しか出ない）。
+   素の <select> の上に検索欄を常に置く形も、使わない欄まで場所を取って邪魔だった。
+   そこで、閉じているときは選択中の値だけを出し、押すと下に「検索欄 → 候補一覧」が開く
+   作りにする。値は隠した <select> が持つので、呼び出し側は今までどおり
+   select.value と change イベントで扱える。
+   候補が COMBO_SEARCH_MIN 以下のもの（グラフ/フィルターの区分、グラフ種類など）は
+   探す必要が無いので、素の <select> のまま返す。 */
+const COMBO_SEARCH_MIN = 6;
+/* 開いている間は <body> の直下へ預ける（2026-09-21）。エリアの箱は横スクロール用に
+   overflow-x: auto で、これは縦もスクロールする設定になるため、中に置いたままだと
+   候補一覧が枠で切れ、段に縦スクロールバーまで生える。閉じたら元の場所へ戻す。 */
+function closeCombo(menu) {
+  menu.hidden = true;
+  if (menu.comboHome && menu.parentNode !== menu.comboHome) menu.comboHome.appendChild(menu);
+}
+function closeCombos() {
+  document.querySelectorAll(".combo-menu").forEach(closeCombo);
+}
+document.addEventListener("mousedown", event => {
+  const node = event.target;
+  if (!node.closest) return;
+  if (!node.closest(".combo-wrap") && !node.closest(".combo-menu")) closeCombos();
+});
+/* 画面に対して固定で出しているので、下の何かが動いたら閉じる。ただし一覧の中の
+   スクロールでは閉じない（2026-09-21。候補を送ろうとすると消えていた）。 */
+window.addEventListener("scroll", event => {
+  const node = event.target;
+  if (node && node.closest && node.closest(".combo-menu")) return;
+  closeCombos();
+}, true);
+window.addEventListener("resize", closeCombos);
+/* 開く位置。箱の真下に出し、下に入らなければ上へ返す。どちらにも入らない
+   ときは画面の中へ寄せる（2026-09-21）。 */
+function placeMenu(box, menu) {
+  const rect = box.getBoundingClientRect();
+  menu.style.minWidth = rect.width + "px";
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const size = menu.getBoundingClientRect();
+  function clamp(value, max) { return Math.min(Math.max(4, value), Math.max(4, max)); }
+  let top = rect.bottom + 2;
+  if (top + size.height > window.innerHeight - 4) top = rect.top - size.height - 2;
+  menu.style.left = clamp(rect.left, window.innerWidth - size.width - 4) + "px";
+  menu.style.top = clamp(top, window.innerHeight - size.height - 4) + "px";
+}
 function searchable(select) {
   if (select.dataset.combo || select.disabled) return select;
   select.dataset.combo = "1";
-  const listId = "combo-" + (++comboSeq);
-  const options = Array.prototype.map.call(select.options, option => ({
-    value: option.value,
-    text: option.textContent,
-    group: option.parentNode && option.parentNode.tagName === "OPTGROUP"
-      ? option.parentNode.label : "",
-  }));
-  const list = el("datalist", { id: listId },
-    options.filter(item => item.text).map(item =>
-      el("option", item.group ? { value: item.text, label: item.group }
-                              : { value: item.text })));
-  const selected = options.find(item => item.value === select.value);
-  const input = el("input", { type: "text", class: "combo", list: listId,
-                              placeholder: "入力して絞り込み",
-                              value: selected ? selected.text : "" });
-  function commit() {
-    const text = input.value.trim();
-    const hit = options.find(item => item.text === text)
-      || options.find(item => item.value === text);
-    if (hit) {
-      select.value = hit.value;
-      input.value = hit.text;
-    } else if (!text && options.some(item => !item.value)) {
-      select.value = "";
-    } else {
-      // 候補に無い文字は捨てて、選ばれている値へ戻す
-      const current = options.find(item => item.value === select.value);
-      input.value = current ? current.text : "";
-      return;
-    }
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+  if (select.options.length <= COMBO_SEARCH_MIN) return select;
+  const box = el("button", { type: "button", class: "combo-box" });
+  const search = el("input", { type: "search", class: "combo", placeholder: "検索" });
+  const list = el("div", { class: "combo-list" });
+  const menu = el("div", { class: "combo-menu", hidden: "hidden" }, [search, list]);
+
+  function paint() {
+    const option = select.options[select.selectedIndex];
+    const text = option ? option.textContent : "";
+    box.textContent = text || "（選択）";
   }
-  input.addEventListener("change", commit);
-  input.addEventListener("blur", commit);
-  return el("span", { class: "combo-wrap" }, [input, list, select]);
+  function addItem(option, text) {
+    if (text && option.textContent.toLowerCase().indexOf(text) < 0) return 0;
+    const item = el("div", { class: "combo-item", text: option.textContent || "（選択）" });
+    if (option.value === select.value) item.classList.add("on");
+    // click だと検索欄から外れた時点で閉じてしまうので mousedown で拾う
+    item.addEventListener("mousedown", event => {
+      event.preventDefault();
+      closeCombo(menu);
+      if (select.value !== option.value) {
+        select.value = option.value;
+        paint();
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    list.appendChild(item);
+    return 1;
+  }
+  /* フォルダ（optgroup）の見出しも出す。素のプルダウンと同じく、フォルダを見てから
+     フィールドを選べるようにするため（2026-09-21。一覧を自前で描いたとき落ちていた）。
+     絞り込みで中身が 1 つも残らないフォルダは見出しごと出さない。 */
+  function renderList() {
+    const text = search.value.trim().toLowerCase();
+    list.textContent = "";
+    let shown = 0;
+    Array.prototype.forEach.call(select.children, node => {
+      if (node.tagName !== "OPTGROUP") {
+        shown += addItem(node, text);
+        return;
+      }
+      const head = el("div", { class: "combo-group", text: node.label });
+      list.appendChild(head);
+      let count = 0;
+      Array.prototype.forEach.call(node.children, option => { count += addItem(option, text); });
+      if (count) shown += count;
+      else list.removeChild(head);
+    });
+    if (!shown) {
+      list.textContent = "";
+      list.appendChild(el("div", { class: "combo-empty", text: "該当なし" }));
+    }
+  }
+  const wrap = el("span", { class: "combo-wrap" }, [select, box, menu]);
+  menu.comboHome = wrap;
+  box.addEventListener("click", () => {
+    if (!menu.hidden) { closeCombo(menu); return; }
+    closeCombos();
+    search.value = "";
+    renderList();
+    document.body.appendChild(menu);
+    menu.hidden = false;
+    placeMenu(box, menu);
+    search.focus();
+  });
+  search.addEventListener("input", renderList);
+  search.addEventListener("keydown", event => { if (event.key === "Escape") closeCombo(menu); });
+  paint();
+  return wrap;
 }
+
+/* ---- リネーム・フォルダ設定を AI に考えてもらうプロンプト（2026-09-21） ----
+   選んだ行（無ければ全行）の 元カラム / データ型 / 役割 をタブ区切りにして、
+   プロンプトへ差し込む。返ってくる 3 列はそのまま表へ貼り戻せる。 */
+const FIELD_PROMPT = __FIELD_PROMPT__;
+const CALC_PROMPT = __CALC_PROMPT__;
+
+/* プロンプトに入れる行。掴み手の列を Ctrl+クリックで拾った行があればそれ、
+   無ければ範囲選択した行、それも無ければ（絞り込みで残っている）全行（2026-09-21）。
+   表の範囲選択は長方形なので、離れた行はこの Ctrl+クリックで選ぶ。 */
+const PICKED_FIELDS = new Set();
+
+/* AI の結果（元カラム||リネーム後名称||フォルダ||階層）は、貼り付け位置ではなく
+   1 列目の元カラム名で行を合わせる。飛び飛びに選んだ行でもそのまま貼れる
+   （2026-09-21）。1 列目が表に無い名前なら、今までどおり位置で貼る。 */
+function pasteByOriginalName(grid, startColumn) {
+  const lines = grid.filter(cols => cols.some(value => value.trim()));
+  if (lines.length < 1 || lines.some(cols => cols.length < 2)) return false;
+  const rows = Array.from(document.getElementById("rename-body").rows);
+  const byName = new Map(rows.map(row => [row.cells[1].textContent.trim(), row]));
+  if (!lines.every(cols => byName.has(cols[0].trim()))) return false;
+  // 2 列目以降は、選んでいたセルの列から順に入れる。フォルダの列を選んで
+  // 「元カラム||フォルダ」の 2 列だけ貼れば、フォルダだけを書き換えられる。
+  const first = Math.min(Math.max(startColumn, 2), 4);
+  lines.forEach(cols => {
+    const row = byName.get(cols[0].trim());
+    cols.slice(1).forEach((value, i) => {
+      const target = row.cells[first + i];
+      if (target && target.dataset.edit === "1") target.textContent = value.trim();
+    });
+  });
+  return true;
+}
+
+let PICK_ANCHOR = -1;
+
+function pickedRowName(tr) { return tr.cells[1].textContent.trim(); }
+
+function markPicked(tr, on) {
+  const name = pickedRowName(tr);
+  if (on) PICKED_FIELDS.add(name);
+  else PICKED_FIELDS.delete(name);
+  tr.classList.toggle("picked", on);
+}
+
+/* 行のどこでも Ctrl+クリックで拾う / 外す。Shift+クリックは、直前に拾った行から
+   そこまでをまとめて拾う（2026-09-21）。表のセル選択より先に処理して止める。
+   拾った行が 1 つも無いときの Shift+クリックは、今までどおりセルの範囲選択。 */
+function pickFieldRows(event) {
+  const cell = event.target.closest("td");
+  if (!cell || !cell.parentElement || cell.parentElement.parentElement.id !== "rename-body") return;
+  const tr = cell.parentElement;
+  const rows = Array.from(tr.parentElement.rows);
+  const index = rows.indexOf(tr);
+  if (event.ctrlKey || event.metaKey) {
+    markPicked(tr, !PICKED_FIELDS.has(pickedRowName(tr)));
+    PICK_ANCHOR = index;
+  } else if (event.shiftKey && PICKED_FIELDS.size && PICK_ANCHOR >= 0) {
+    const from = Math.min(PICK_ANCHOR, index);
+    const to = Math.max(PICK_ANCHOR, index);
+    for (let i = from; i <= to; i++) markPicked(rows[i], true);
+    PICK_ANCHOR = index;
+  } else {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+}
+document.getElementById("rename-table").addEventListener("mousedown", pickFieldRows, true);
+
+function selectedFieldRows() {
+  const rows = Array.from(document.getElementById("rename-body").rows)
+    .filter(row => row.style.display !== "none");
+  const picked = rows.filter(row => PICKED_FIELDS.has(row.cells[1].textContent.trim()));
+  if (picked.length) return picked;
+  const selected = rows.filter(row =>
+    Array.from(row.cells).some(cell => cell.classList.contains("sel")
+                                    || cell.classList.contains("active")));
+  return selected.length ? selected : rows;
+}
+
+function fieldPromptText() {
+  // 入力も出力と同じ二重縦棒で区切る。タブはチャットへ貼ると潰れて、
+  // 「商品 ID」のように値へ空白が入る名前と区別できなくなる（2026-09-21）。
+  const lines = selectedFieldRows().map(row => [
+    row.cells[1].textContent.trim(),
+    row.cells[5].textContent.trim(),
+    row.cells[6].textContent.trim(),
+  ].join("||"));
+  return FIELD_PROMPT.replace("__ROWS__", lines.join("\n"));
+}
+
+/* 計算フィールドのプロンプト。式の中で使える名前（リネーム後の名前と、
+   いま表に入っている計算フィールド）を一覧にして渡す（2026-09-21）。 */
+function calcPromptText() {
+  const fields = selectedFieldRows().map(row => [
+    row.cells[2].textContent.trim() || row.cells[1].textContent.trim(),
+    row.cells[5].textContent.trim(),
+    row.cells[6].textContent.trim(),
+  ].join("||"));
+  Array.from(document.getElementById("calc-body").rows).forEach(row => {
+    const name = row.cells[0].textContent.trim();
+    if (!name) return;
+    fields.push([name, row.cells[3].textContent.trim(),
+                 row.cells[4].textContent.trim()].join("||"));
+  });
+  return CALC_PROMPT.replace("__FIELDS__", fields.join("\n"));
+}
+
+const promptDialog = document.getElementById("prompt-dialog");
+function openPrompt(text, note) {
+  document.getElementById("prompt-text").value = text;
+  document.getElementById("prompt-copied").textContent = note;
+  promptDialog.showModal();
+}
+document.getElementById("prompt-open").addEventListener("click",
+  () => openPrompt(fieldPromptText(), selectedFieldRows().length + " 行"));
+document.getElementById("calc-prompt-open").addEventListener("click",
+  () => openPrompt(calcPromptText(), "「# 作りたい指標」を書いてからコピーする"));
+document.getElementById("prompt-close").addEventListener("click", () => promptDialog.close());
+document.getElementById("prompt-clear").addEventListener("click", () => {
+  PICKED_FIELDS.clear();
+  PICK_ANCHOR = -1;
+  Array.from(document.getElementById("rename-body").rows)
+    .forEach(row => row.classList.remove("picked"));
+});
+document.getElementById("prompt-copy").addEventListener("click", () => {
+  const area = document.getElementById("prompt-text");
+  const done = () => { document.getElementById("prompt-copied").textContent = "コピーしました"; };
+  // file:// で開くと navigator.clipboard が使えないことがあるので、選択してのコピーへ落とす
+  area.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(area.value).then(done, () => {
+      if (document.execCommand("copy")) done();
+    });
+    return;
+  }
+  if (document.execCommand("copy")) done();
+});
 
 /* ---- タブ ---- */
 document.querySelectorAll("nav button[data-tab]").forEach(btn => {
@@ -329,6 +588,28 @@ function enableColumnResize(table) {
 
 /* ---- セル状の表: 範囲選択・コピー・貼り付け ---- */
 let activeGrid = null;
+
+/* 貼り付けの区切り（2026-09-21）。タブがあればタブ（Excel・スプレッドシート）。
+   無ければ二重縦棒（||）、それも無ければ縦棒（|）。生成 AI の返事はタブが落ちて
+   届くことが多く、値に空白が入る「商品 ID」のような名前があるので空白では区切れない。
+   二重縦棒にしているのは、値の中の縦棒（「売上|当年」など）とぶつからないため。
+   Markdown の表で返ってきたときのために、行頭行末の | と区切り行（---）は落とす。 */
+function parsePastedGrid(text) {
+  const lines = text.replace(/\r/g, "").replace(/\n+$/, "").split("\n");
+  if (text.indexOf("\t") >= 0) return lines.map(line => line.split("\t"));
+  const mark = text.indexOf("||") >= 0 ? "||" : "|";
+  if (text.indexOf(mark) < 0) return lines.map(line => [line]);
+  return lines
+    .filter(line => !/^\s*\|?\s*:?-{2,}/.test(line))
+    .map(line => {
+      // Markdown の表（行頭行末も | ）のときだけ、その 2 本を落とす。
+      // 末尾の区切りは残す。3 列目が空の行を 2 列と読み違えないため。
+      const body = (mark === "|" && /^\s*\|.*\|\s*$/.test(line))
+        ? line.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
+        : line;
+      return body.split(mark).map(value => value.trim());
+    });
+}
 
 function enableGrid(table, options) {
   options = options || {};
@@ -641,6 +922,17 @@ function enableGrid(table, options) {
     // hasRange() から「選択があるか」へ緩めた。以前は 1 セルだけだとキャレットが
     // 入っていたのでブラウザ既定のコピーが効いていた）
     if (activeGrid !== table || editing || sel.r1 < 0) return;
+    /* 表の外にあるものからのコピーは、ブラウザ既定に任せる（2026-09-21）。
+       表のセルを選んだまま別のタブへ移ると activeGrid と選択が残るため、
+       ダッシュボードのシート名などテキストボックスのコピーを横取りしていた。 */
+    const active = document.activeElement;
+    if (active && active !== document.body && !table.contains(active)) return;
+    const picked = window.getSelection && window.getSelection();
+    if (picked && !picked.isCollapsed && picked.rangeCount) {
+      const node = picked.getRangeAt(0).commonAncestorContainer;
+      const element = node.nodeType === 1 ? node : node.parentNode;
+      if (element && !table.contains(element)) return;
+    }
     const r = rect();
     const rows = rowsOf();
     const lines = [];
@@ -681,8 +973,14 @@ function enableGrid(table, options) {
       editing.dispatchEvent(new Event("input", { bubbles: true }));
       return;
     }
-    const grid = text.replace(/\r/g, "").replace(/\n+$/, "").split("\n").map(r => r.split("\t"));
+    const grid = parsePastedGrid(text);
     const start = cell ? posOf(cell) : { r: rect().top, c: rect().left };
+    // 1 列目が既にある行の名前なら、どの行かは名前で決める。列は貼り付け先から
+    if (options.pasteByName && options.pasteByName(grid, start.c)) {
+      dirty();
+      commit();
+      return;
+    }
     ensureRows(start.r + grid.length);
     const rows = rowsOf();
     grid.forEach((cols, r) => {
@@ -743,13 +1041,38 @@ function originalNameOf(field) {
   return id.startsWith("[") && id.endsWith("]") ? id.slice(1, -1) : (id || field.name || "");
 }
 
+/* 階層（ドリルパス）は .twb では folder-item を持たないので、行の「フォルダ」には
+   階層が置かれているフォルダを入れる。行の並びがそのまま階層の順になるよう、
+   同じ階層のフィールドを先頭の行の位置へ集める（2026-09-21）。 */
+function hierarchyOf(ds, field) {
+  return (ds.drill_paths || []).find(path => (path.field_ids || []).indexOf(field.id) >= 0);
+}
+
+function orderByHierarchy(ds, rows) {
+  (ds.drill_paths || []).forEach(path => {
+    const members = (path.field_ids || [])
+      .map(id => rows.find(row => row.fieldId === id))
+      .filter(Boolean);
+    if (members.length < 2) return;
+    const at = rows.indexOf(members[0]);
+    members.forEach(row => rows.splice(rows.indexOf(row), 1));
+    rows.splice(rows.indexOf(members[0]) >= 0 ? rows.indexOf(members[0]) : at, 0, ...members);
+  });
+  return rows;
+}
+
 function initialState(ds) {
-  const rename = (ds.fields || []).filter(f => !f.is_calculated).map(field => ({
-    original: originalNameOf(field),
-    display: field.name || "",
-    folder: folderNameOf(ds, field) || NO_FOLDER,
-    datatype: field.datatype || "",
-    role: field.role || "",
+  const rename = orderByHierarchy(ds, (ds.fields || []).filter(f => !f.is_calculated).map(field => {
+    const path = hierarchyOf(ds, field);
+    return {
+      fieldId: field.id,
+      original: originalNameOf(field),
+      display: field.name || "",
+      folder: (path ? path.folder_name : folderNameOf(ds, field)) || NO_FOLDER,
+      hierarchy: path ? path.name : "",
+      datatype: field.datatype || "",
+      role: field.role || "",
+    };
   }));
   const calcs = (ds.fields || []).filter(f => f.is_calculated).map(field => ([
     field.name || "", field.formula || "", folderNameOf(ds, field) || NO_FOLDER,
@@ -808,7 +1131,16 @@ function closeFolderPopup() {
 function folderCandidates() {
   const set = new Set([NO_FOLDER]);
   Array.from(document.getElementById("rename-body").rows).forEach(row => {
-    const value = row.cells[2].textContent.trim();
+    const value = row.cells[3].textContent.trim();
+    if (value) set.add(value);
+  });
+  return Array.from(set);
+}
+/* 階層名の候補。今この表に入っている名前を集める（2026-09-21） */
+function hierarchyCandidates() {
+  const set = new Set([""]);
+  Array.from(document.getElementById("rename-body").rows).forEach(row => {
+    const value = row.cells[4].textContent.trim();
     if (value) set.add(value);
   });
   return Array.from(set);
@@ -864,16 +1196,112 @@ function clearModalDropMarks() {
     .forEach(node => node.classList.remove("drop-top", "drop-bottom"));
 }
 
+/* 帳票の表示方法（2026-09-22）。並び替えの一覧は表にしない（表にすると順番を
+   ドラッグで変えられなくなる）。選択済みの行の「×」の手前に、メジャーだけ
+   小さなボタンを置き、押すたびに 数値 → 棒 → 色付け と変える。
+   受け手は draw_sheet の bar_metrics / color_metrics として読む。 */
+const SHEET_DISPLAYS = [["value", "数値"], ["bar", "棒"], ["color", "色付け"]];
+/* 表示方法ボタンの左に出す色。棒は 1 色、色付けは 2 色（薄い側 → 濃い側）。
+   数値には色を出さない（2026-09-22 指定）。 */
+const SHEET_BAR_COLOR = "#4a7dff";
+const SHEET_COLOR_RANGE = ["#e8eef7", "#2f3b52"];
+function hasSheetDisplay(area, spec) {
+  return area.chart === "draw_sheet" && spec.name === "items";
+}
+function measureNames(dsIndex) {
+  const ds = DATA.datasources[Number(dsIndex) || 0];
+  return ((ds && ds.fields) || [])
+    .filter(field => !field.hidden && field.role === "measure")
+    .map(field => field.name || "");
+}
+
 function openFieldOrderModal(area, spec, selected, onChange) {
   let dragFrom = null; // { list: "left" | "right", name: string }
 
+  const withDisplay = hasSheetDisplay(area, spec);
+  const measures = withDisplay ? measureNames(area.datasource) : [];
+  const displays = {};
+  const barColors = {};
+  const colorRanges = {};
+  if (withDisplay) {
+    (area.params.bar_metrics || []).forEach((name, index) => {
+      displays[name] = "bar";
+      barColors[name] = (area.params.bar_colors || [])[index] || SHEET_BAR_COLOR;
+    });
+    (area.params.color_metrics || []).forEach((name, index) => {
+      displays[name] = "color";
+      colorRanges[name] = [
+        (area.params.color_starts || [])[index] || SHEET_COLOR_RANGE[0],
+        (area.params.color_ends || [])[index] || SHEET_COLOR_RANGE[1],
+      ];
+    });
+  }
+  /* 選んだ順のまま書き出す。選択から外れたフィールドはここで落ちる。
+     色もメジャーと同じ並びで書き出す（2026-09-22） */
+  function applyDisplays() {
+    if (!withDisplay) return;
+    const bars = selected.filter(name => displays[name] === "bar");
+    const colors = selected.filter(name => displays[name] === "color");
+    area.params.bar_metrics = bars;
+    area.params.color_metrics = colors;
+    area.params.bar_colors = bars.map(name => barColors[name] || SHEET_BAR_COLOR);
+    area.params.color_starts = colors.map(
+      name => (colorRanges[name] || SHEET_COLOR_RANGE)[0]);
+    area.params.color_ends = colors.map(
+      name => (colorRanges[name] || SHEET_COLOR_RANGE)[1]);
+  }
+
   const overlay = el("div", { class: "modal-overlay" });
+  function closeModal() {
+    applyDisplays();
+    overlay.remove();
+  }
   overlay.addEventListener("mousedown", event => {
-    if (event.target === overlay) overlay.remove();
+    if (event.target === overlay) closeModal();
   });
 
   const leftList = el("div", { class: "modal-list" });
   const rightList = el("div", { class: "modal-list" });
+
+  /* 表示方法のボタンと、その左に出す色。棒は 1 色、色付けは 2 色 */
+  function displayControls(name) {
+    const order = SHEET_DISPLAYS.map(pair => pair[0]);
+    const swatches = el("span", { class: "display-colors" });
+    const button = el("button", { class: "mini display-pick", draggable: "false" });
+    function swatch(value, hint, onPick) {
+      const input = el("input", { type: "color", class: "display-color",
+                                  value: value, title: hint });
+      input.addEventListener("input", () => { onPick(input.value); applyDisplays(); });
+      return input;
+    }
+    function refresh() {
+      const kind = displays[name] || "value";
+      button.textContent = SHEET_DISPLAYS.filter(pair => pair[0] === kind)[0][1];
+      button.title = "表示方法（押すと 数値 → 棒 → 色付け と変わります）";
+      button.classList.toggle("on", kind !== "value");
+      swatches.innerHTML = "";
+      if (kind === "bar") {
+        const value = barColors[name] || SHEET_BAR_COLOR;
+        barColors[name] = value;
+        swatches.appendChild(
+          swatch(value, "棒の色", picked => { barColors[name] = picked; }));
+      } else if (kind === "color") {
+        const range = (colorRanges[name] || SHEET_COLOR_RANGE).slice();
+        colorRanges[name] = range;
+        ["薄い側の色", "濃い側の色"].forEach((hint, index) => {
+          swatches.appendChild(
+            swatch(range[index], hint, picked => { range[index] = picked; }));
+        });
+      }
+    }
+    button.addEventListener("click", () => {
+      displays[name] = order[(order.indexOf(displays[name] || "value") + 1) % order.length];
+      refresh();
+      applyDisplays();
+    });
+    refresh();
+    return [swatches, button];
+  }
 
   function makeItem(name, listName) {
     const item = el("div", { class: "modal-item", draggable: "true" }, [
@@ -881,6 +1309,9 @@ function openFieldOrderModal(area, spec, selected, onChange) {
       el("span", { text: name }),
     ]);
     if (listName === "right") {
+      if (withDisplay && measures.indexOf(name) >= 0) {
+        displayControls(name).forEach(node => item.appendChild(node));
+      }
       const remove = el("button", { class: "mini danger", text: "×", title: "外す" });
       remove.addEventListener("click", () => {
         selected.splice(selected.indexOf(name), 1);
@@ -910,6 +1341,8 @@ function openFieldOrderModal(area, spec, selected, onChange) {
   }
 
   function renderLists() {
+    // 外したり並べ替えたりした結果を、その場で表示方法へ反映する（2026-09-22）
+    applyDisplays();
     leftList.innerHTML = "";
     rightList.innerHTML = "";
     groupedFields(area.datasource, spec.role).forEach(group => {
@@ -958,9 +1391,9 @@ function openFieldOrderModal(area, spec, selected, onChange) {
   renderLists();
 
   const closeBtn = el("button", { class: "mini", text: "×", title: "閉じる" });
-  closeBtn.addEventListener("click", () => overlay.remove());
+  closeBtn.addEventListener("click", closeModal);
   const footClose = el("button", { class: "act", text: "閉じる" });
-  footClose.addEventListener("click", () => overlay.remove());
+  footClose.addEventListener("click", closeModal);
 
   const box = el("div", { class: "modal-box" }, [
     el("div", { class: "modal-head" }, [
@@ -973,6 +1406,8 @@ function openFieldOrderModal(area, spec, selected, onChange) {
     ]),
     el("div", { class: "modal-foot" }, [footClose]),
   ]);
+  applyDisplays();
+
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 }
@@ -991,19 +1426,81 @@ function fieldsCheckControl(area, spec, value) {
   return button;
 }
 
+/* 表の行をドラッグで並べ替える（2026-09-21）。階層の順は行の並びで決まるので、
+   ここで動かした順がそのままドリルの順になる。掴み手（⠿）を押している間だけ
+   draggable にして、セルの選択と喧嘩しないようにする。
+
+   掴むのは行オブジェクトではなく <tr> の位置。行オブジェクトは `captureCurrent()` が
+   呼ばれるたびに作り直されるので、持っていても元の配列から見つからなくなる。 */
+let ROW_DRAG = null;
+function attachRowDrag(tr, gripCell, state) {
+  const bodyRows = () => Array.from(tr.parentElement.rows);
+  gripCell.addEventListener("mousedown", event => {
+    tr.setAttribute("draggable", "true");
+    event.stopPropagation();
+  });
+  gripCell.addEventListener("mouseup", () => tr.removeAttribute("draggable"));
+  tr.addEventListener("dragstart", event => {
+    ROW_DRAG = tr;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", "field-row");
+    tr.classList.add("dragging-src");
+  });
+  tr.addEventListener("dragend", () => {
+    ROW_DRAG = null;
+    tr.removeAttribute("draggable");
+    tr.classList.remove("dragging-src");
+    bodyRows().forEach(other => other.classList.remove("drop-row"));
+  });
+  tr.addEventListener("dragover", event => {
+    if (!ROW_DRAG || ROW_DRAG === tr) return;
+    event.preventDefault();
+    tr.classList.add("drop-row");
+  });
+  tr.addEventListener("dragleave", () => tr.classList.remove("drop-row"));
+  tr.addEventListener("drop", event => {
+    if (!ROW_DRAG || ROW_DRAG === tr) return;
+    event.preventDefault();
+    tr.classList.remove("drop-row");
+    const rows = bodyRows();
+    moveFieldRow(state, rows.indexOf(ROW_DRAG), rows.indexOf(tr));
+  });
+}
+
+/* `from` 番目の行を `to` 番目の位置へ。上へ動かすときは落とした行の前、
+   下へ動かすときは後ろに入る。 */
+function moveFieldRow(state, from, to) {
+  if (from < 0 || to < 0 || from === to) return;
+  const rows = captureCurrent().rename;   // 画面の並びに合わせてから動かす
+  const moved = rows.splice(from, 1)[0];
+  rows.splice(to, 0, moved);
+  renderTables(state);
+  validateRename();
+}
+
 function renderTables(state) {
   const renameBody = document.getElementById("rename-body");
   renameBody.innerHTML = "";
   state.rename.forEach(row => {
     const folderCell = editableCell(row.folder);
     folderCell.addEventListener("focus", () => openChoicePopup(folderCell, folderCandidates()));
-    renameBody.appendChild(el("tr", {}, [
+    const hierarchyCell = editableCell(row.hierarchy || "");
+    hierarchyCell.addEventListener("focus",
+      () => openChoicePopup(hierarchyCell, hierarchyCandidates()));
+    const gripCell = el("td", { class: "ro grip-cell", tabindex: "-1" },
+      [el("span", { class: "grip", text: "⠿", title: "ドラッグして並べ替え" })]);
+    const tr = el("tr", {}, [
+      gripCell,
       readonlyCell(row.original),
       editableCell(row.display),
       folderCell,
+      hierarchyCell,
       readonlyCell(row.datatype),
       readonlyCell(row.role),
-    ]));
+    ]);
+    attachRowDrag(tr, gripCell, state);
+    if (PICKED_FIELDS.has(row.original)) tr.classList.add("picked");
+    renameBody.appendChild(tr);
   });
   const calcBody = document.getElementById("calc-body");
   calcBody.innerHTML = "";
@@ -1013,12 +1510,15 @@ function renderTables(state) {
 /* 画面の内容を、いま表示しているデータソースの編集内容へ書き戻す */
 function captureInto(index) {
   const state = stateAt(index);
-  state.rename = Array.from(document.getElementById("rename-body").rows).map(row => ({
-    original: row.cells[0].textContent.trim(),
-    display: row.cells[1].textContent.trim(),
-    folder: row.cells[2].textContent.trim(),
-    datatype: row.cells[3].textContent.trim(),
-    role: row.cells[4].textContent.trim(),
+  state.rename = Array.from(document.getElementById("rename-body").rows).map((row, index) => ({
+    fieldId: (state.rename[index] || {}).fieldId,
+    // 先頭はドラッグの掴み手の列（2026-09-21）
+    original: row.cells[1].textContent.trim(),
+    display: row.cells[2].textContent.trim(),
+    folder: row.cells[3].textContent.trim(),
+    hierarchy: row.cells[4].textContent.trim(),
+    datatype: row.cells[5].textContent.trim(),
+    role: row.cells[6].textContent.trim(),
   }));
   state.calcs = Array.from(document.getElementById("calc-body").rows)
     .map(row => Array.from(row.cells).map(cell => cell.textContent.trim()));
@@ -1036,6 +1536,7 @@ function refreshDatasource() {
   renderedIndex = currentIndex();
   renderTables(stateAt(renderedIndex));
   validateRename();
+  validateCalc();
   document.querySelectorAll("table").forEach(table => {
     if (table.grid) table.grid.resetHistory();
   });
@@ -1098,30 +1599,82 @@ function validateState(state) {
     }
     assigned.add(row.original);
   });
+  errors.push.apply(errors, validateHierarchies(state));
+  return errors;
+}
+
+/* 階層は 2 つ以上のフィールドが要る。フォルダは階層の中でそろえる（2026-09-21） */
+function validateHierarchies(state) {
+  const errors = [];
+  hierarchiesOf(state).forEach((entry, name) => {
+    if (entry.fields.length < 2) {
+      errors.push("階層「" + name + "」はフィールドが 2 つ以上要る");
+    }
+    const folders = new Set(state.rename
+      .filter(row => (row.hierarchy || "").trim() === name && row.display)
+      .map(row => row.folder));
+    if (folders.size > 1) {
+      errors.push("階層「" + name + "」のフォルダがそろっていない: "
+        + Array.from(folders).join(" / "));
+    }
+    if (state.rename.some(row => row.display === name)) {
+      errors.push("階層「" + name + "」と同じ名前のフィールドがある");
+    }
+  });
   return errors;
 }
 
 function validateRename() {
   const seen = new Set();
   Array.from(document.getElementById("rename-body").rows).forEach(row => {
-    const original = row.cells[0].textContent.trim();
-    const display = row.cells[1].textContent.trim();
-    const folder = row.cells[2].textContent.trim();
+    const original = row.cells[1].textContent.trim();
+    const display = row.cells[2].textContent.trim();
+    const folder = row.cells[3].textContent.trim();
     const hasFolder = !isNoFolder(folder);
-    row.cells[1].classList.toggle("invalid", hasFolder && !display);
-    row.cells[2].classList.toggle("invalid", hasFolder && seen.has(original));
+    row.cells[2].classList.toggle("invalid", hasFolder && !display);
+    row.cells[3].classList.toggle("invalid", hasFolder && seen.has(original));
     if (hasFolder) seen.add(original);
   });
   const errors = validateState(captureCurrent());
   document.getElementById("rename-errors").textContent = errors.join("\n");
+  // リネームすると式から参照できる名前が変わる（2026-09-21）
+  if (document.getElementById("calc-body").rows.length) validateCalc();
   return errors.length === 0;
 }
 document.getElementById("rename-table").addEventListener("griddirty", validateRename);
 
+/* 式の中で使える名前（2026-09-21）。リネーム後の名前（空なら元の名前）と、
+   この表で定義する計算フィールドの名前。受け手も適用後の名前で解決するため、
+   リネーム前の名前は使えない。絞り込みで隠れている行も対象に含める。 */
+function knownFieldNames() {
+  const names = new Set();
+  Array.from(document.getElementById("rename-body").rows).forEach(row => {
+    const name = row.cells[2].textContent.trim() || row.cells[1].textContent.trim();
+    if (name) names.add(name);
+  });
+  Array.from(document.getElementById("calc-body").rows).forEach(row => {
+    const name = row.cells[0].textContent.trim();
+    if (name) names.add(name);
+  });
+  return names;
+}
+/* 式の [フィールド名] のうち、存在しないものを返す。文字列の中の [ ] までは
+   見分けられないが、実在しない名前を早く気づける方を採る。 */
+function missingReferences(formula, names) {
+  const missing = [];
+  (formula.match(/\[[^\[\]]+\]/g) || []).forEach(token => {
+    const name = token.slice(1, -1).trim();
+    if (name && !names.has(name) && missing.indexOf(name) < 0) missing.push(name);
+  });
+  return missing;
+}
+
 /* 計算フィールド: フォルダは自由入力のまま検証しない。データ型・役割は
-   テキスト入力を許すが、候補にない文字列は赤くしてエラー欄に出す。 */
+   テキスト入力を許すが、候補にない文字列は赤くしてエラー欄に出す。
+   式は [フィールド名] の参照先が無ければ赤くする（2026-09-21 追加）。 */
 function validateCalc() {
   const errors = [];
+  const names = knownFieldNames();
   Array.from(document.getElementById("calc-body").rows).forEach(row => {
     const name = row.cells[0].textContent.trim();
     const formula = row.cells[1].textContent.trim();
@@ -1130,8 +1683,14 @@ function validateCalc() {
     const role = row.cells[4].textContent.trim();
     const datatypeInvalid = !!datatype && !CALC_DATATYPE_CHOICES.includes(datatype);
     const roleInvalid = !!role && !CALC_ROLE_CHOICES.includes(role);
+    const missing = missingReferences(formula, names);
+    row.cells[1].classList.toggle("invalid", missing.length > 0);
     row.cells[3].classList.toggle("invalid", datatypeInvalid);
     row.cells[4].classList.toggle("invalid", roleInvalid);
+    if (missing.length) {
+      errors.push((name || formula) + ": 無いフィールドを参照しています ("
+                  + missing.map(item => "[" + item + "]").join(", ") + ")");
+    }
     if (datatypeInvalid) errors.push((name || formula) + ": データ型が不正です (" + datatype + ")");
     if (roleInvalid) errors.push((name || formula) + ": 役割が不正です (" + role + ")");
   });
@@ -1147,9 +1706,20 @@ document.getElementById("calc-table").addEventListener("griddirty", () => {
    （EDITS を見る。rename の validateState() と対になる） */
 function validateCalcState(state) {
   const errors = [];
+  const names = new Set();
+  state.rename.forEach(row => {
+    const name = row.display || row.original;
+    if (name) names.add(name);
+  });
+  state.calcs.forEach(cells => { if (cells[0]) names.add(cells[0]); });
   state.calcs.forEach(cells => {
     const name = cells[0], formula = cells[1];
     if (!name && !formula) return;
+    const missing = missingReferences(formula || "", names);
+    if (missing.length) {
+      errors.push((name || formula) + ": 無いフィールドを参照しています ("
+                  + missing.map(item => "[" + item + "]").join(", ") + ")");
+    }
     const datatype = cells[3], role = cells[4];
     if (datatype && !CALC_DATATYPE_CHOICES.includes(datatype)) {
       errors.push((name || formula) + ": データ型が不正です (" + datatype + ")");
@@ -1177,8 +1747,8 @@ function bindColor(id) {
     if (typeof renderKpiTree === "function") renderKpiTree();
   });
 }
-["d-main", "d-sub1", "d-sub2", "d-sub3", "d-text1", "d-text2", "d-border",
- "d-heat-min", "d-heat-mid", "d-heat-max"]
+["d-main", "d-sub1", "d-sub2", "d-sub3", "d-accent", "d-text1", "d-text2", "d-bg",
+ "d-border", "d-heat-min", "d-heat-mid", "d-heat-max"]
   .forEach(bindColor);
 
 function designYaml() {
@@ -1189,8 +1759,12 @@ function designYaml() {
   out += "  sub_color_1: " + yamlKey(value("d-sub1")) + "\n";
   out += "  sub_color_2: " + yamlKey(value("d-sub2")) + "\n";
   out += "  sub_color_3: " + yamlKey(value("d-sub3")) + "\n";
+  // 追加アクセントは入れたときだけ出す（プリセットによっては無い）
+  if (value("d-accent")) out += "  accent_color: " + yamlKey(value("d-accent")) + "\n";
   out += "  text_color_1: " + yamlKey(value("d-text1")) + "\n";
   out += "  text_color_2: " + yamlKey(value("d-text2")) + "\n";
+  // 台紙（ダッシュボードの地）の色（2026-09-21 追加）
+  out += "  background_color: " + yamlKey(value("d-bg")) + "\n";
   // 枠線は色を入れたときだけ引く。空なら枠線なし
   if (value("d-border")) out += "  border_color: " + yamlKey(value("d-border")) + "\n";
   out += "  min_color: " + yamlKey(value("d-heat-min")) + "\n";
@@ -1214,6 +1788,18 @@ function yamlHeader(sections) {
   return out;
 }
 
+/* 階層は「階層」列から組み立てる。並びは表の行順、フォルダは最初の行のフォルダ（2026-09-21） */
+function hierarchiesOf(state) {
+  const hierarchies = new Map();
+  state.rename.forEach(row => {
+    const name = (row.hierarchy || "").trim();
+    if (!name || !row.display) return;
+    if (!hierarchies.has(name)) hierarchies.set(name, { folder: row.folder, fields: [] });
+    hierarchies.get(name).fields.push(row.display);
+  });
+  return hierarchies;
+}
+
 function datasourcesYaml() {
   captureCurrent();
   let out = "datasources:\n";
@@ -1233,7 +1819,8 @@ function datasourcesYaml() {
       folders.get(row.folder).push([row.original, row.display]);
     });
     const calcs = state.calcs.filter(cells => cells[0] && cells[1]);
-    if (!folders.size && !renames.length && !calcs.length) return;
+    const hierarchies = hierarchiesOf(state);
+    if (!folders.size && !renames.length && !calcs.length && !hierarchies.size) return;
     wrote = true;
     out += "  " + yamlKey(ds.name || ds.id) + ":\n";
     if (folders.size) {
@@ -1249,6 +1836,15 @@ function datasourcesYaml() {
       out += "    renames:\n";
       renames.forEach(pair => {
         out += "      " + yamlKey(pair[0]) + ": " + yamlKey(pair[1]) + "\n";
+      });
+    }
+    if (hierarchies.size) {
+      out += "    hierarchies:\n";
+      hierarchies.forEach((entry, name) => {
+        out += "      " + yamlKey(name) + ":\n";
+        if (!isNoFolder(entry.folder)) out += "        folder: " + yamlKey(entry.folder) + "\n";
+        out += "        fields:\n";
+        entry.fields.forEach(field => { out += "          - " + yamlKey(field) + "\n"; });
       });
     }
     if (calcs.length) {
@@ -1298,7 +1894,14 @@ document.getElementById("yaml-download-datasources").addEventListener("click", (
 
 /* ---- ダッシュボードタブ（新規作成） ---- */
 const DRAW_SPECS = JSON.parse(document.getElementById("draw-specs").textContent);
-const CHART_TYPES = Object.keys(DRAW_SPECS);
+// selectable: false のもの（draw_info。インフォメーションを追加のチェックボックス
+// 経由でのみ使う）は「グラフ種類」プルダウンには出さない（2026-09-23）。
+const CHART_TYPES = Object.keys(DRAW_SPECS).filter(name => DRAW_SPECS[name].selectable !== false);
+
+/* 設定 YAML を読み込んで作った画面なら、その中身が入っている（2026-09-21）。
+   .twb にはデザインルール・ダッシュボードの組み立て・KPI ツリーが残らないため、
+   画面を作り直すときは YAML から戻す。 */
+const CONFIG = JSON.parse(document.getElementById("config-data").textContent);
 
 const DASH = { rows: [] };
 let rowSeq = 0;
@@ -1330,13 +1933,29 @@ function newArea() {
   };
 }
 function newRow() {
-  return { id: ++rowSeq, name: "", height: "300", collapsed: false, areas: [newArea()] };
+  // distribute: 段の幅を均等に割るか（2026-09-21）。均等割りの段では Tableau が
+  // エリアごとの幅を見ないので、幅を効かせたい段はここを外す。
+  // 名前は Tableau のレイアウトツリーに出るコンテナ名。空のままだと読みづらいので
+  // 追加した順に既定を入れる（2026-09-21。並べ替えても付け直さない）。
+  return { id: ++rowSeq, name: nextRowName(), height: "300", collapsed: false,
+           distribute: true, areas: [newArea()] };
+}
+function nextRowName() {
+  const used = new Set((typeof DASH === "undefined" ? [] : DASH.rows).map(row => row.name));
+  for (let index = 1; ; index += 1) {
+    const name = index + "段目";
+    if (!used.has(name)) return name;
+  }
+}
+function distributeOf(row) {
+  return row.distribute === undefined ? true : !!row.distribute;
 }
 function cloneArea(area) {
   return Object.assign({}, area, {
     id: ++rowSeq,
     params: Object.assign({}, area.params),
     action: Object.assign({}, area.action),
+    info: area.info ? Object.assign({}, area.info) : undefined,
   });
 }
 
@@ -1348,6 +1967,7 @@ const SHEET_NAME_PATTERNS = {
   draw_quadrant: { label: "象限", fields: [{ name: "x_metric" }, { name: "y_metric" }] },
   draw_crosstab: { label: "クロス", fields: [{ name: "x_item" }, { name: "y_item" }] },
   draw_sheet: { label: "帳票", fields: [{ name: "items", limit: 2 }] },
+  build_waterfall: { label: "滝", fields: [{ name: "metrics", limit: 2 }] },
 };
 function fieldPartsOf(area, spec) {
   const value = area.params[spec.name];
@@ -1394,8 +2014,33 @@ function dashboardSheetNames(except) {
   }));
   return names;
 }
+/* .twb に既にあるシート名。ただし**読み込んだ設定 YAML が作るシートは除く**
+   （2026-09-21）。YAML を当ててから画面を作り直すと（bat の 2 番）、その YAML が
+   作ったシートが .twb に居るため、戻した段のシート名が軒並み重複扱いになっていた。
+   もう一度同じ YAML を適用するときは作り直されるので、重複ではない。 */
+function existingSheetNames() {
+  const mine = configSheetNames();
+  return new Set((DATA.worksheets || []).map(ws => ws.name).filter(name => !mine.has(name)));
+}
+let CONFIG_SHEET_NAMES = null;
+function configSheetNames() {
+  if (CONFIG_SHEET_NAMES) return CONFIG_SHEET_NAMES;
+  CONFIG_SHEET_NAMES = new Set();
+  ((CONFIG.dashboard || {}).rows || []).forEach(row => {
+    (row.areas || []).forEach(area => {
+      if (area && area.sheet) CONFIG_SHEET_NAMES.add(area.sheet);
+    });
+  });
+  const walk = node => {
+    if (!node) return;
+    if (node.sheet) CONFIG_SHEET_NAMES.add(node.sheet);
+    (node.children || []).forEach(walk);
+  };
+  walk((CONFIG.kpi_tree || {}).root);
+  return CONFIG_SHEET_NAMES;
+}
 function usedSheetNames(except) {
-  const used = new Set((DATA.worksheets || []).map(ws => ws.name));
+  const used = existingSheetNames();
   dashboardSheetNames(except).forEach(name => used.add(name));
   kpiTreeSheetNames(except).forEach(name => used.add(name));
   return used;
@@ -1414,7 +2059,7 @@ function markSheetName(input, area) {
    `names` はそのタブのシート名（[名前, 表示用の場所] の組）、`others` は別タブのシート名。 */
 function duplicateSheetErrors(names, others, otherLabel) {
   const errors = [];
-  const existing = new Set((DATA.worksheets || []).map(ws => ws.name));
+  const existing = existingSheetNames();
   const other = new Set(others);
   const seen = new Set();
   names.forEach(([name, label]) => {
@@ -1430,7 +2075,10 @@ function duplicateSheetErrors(names, others, otherLabel) {
 /* ダッシュボード名の重複。別タブの名前は、そのタブを使っているときだけ渡す */
 function duplicateDashboardErrors(name, label, otherName, otherLabel) {
   if (!name) return [label + ": ダッシュボード名が空"];
-  if ((DATA.dashboards || []).some(db => db.name === name)) {
+  // 読み込んだ設定 YAML が作るダッシュボードは、シート名と同じ理由で除く
+  const mine = new Set([(CONFIG.dashboard || {}).name, (CONFIG.kpi_tree || {}).name]
+    .filter(Boolean));
+  if (!mine.has(name) && (DATA.dashboards || []).some(db => db.name === name)) {
     return [label + ": ダッシュボード名「" + name + "」は .twb に既にある"];
   }
   if (otherName && otherName === name) {
@@ -1467,8 +2115,10 @@ function groupedFields(dsIndex, role) {
 
 /* フィールドの候補はフォルダごとに optgroup でまとめる（プルダウンは1つのまま、
    フォルダを見てからフィールドを選ぶ体験にする。フォルダ未指定は最後に出す） */
-function fieldOptions(dsIndex, selected, role) {
-  const options = [el("option", { value: "", text: "（選ぶ）" })];
+/* optional を渡すと、空の選択肢を「（指定なし）」にする（2026-09-22）。
+   棒グラフの項目のように、選ばないことが正しい指定になる引数のため。 */
+function fieldOptions(dsIndex, selected, role, optional) {
+  const options = [el("option", { value: "", text: optional ? "（指定なし）" : "（選ぶ）" })];
   groupedFields(dsIndex, role).forEach(group => {
     options.push(el("optgroup", { label: group.folderName },
       group.fields.map(field => {
@@ -1490,8 +2140,10 @@ const DESIGN_TOKENS = [
   { key: "sub_color_1", label: "サブカラー①", input: "d-sub1" },
   { key: "sub_color_2", label: "サブカラー②", input: "d-sub2" },
   { key: "sub_color_3", label: "サブカラー③", input: "d-sub3" },
+  { key: "accent_color", label: "追加アクセント", input: "d-accent" },
   { key: "text_color_1", label: "文字色①", input: "d-text1" },
   { key: "text_color_2", label: "文字色②", input: "d-text2" },
+  { key: "background_color", label: "背景色", input: "d-bg" },
   { key: "min_color", label: "ヒートマップ：最小値の色", input: "d-heat-min" },
   { key: "mid_color", label: "ヒートマップ：中間の色", input: "d-heat-mid" },
   { key: "max_color", label: "ヒートマップ：最大値の色", input: "d-heat-max" },
@@ -1529,6 +2181,59 @@ function colorControl(value, onChange) {
   return el("span", { class: "color2" }, [searchable(source), picker]);
 }
 
+/* ---- インフォメーションアイコン（2026-09-23） ----
+   グラフのエリア／KPI ツリーのノードに「インフォメーションを追加」チェックボックスを
+   出す。チェックすると draw_info() の入力（本文・アイコン・見出し・色）が現れる。
+   受け手（config_apply.py の _apply_info()）が build_report() の後、対象シートの
+   ゾーンの右上へ浮動で重ねる。draw_info の choices/既定値は DRAW_SPECS からそのまま
+   読むので、アイコンの種類や既定色を画面側で二重に持たない。 */
+function infoParamSpec(name) {
+  return ((DRAW_SPECS["draw_info"] || {}).params || []).find(p => p.name === name);
+}
+function infoControl(holder) {
+  if (!holder.info) {
+    const iconSpec = infoParamSpec("icon");
+    const headingSpec = infoParamSpec("heading");
+    holder.info = {
+      enabled: false, text: "",
+      icon: (iconSpec && iconSpec.default) || "info",
+      heading: (headingSpec && headingSpec.default) || "説明",
+      color: "",
+    };
+  }
+  const info = holder.info;
+  const checkbox = el("input", Object.assign({ type: "checkbox" },
+    info.enabled ? { checked: "checked" } : {}));
+  const body = el("div", { class: "params" });
+  function renderBody() {
+    body.innerHTML = "";
+    body.hidden = !info.enabled;
+    if (!info.enabled) return;
+    const text = el("textarea", { rows: "3" }, []);
+    text.value = info.text || "";
+    text.addEventListener("input", () => { info.text = text.value; });
+    const choices = (infoParamSpec("icon") || {}).choices || [];
+    const icon = el("select", {}, choices.map(choice =>
+      el("option", Object.assign({ value: choice[0], text: choice[1] },
+                                 choice[0] === info.icon ? { selected: "selected" } : {}))));
+    icon.addEventListener("change", () => { info.icon = icon.value; });
+    const heading = el("input", { type: "text", value: info.heading });
+    heading.addEventListener("input", () => { info.heading = heading.value.trim(); });
+    const colorSpec = infoParamSpec("color");
+    if (!info.color) info.color = (colorSpec && colorSpec.default) || "#e15759";
+    const color = colorControl(info.color, v => { info.color = v; });
+    body.appendChild(labeled("本文 *", text));
+    body.appendChild(el("div", { class: "fields" }, [
+      labeled("アイコン", searchable(icon)),
+      labeled("見出し", heading),
+      labeled("色", color),
+    ]));
+  }
+  checkbox.addEventListener("change", () => { info.enabled = checkbox.checked; renderBody(); });
+  renderBody();
+  return el("div", { class: "info-control" }, [labeled("インフォメーションを追加", checkbox), body]);
+}
+
 //: draw_quadrant の colors 既定値。4色そろわない場合の初期値にも使う。
 const DEFAULT_QUADRANT_COLORS = ["#4400FF", "#FF007F", "#00C888", "#CCD500"];
 
@@ -1558,8 +2263,61 @@ function colorsControl(area, spec, value) {
   return el("span", { class: "colors4" }, pickers);
 }
 
+/* ---- KPI カードのモード（2026-09-21） ----
+   モードで使う引数が変わる。選んでいないモードの入力欄は出さず、YAML にも書かない
+   （両方書くと受け手が「予実比較モードは sub_metric を取らない」で止まる）。
+   モードと、そのモードの主役になる引数は、詳細設定に畳まず前に出す。 */
+const CARD_MODE_PARAMS = {
+  sub_metric: ["sub_metric"],
+  /* budget_value_color は画面に出さない（paramsYaml が文字色②を当てる、2026-09-22）が、
+     サブ指標モードのときに書き残さないよう、ここへも並べておく。 */
+  budget: ["budget_metric", "budget_threshold", "achieved_color", "missed_color",
+           "budget_value_color"],
+};
+function cardModeOf(params) {
+  return (params || {}).mode || "sub_metric";
+}
+function hiddenParamNames(chart, params) {
+  if (chart !== "draw_card") return [];
+  const mode = cardModeOf(params);
+  const names = [];
+  Object.keys(CARD_MODE_PARAMS).forEach(key => {
+    if (key !== mode) names.push.apply(names, CARD_MODE_PARAMS[key]);
+  });
+  return names;
+}
+/* chart を省くと area.chart を使う。KPI ツリーのノードは draw_card 固定で
+   chart を持たないため、呼び出し側から渡す。 */
+function visibleParams(area, chart) {
+  const kind = chart || area.chart;
+  const specs = (DRAW_SPECS[kind] || {}).params || [];
+  const hidden = hiddenParamNames(kind, area.params);
+  return specs.filter(spec => hidden.indexOf(spec.name) < 0);
+}
+function frontParams(area, chart) {
+  const kind = chart || area.chart;
+  /* 棒グラフの項目は任意（[指定なし]で棒 1 本）になったが、主役の指定なので
+     詳細設定に畳まず前に出す（2026-09-22）。 */
+  if (kind === "draw_bar") return ["item"];
+  if (kind !== "draw_card") return [];
+  return ["mode"].concat(cardModeOf(area.params) === "budget" ? ["budget_metric"] : []);
+}
+function renderAll() {
+  if (typeof renderRows === "function") renderRows();
+  if (typeof renderKpiTree === "function") renderKpiTree();
+}
+
 function paramControl(area, spec) {
-  const value = area.params[spec.name] === undefined ? "" : area.params[spec.name];
+  let value = area.params[spec.name] === undefined ? "" : area.params[spec.name];
+  if (spec.kind === "color" && value === "" && spec.default) {
+    /* 画面の色ピッカーは触らなければ汎用フォールバック色（#4a7dff）を映すだけで、
+       area.params には何も書かれない。YAML にキー自体が出ず、受け手（build_waterfall
+       などの draw_*()）は自分の既定色を使うため、画面に見えている色と実際に使われる
+       色が食い違って見えるバグになっていた（2026-09-23、実機で確認）。ここで API 側の
+       既定値を area.params にも書き込み、画面の表示と YAML の出力を一致させる。 */
+    value = spec.default;
+    area.params[spec.name] = value;
+  }
   let control;
   if (spec.kind === "bool") {
     control = el("input", Object.assign({ type: "checkbox" }, value ? { checked: "checked" } : {}));
@@ -1567,7 +2325,8 @@ function paramControl(area, spec) {
   } else if (spec.kind === "fields") {
     control = fieldsCheckControl(area, spec, value);
   } else if (spec.kind === "field") {
-    control = el("select", {}, fieldOptions(area.datasource, value, spec.role));
+    control = el("select", {},
+                 fieldOptions(area.datasource, value, spec.role, !spec.required));
     control.addEventListener("change", () => { area.params[spec.name] = control.value; });
   } else if (spec.kind === "color") {
     control = colorControl(value, v => { area.params[spec.name] = v; });
@@ -1578,7 +2337,17 @@ function paramControl(area, spec) {
       spec.choices.map(choice =>
         el("option", Object.assign({ value: choice[0], text: choice[1] },
                                    choice[0] === value ? { selected: "selected" } : {})))));
-    control.addEventListener("change", () => { area.params[spec.name] = control.value; });
+    control.addEventListener("change", () => {
+      area.params[spec.name] = control.value;
+      // モードを変えると出す入力欄が変わる（2026-09-21）
+      if (spec.name === "mode") renderAll();
+    });
+  } else if (spec.kind === "textarea") {
+    /* <textarea> は value 属性ではなく DOM プロパティで初期値を入れる
+       （2026-09-23、インフォメーションの本文向け。複数行になりうる）。 */
+    control = el("textarea", { rows: "4" }, []);
+    control.value = value;
+    control.addEventListener("input", () => { area.params[spec.name] = control.value; });
   } else {
     control = el("input", { type: "text", value: value });
     control.addEventListener("input", () => { area.params[spec.name] = control.value.trim(); });
@@ -1648,7 +2417,11 @@ function renderArea(row, area) {
   ]);
   kind.addEventListener("change", () => { area.kind = kind.value; renderRows(); });
 
-  const width = el("input", { type: "number", step: "10", min: "0", value: area.width });
+  // 均等割りの段では幅を書いても効かないので、入力させない（2026-09-21）
+  const evenly = distributeOf(row);
+  const width = el("input", Object.assign(
+    { type: "number", step: "10", min: "0", value: area.width },
+    evenly ? { disabled: "disabled", title: "段が「幅を均等割り」のときは使わない" } : {}));
   width.addEventListener("input", () => { area.width = width.value.trim(); });
 
   const duplicate = el("button", { class: "mini", text: "⧉", title: "エリアを複製" });
@@ -1752,9 +2525,10 @@ function renderArea(row, area) {
     ]);
     card.appendChild(head);
 
-    const specs = (DRAW_SPECS[area.chart] || {}).params || [];
-    const required = specs.filter(spec => spec.required);
-    const optional = specs.filter(spec => !spec.required);
+    const specs = visibleParams(area);
+    const front = frontParams(area);
+    const required = specs.filter(spec => spec.required || front.indexOf(spec.name) >= 0);
+    const optional = specs.filter(spec => !spec.required && front.indexOf(spec.name) < 0);
     if (required.length) {
       card.appendChild(el("div", { class: "params" },
         required.map(spec => paramControl(area, spec))));
@@ -1767,6 +2541,10 @@ function renderArea(row, area) {
       if (area.moreOpen) more.setAttribute("open", "open");
       more.addEventListener("toggle", () => { area.moreOpen = more.open; });
       card.appendChild(more);
+    }
+    // インフォメーション自体には出さない（自分に自分を重ねることになるため）
+    if (area.chart !== "draw_info") {
+      card.appendChild(infoControl(area));
     }
   }
 
@@ -1870,10 +2648,17 @@ function renderRow(row, index) {
     toggle.textContent = row.collapsed ? "▶" : "▼";
   });
 
+  /* 幅の割り方は段ごとに選ぶ（2026-09-21）。入れると Tableau の「均等に配布」に
+     なり、エリアの幅 (px) は効かない。外すとエリアごとの幅がそのまま通る。 */
+  const evenly = el("input", Object.assign({ type: "checkbox" },
+                                           distributeOf(row) ? { checked: "checked" } : {}));
+  evenly.addEventListener("change", () => { row.distribute = evenly.checked; renderRows(); });
+
   card.appendChild(el("div", { class: "row-head" }, [
     grip, toggle,
     el("span", { class: "row-no", text: (index + 1) + "段目" }),
-    labeled("名前", name), labeled("高さ (px)", height), summary, addArea,
+    labeled("名前", name), labeled("高さ (px)", height),
+    labeled("幅を均等割り", evenly), summary, addArea,
     el("span", { class: "spacer" }), up, down, remove,
   ]));
 
@@ -1895,6 +2680,7 @@ function renderRow(row, index) {
 }
 
 function renderRows() {
+  closeCombos();  // 開いたままの候補一覧が <body> に取り残されないように（2026-09-21）
   const root = document.getElementById("rows-root");
   root.innerHTML = "";
   if (!DASH.rows.length) {
@@ -1908,8 +2694,122 @@ document.getElementById("row-add").addEventListener("click", () => {
   DASH.rows.push(newRow());
   renderRows();
 });
-["h-bg", "h-fg"].forEach(bindColor);
-renderRows();
+/* ---- 設定 YAML から画面を戻す（2026-09-21） ----
+   デザインルール・ダッシュボード・KPI ツリーは .twb に残らないので、
+   YAML を読み込んで作った画面ではここで入力欄へ戻す。 */
+function restoreDesign(design) {
+  if (!design) return;
+  const setValue = (id, value) => {
+    const node = document.getElementById(id);
+    if (node && value !== undefined && value !== null && value !== "") node.value = value;
+  };
+  if (design.font) setValue("d-font", design.font);
+  DESIGN_TOKENS.forEach(token => { setValue(token.input, design[token.key]); });
+  setValue("d-border", design.border_color);
+  document.getElementById("d-apply").checked = !!design.filter_apply_button;
+  const spacing = document.querySelector(
+    'input[name=d-space][value="' + (design.spacing || "narrow") + '"]');
+  if (spacing) spacing.checked = true;
+  // 色見本（input[type=color]）へも反映する
+  document.querySelectorAll("#tab-design input[type=text]").forEach(text => {
+    const picker = document.getElementById(text.id + "-pick");
+    if (picker && /^#[0-9a-fA-F]{6}$/.test(text.value.trim())) picker.value = text.value.trim();
+  });
+}
+/* プリセットを選ぶと、デザインルールの全項目をその値に置き換える（2026-09-25）。
+   反映後も項目ごとに変えられる。restoreDesign() と違い、空の値も反映する
+   （追加アクセントや枠線が無いプリセットで、前の値を残さないため）。 */
+const DESIGN_PRESETS = JSON.parse(document.getElementById("design-presets").textContent);
+function applyDesignPreset(name) {
+  const preset = DESIGN_PRESETS[name];
+  if (!preset) return;
+  const setColor = (id, value) => {
+    const node = document.getElementById(id);
+    node.value = value || "";
+    const picker = document.getElementById(id + "-pick");
+    if (picker && /^#[0-9a-fA-F]{6}$/.test(node.value)) picker.value = node.value;
+  };
+  document.getElementById("d-font").value = preset.font;
+  DESIGN_TOKENS.forEach(token => setColor(token.input, preset[token.key]));
+  setColor("d-border", preset.border_color);
+  document.getElementById("d-apply").checked = !!preset.filter_apply_button;
+  const spacing = document.querySelector('input[name=d-space][value="' + preset.spacing + '"]');
+  if (spacing) spacing.checked = true;
+  if (typeof renderRows === "function") renderRows();
+  if (typeof renderKpiTree === "function") renderKpiTree();
+}
+document.getElementById("d-preset").addEventListener("change", event => {
+  applyDesignPreset(event.target.value);
+});
+//: データソース名 → 画面の添字
+function datasourceIndexOf(name) {
+  const index = DATA.datasources.findIndex(ds => (ds.name || ds.id) === name);
+  return index < 0 ? 0 : index;
+}
+function restoreArea(source) {
+  const area = newArea();
+  area.kind = source.kind === "filter" ? "filter" : "worksheet";
+  area.datasource = datasourceIndexOf(source.datasource);
+  area.width = source.width === undefined || source.width === null ? "" : String(source.width);
+  if (area.kind === "filter") {
+    area.filterField = source.field || "";
+    const field = ((DATA.datasources[area.datasource] || {}).fields || [])
+      .find(item => item.name === area.filterField);
+    area.filterRole = field ? (field.role || "dimension") : "dimension";
+  } else {
+    area.sheet = source.sheet || "";
+    area.chart = source.chart || area.chart;
+    area.params = Object.assign({}, source.params || {});
+  }
+  const action = source.action;
+  if (action) {
+    area.action = {
+      enabled: true,
+      type: action.type || "filter",
+      target: action.type === "url" ? (action.url || "") : (action.target || ""),
+      field: action.field || "",
+    };
+  }
+  return area;
+}
+function restoreDashboard(dashboard) {
+  if (!dashboard) return;
+  const setValue = (id, value) => {
+    const node = document.getElementById(id);
+    if (node && value !== undefined && value !== null && value !== "") node.value = value;
+  };
+  setValue("db-name", dashboard.name);
+  setValue("db-width", dashboard.width);
+  setValue("db-height", dashboard.height);
+  const header = dashboard.header || {};
+  setValue("h-title", header.title);
+  setValue("h-height", header.height);
+  if (header.background_color) HEADER.background = header.background_color;
+  if (header.font_color) HEADER.font = header.font_color;
+  (dashboard.rows || []).forEach(source => {
+    const row = newRow();
+    if (source.name) row.name = source.name;
+    if (source.height !== undefined && source.height !== null) row.height = String(source.height);
+    row.distribute = source.distribute_evenly !== false;
+    row.areas = (source.areas || []).map(restoreArea);
+    if (!row.areas.length) row.areas = [newArea()];
+    DASH.rows.push(row);
+  });
+}
+
+/* ヘッダーの色はデザインルールを参照する（2026-09-21）。既定は背景＝メインカラー、
+   文字＝背景色。濃いメインカラーの上でも読めるようにしてある。文字色①②など
+   ほかの色や、個別の色コードもここから選べる。 */
+const HEADER = { background: "@main_color", font: "@background_color" };
+restoreDesign(CONFIG.design);
+restoreDashboard(CONFIG.dashboard);
+document.getElementById("h-bg-mount").appendChild(
+  colorControl(HEADER.background, value => { HEADER.background = value; }));
+document.getElementById("h-fg-mount").appendChild(
+  colorControl(HEADER.font, value => { HEADER.font = value; }));
+/* 最初の renderRows() は KPI ツリーのスクリプトの末尾で呼ぶ（2026-09-21）。
+   段の描画はシート名の重複チェックで KPI ツリーの状態（const KT）を見るため、
+   ここで呼ぶと「Cannot access 'KT' before initialization」になる。 */
 
 /* ダッシュボードタブの必須入力チェック。データソースタブと違い、これまで
    何も検証しないまま YAML を出せてしまい、必須パラメータが空のエリアが
@@ -1950,21 +2850,43 @@ function validateDashboard() {
           errors.push(label + ": 最小値・中間・最大値の色は3つ揃えるか、全く指定しないでください");
         }
       }
+      // インフォメーションを追加していて本文が空だと受け手（draw_info）が止まる
+      if (area.info && area.info.enabled && !(area.info.text || "").trim()) {
+        errors.push(label + ": インフォメーションの本文が空");
+      }
     });
   });
   return errors;
 }
 
+/* エリア（または KPI ツリーのノード）の `info:` を書く。チェックが入っていて
+   本文があるときだけ出す（2026-09-23）。`pad` は `sheet:` などと同じ字下げ。 */
+function infoYaml(holder, pad) {
+  const info = holder.info;
+  if (!info || !info.enabled || !(info.text || "").trim()) return "";
+  let out = pad + "info:\n";
+  out += pad + "  text: " + yamlKey(info.text.trim()) + "\n";
+  if (info.icon) out += pad + "  icon: " + yamlKey(info.icon) + "\n";
+  if (info.heading) out += pad + "  heading: " + yamlKey(info.heading) + "\n";
+  if (info.color) out += pad + "  color: " + yamlKey(info.color) + "\n";
+  return out;
+}
+
 /* グラフの引数を `params:` として書く。`pad` は `params:` の行の字下げ。
    KPI ツリーのノードも同じ形で書く（html_kpi_tree.py）。 */
 function paramsYaml(chart, source, pad) {
-  // value_color と title_background_color は画面に出さず main_color を
-  // そのまま複製する（draw_card 固有、2026-09-12, 2026-09-13）
+  /* value_color / budget_value_color / title_background_color は画面に出さず、
+     デザインルールから当てる（draw_card 固有、2026-09-12, 2026-09-13）。
+     タイトルの背景は主要色。メイン指標の数値は文字色①、
+     予実比較の率は文字色②（2026-09-22 指定）。 */
   const params = Object.assign({}, source);
   if (chart === "draw_card" && params.main_color) {
-    params.value_color = params.main_color;
+    params.value_color = "@text_color_1";
+    params.budget_value_color = "@text_color_2";
     params.title_background_color = params.main_color;
   }
+  // 選んでいないモードの引数は書かない（2026-09-21）
+  hiddenParamNames(chart, params).forEach(name => { delete params[name]; });
   const names = Object.keys(params).filter(key => {
     const v = params[key];
     return v !== "" && v !== undefined && !(Array.isArray(v) && !v.length);
@@ -2002,25 +2924,32 @@ function dashboardYaml() {
   out += "  header:\n";
   out += "    title: " + yamlKey(value("h-title")) + "\n";
   out += "    height: " + yamlKey(value("h-height")) + "\n";
-  out += "    background_color: " + yamlKey(value("h-bg")) + "\n";
-  out += "    font_color: " + yamlKey(value("h-fg")) + "\n";
+  // 色はデザインルールの参照（@キー）のまま出す。解決は受け手側（2026-09-21）
+  out += "    background_color: " + yamlKey(HEADER.background) + "\n";
+  out += "    font_color: " + yamlKey(HEADER.font) + "\n";
   out += "  rows:\n";
   if (!DASH.rows.length) { out += "    []\n"; return out; }
   DASH.rows.forEach(row => {
     out += "    - name: " + yamlKey(row.name) + "\n";
     if (row.height) out += "      height: " + yamlKey(row.height) + "\n";
+    // 幅の割り方（2026-09-21）。真偽値なので yamlKey に通さない
+    out += "      distribute_evenly: " + (distributeOf(row) ? "true" : "false") + "\n";
     out += "      areas:\n";
     row.areas.forEach(area => {
       const ds = DATA.datasources[area.datasource];
       out += "        - kind: " + yamlKey(area.kind) + "\n";
       out += "          datasource: " + yamlKey(ds ? (ds.name || ds.id) : "") + "\n";
-      if (area.width) out += "          width: " + yamlKey(area.width) + "\n";
+      // 均等割りの段では幅が効かないので書かない
+      if (area.width && !distributeOf(row)) {
+        out += "          width: " + yamlKey(area.width) + "\n";
+      }
       if (area.kind === "filter") {
         out += "          field: " + yamlKey(area.filterField) + "\n";
       } else {
         out += "          sheet: " + yamlKey(area.sheet) + "\n";
         out += "          chart: " + yamlKey(area.chart) + "\n";
         out += paramsYaml(area.chart, area.params, "          ");
+        out += infoYaml(area, "          ");
       }
       if (area.action.enabled) {
         out += "          action:\n";
@@ -2038,7 +2967,7 @@ function dashboardYaml() {
 }
 
 refreshDatasource();
-enableGrid(document.getElementById("rename-table"));
+enableGrid(document.getElementById("rename-table"), { pasteByName: pasteByOriginalName });
 enableGrid(document.getElementById("calc-table"), { newRow: () => calcRow("", "", NO_FOLDER, "", "") });
 enableColumnResize(document.getElementById("rename-table"));
 enableColumnResize(document.getElementById("calc-table"));
@@ -2060,6 +2989,8 @@ _BODY = """
     <h2>全体の書式設定 <span class="todo">受け手はフォントのみ実装済み</span></h2>
     <p class="note">ここで設定した内容を Python 側へ渡す API は未実装。今は YAML の案を出力するだけ。</p>
     <div class="grid">
+      <label for="d-preset">プリセット</label>
+      <select id="d-preset">__PRESET_OPTIONS__</select>
       <label for="d-font">フォント</label>
       <select id="d-font">__FONT_OPTIONS__</select>
       <label for="d-main">メインカラーコード</label>
@@ -2078,6 +3009,10 @@ _BODY = """
       <span class="color">
         <input type="color" id="d-sub3-pick"><input type="text" id="d-sub3" value="#4a9ca5">
       </span>
+      <label for="d-accent">追加アクセント</label>
+      <span class="color">
+        <input type="color" id="d-accent-pick"><input type="text" id="d-accent" value="">
+      </span>
       <label for="d-text1">文字色&#9312;</label>
       <span class="color">
         <input type="color" id="d-text1-pick"><input type="text" id="d-text1" value="#202020">
@@ -2085,6 +3020,10 @@ _BODY = """
       <label for="d-text2">文字色&#9313;</label>
       <span class="color">
         <input type="color" id="d-text2-pick"><input type="text" id="d-text2" value="#4e4e4e">
+      </span>
+      <label for="d-bg">背景色</label>
+      <span class="color">
+        <input type="color" id="d-bg-pick"><input type="text" id="d-bg" value="#f5f5f5">
       </span>
       <label for="d-border">枠線の色</label>
       <span class="color">
@@ -2133,19 +3072,35 @@ _BODY = """
     <div class="scroll">
       <table id="rename-table">
         <colgroup>
-          <col style="width: 20%"><col style="width: 25%"><col style="width: 22%">
-          <col style="width: 16%"><col style="width: 17%">
+          <col style="width: 3%"><col style="width: 17%"><col style="width: 20%">
+          <col style="width: 17%"><col style="width: 18%"><col style="width: 12%">
+          <col style="width: 13%">
         </colgroup>
         <thead><tr>
-          <th>元カラム</th><th>リネーム後名称</th><th>フォルダ</th>
+          <th></th><th>元カラム</th><th>リネーム後名称</th><th>フォルダ</th><th>階層</th>
           <th>データ型</th><th>役割</th>
         </tr></thead>
         <tbody id="rename-body"></tbody>
       </table>
     </div>
     <p class="errors" id="rename-errors"></p>
+    <p><button class="act" id="prompt-open">選んだ行から AI 用プロンプトを作る</button>
+      <button class="act" id="prompt-clear">行の選択を解除</button>
+      <span class="note">Ctrl+クリックで行を選ぶ（離れた行も選べる）。Shift+クリックでそこまでまとめて選ぶ。
+        選択が無いときは絞り込みで残っている全行。
+        返ってきた 3 列は「リネーム後名称」のセルへ貼り付ける</span></p>
     </div>
   </div>
+
+  <dialog id="prompt-dialog">
+    <h3>AI 用プロンプト</h3>
+    <textarea id="prompt-text"></textarea>
+    <p>
+      <button class="act" id="prompt-copy">クリップボードにコピー</button>
+      <span id="prompt-copied" class="note"></span>
+      <button class="act" id="prompt-close">閉じる</button>
+    </p>
+  </dialog>
 
   <div class="panel acc" id="acc-calc">
     <h2 class="acc-head">計算フィールド <span class="todo">受け手は未実装</span></h2>
@@ -2171,6 +3126,9 @@ _BODY = """
     <p>
       <button class="act" id="calc-add">行を追加</button>
       <button class="act" id="calc-delete">選択行を削除</button>
+      <button class="act" id="calc-prompt-open">AI 用プロンプトを作る</button>
+      <span class="note">リネーム・フォルダ設定で選んだフィールドと、この表の計算フィールドを
+        一覧にして渡す。返ってきた 5 列はこの表の左上へ貼り付ける</span>
     </p>
     </div>
   </div>
@@ -2201,17 +3159,14 @@ _BODY = """
     <div class="acc-body">
       <div class="grid">
         <label for="h-title">タイトル</label>
-        <input type="text" id="h-title" value="">
+        <input type="text" id="h-title" value="ダッシュボード">
         <label for="h-height">高さ (px)</label>
         <input type="text" id="h-height" value="43">
-        <label for="h-bg">背景色</label>
-        <span class="color">
-          <input type="color" id="h-bg-pick"><input type="text" id="h-bg" value="#c0c0c0">
-        </span>
-        <label for="h-fg">文字色</label>
-        <span class="color">
-          <input type="color" id="h-fg-pick"><input type="text" id="h-fg" value="#333333">
-        </span>
+        <!-- 色はデザインルールを参照する（2026-09-21）。中身は colorControl で作る -->
+        <label>背景色</label>
+        <span id="h-bg-mount"></span>
+        <label>文字色</label>
+        <span id="h-fg-mount"></span>
       </div>
     </div>
   </div>
@@ -2239,6 +3194,8 @@ _TEMPLATE = """<meta charset="utf-8">
 __BODY__
 <script type="application/json" id="wb-data">__DATA__</script>
 <script type="application/json" id="draw-specs">__DRAW_SPECS__</script>
+<script type="application/json" id="config-data">__CONFIG__</script>
+<script type="application/json" id="design-presets">__DESIGN_PRESETS__</script>
 <script>__SCRIPT__</script>
 """
 
@@ -2264,22 +3221,205 @@ FONT_CHOICES = (
     "Arial",
     "Segoe UI",
     "Helvetica Neue",
+    "Poppins",
 )
+
+#: デザインルールのプリセット（2026-09-25。ユーザーが作った 3 パターン）。
+#: 選ぶと全項目へ反映し、あとから項目ごとに変えられる。
+#: フォントは Tableau が 1 つの名前しか受けないので、CSS の並び（`Arial, sans-serif`）の
+#: 先頭だけ使う。「適用」ボタンの色は受け皿が無い（チェックだけ）ので入れない。
+#: 余白 `24px` は広い（`wide`）へ、指定の無いモスグリーンは既定の狭い（`narrow`）へ当てた。
+DESIGN_PRESETS: dict[str, dict[str, Any]] = {
+    "モスグリーン": {
+        "font": "Arial",
+        "main_color": "#1A7259",
+        "sub_color_1": "#F65824",
+        "sub_color_2": "#FBB6C9",
+        "sub_color_3": "#C1E0BF",
+        "accent_color": "",
+        "text_color_1": "#111111",
+        "text_color_2": "#555555",
+        "background_color": "#FFFFFF",
+        "border_color": "#E5E5E5",
+        "min_color": "#DCEBD9",
+        "mid_color": "#9CCBA8",
+        "max_color": "#1A7259",
+        "filter_apply_button": True,
+        "spacing": "narrow",
+    },
+    "ネオン・ノワール": {
+        "font": "Poppins",
+        "main_color": "#742CDF",
+        "sub_color_1": "#10D19D",
+        "sub_color_2": "#FE8C4F",
+        "sub_color_3": "#FA4E84",
+        "accent_color": "",
+        "text_color_1": "#2B2B2D",
+        "text_color_2": "#79787F",
+        "background_color": "#F5F7FB",
+        "border_color": "#ECECF0",
+        "min_color": "#F5EEFE",
+        "mid_color": "#B895E5",
+        "max_color": "#742CDF",
+        "filter_apply_button": True,
+        "spacing": "wide",
+    },
+    "ソメイヨシノ": {
+        "font": "Noto Sans JP",
+        "main_color": "#000000",
+        "sub_color_1": "#9A4DAD",
+        "sub_color_2": "#EAF5F7",
+        "sub_color_3": "#F8463C",
+        "accent_color": "#2E7664",
+        "text_color_1": "#000000",
+        "text_color_2": "#555555",
+        "background_color": "#FBFAF7",
+        "border_color": "#1A1A1A",
+        "min_color": "#F3E5F5",
+        "mid_color": "#D09BDC",
+        "max_color": "#9A4DAD",
+        "filter_apply_button": True,
+        "spacing": "wide",
+    },
+}
 
 
 #: グラフの引数のうち、画面に出さないもの。
 #: 集計方法（`*aggregation`）は出さない。フィールドの役割とデータ型が分かっていれば
 #: `draw.py` の `_auto_metric_aggregation()` が決められるため、人が選ぶ必要がない。
-#: `value_color` / `title_background_color` / `vertical_alignment` は draw_card 固有。
-#: 前2つは画面では main_color をそのまま複製する（2026-09-12, 2026-09-13）。
-#: 文字色・タイトル背景色を指標の色と別々に選ばせても、個別に変える需要が薄く
-#: 混乱のもとだった。`vertical_alignment` は「縦は常に中央でよい」との指摘
+#: `value_color` / `budget_value_color` / `title_background_color` /
+#: `vertical_alignment` は draw_card 固有。前3つは画面に出さず、タイトル背景は
+#: main_color、メイン指標の数値は文字色①、予実比較の率は文字色②を当てる
+#: （2026-09-12, 2026-09-13, 2026-09-22）。文字色・タイトル背景色を指標の色と
+#: 別々に選ばせても、個別に変える需要が薄く混乱のもとだった。
+#: `vertical_alignment` は「縦は常に中央でよい」との指摘
 #: （2026-09-13）を受け、画面からは選ばせず API 既定の "center" のまま渡す。
-_DRAW_SKIP = {"self", "datasource", "name", "value_color", "title_background_color", "vertical_alignment"}
+#: `bar_metrics` / `color_metrics` は帳票の項目の並び替えモーダルで、行内のボタンから
+#: 決める（2026-09-22）。詳細設定にも「（選ぶ）」が出ると同じ指定が 2 か所になり、
+#: しかもそちらのモーダルには行内ボタンが付かないため、画面には出さない。
+_DRAW_SKIP = {
+    "self", "datasource", "name",
+    "value_color", "budget_value_color", "title_background_color", "vertical_alignment",
+    "bar_metrics", "color_metrics", "bar_colors", "color_starts", "color_ends",
+}
 
 
-def _is_skipped(name: str) -> bool:
+#: グラフごとに画面へ出さない引数（2026-09-22）。帳票の `item_shelf` は、
+#: メジャーを不連続で行へ並べる作りにも、棒・色帯の列を横へ足す作りにも
+#: 「行」以外の選択肢が無いため出さない。API 側は既定の `"rows"` のまま残す。
+_CHART_PARAM_SKIP: dict[str, set[str]] = {
+    "draw_sheet": {"item_shelf"},
+}
+
+
+def _is_skipped(name: str, chart: str = "") -> bool:
+    if name in _CHART_PARAM_SKIP.get(chart, ()):
+        return True
     return name in _DRAW_SKIP or name == "aggregation" or name.endswith("_aggregation")
+
+#: 「リネーム・フォルダ設定を AI に考えてもらう」ボタンが出すプロンプト（2026-09-21）。
+#: `__ROWS__` に、画面で選んだ行のタブ区切り（元カラム / データ型 / 役割）が入る。
+#: 返ってくるのも同じ行数のタブ区切り 3 列なので、そのまま表へ貼り戻せる。
+_FIELD_PROMPT = """あなたは Tableau のデータソース設計を手伝うアシスタントです。
+フィールドの一覧を渡すので、「リネーム後名称」「フォルダ」「階層」を決めてください。
+
+# 入力
+1 行 1 フィールドで、半角の縦棒 2 つ（||）区切りです。
+列は左から 元カラム / データ型 / 役割 です。値に空白が入る名前（例: 商品 ID）があるので、
+空白ではなく || だけを区切りとして読んでください。
+
+__ROWS__
+
+# 出力
+入力と同じ行数・同じ並びで、4 列だけを出力してください。
+列は左から **元カラム（入力のまま）** / リネーム後名称 / フォルダ / 階層 で、
+**半角の縦棒 2 つ（||）で区切ります**。元カラムは 1 文字も変えずにそのまま返してください。
+階層が無い行も区切りは省かず、末尾を空にします。
+見出し行、番号、説明、コードブロックの記号は一切付けないでください。
+
+出力の例:
+Order Date||注文日||02_日付||
+Product ID||商品 ID||01_商品||商品階層
+Sub-Category||サブカテゴリ||01_商品||商品階層
+
+# リネーム後名称の決め方
+- 日本語の業務用語にします。英語のままにしません（例: Order Date → 注文日）。
+- データソース全体で重複させません。同じ意味の語がぶつかるときは修飾語を足します
+  （例: Region → 地域、Region (People) → 地域（担当者））。
+- 内部用の列（Sheet, Table Name など、業務で使わないもの）は元の名前のままにします。
+
+# フォルダの決め方
+- 名前は「01_売上指標」のように、2 桁の番号 + アンダースコア + 日本語名にします。
+- 番号は、業務で見る順（重要な指標 → 補助的な情報 → 管理用）に振ります。
+- ディメンションとメジャーは別のフォルダに分けます。
+- 1 フォルダは 3〜10 個を目安にします。1 個しかないフォルダは作りません。
+- 内部用の列はフォルダに入れず、空欄にします。
+
+# 階層の決め方
+- ドリルダウンに意味がある組み合わせにだけ付けます。上から下へ「粗い → 細かい」
+  の順に並ぶものです（例: カテゴリ → サブカテゴリ → 商品名、国 → 都道府県 → 市区町村）。
+- 階層に入れる行には、同じ階層名を書きます。入れない行は空欄です。
+- 1 つの階層には 2 つ以上のフィールドが要ります。1 つだけなら空欄にします。
+- 同じ階層の行は、フォルダも同じにします。
+- 階層名は、どのフィールドの表示名とも違う名前にします（例: 商品階層、地理階層）。
+- 日付フィールドで階層を作りません。Tableau が年・四半期・月を自動で用意します。
+- 1 つのフィールドを 2 つの階層に入れません。
+"""
+
+#: 「計算フィールドのプロンプトを作る」ボタンが出すプロンプト（2026-09-21）。
+#: `__FIELDS__` に、いま使えるフィールド（名前 / データ型 / 役割）が入る。
+#: 返ってくるのは計算フィールドの表と同じ 5 列なので、そのまま貼り戻せる。
+_CALC_PROMPT = """あなたは Tableau の計算フィールドを作るアシスタントです。
+使えるフィールドの一覧と作りたい指標を渡すので、計算フィールドの定義を返してください。
+
+# 使えるフィールド
+1 行 1 フィールドで、半角の縦棒 2 つ（||）区切りです。
+列は左から 名前 / データ型 / 役割 です。式の中ではこの「名前」を [ ] で囲んで参照します。
+
+__FIELDS__
+
+# 作りたい指標
+（ここに書いてください。例: 売上・利益・数量について 当年 / 昨年 / 昨年差 / 昨年比。
+顧客数・注文数・顧客単価も。）
+
+# 出力
+1 行 1 計算フィールドで、5 列を半角の縦棒 2 つ（||）で区切って出力してください。
+列は左から 名前 / 式 / フォルダ / データ型 / 役割 です。
+説明、見出し行、コードブロックの記号は一切付けないでください。
+
+出力の例:
+売上(当年)||IIF([当年・昨年区分]="当年",[売上],NULL)||01_売上指標||real||measure
+売上(昨年比)||IF ZN(SUM([売上(昨年)])) = 0 THEN NULL ELSE SUM([売上(当年)]) / SUM([売上(昨年)]) END||01_売上指標||real||measure
+顧客数(当年)||COUNTD(IIF([当年・昨年区分]="当年",[顧客ID],NULL))||04_顧客指標||real||measure
+
+# 文字列で絞り込む式（IIF）
+- 特定の文字列のときだけ値を取る式は IIF を使い、文字列は " " で囲みます。
+  例: IIF([当年・昨年区分]="当年",[売上],NULL)
+- 条件に合わない行は 0 ではなく NULL にします。0 にすると平均や件数がずれます。
+- 複数条件は AND / OR でつなぎます。
+  例: COUNTD(IIF([当年・昨年区分]="当年" AND [返品有無]="Yes",[注文ID],NULL))
+- この形の式は明細（行）単位なので、集計関数では包みません。
+
+# 集計してから割る式
+- 割り算は必ず集計してから割ります。明細のまま割ると合計と一致しません。
+  良い例: SUM([売上(当年)]) / SUM([売上(昨年)])
+  悪い例: [売上(当年)] / [売上(昨年)]
+- ゼロ除算は避けます。
+  IF ZN(SUM([売上(昨年)])) = 0 THEN NULL ELSE SUM([売上(当年)]) / SUM([売上(昨年)]) END
+- 件数は COUNTD を使います。
+- 集計済みの計算フィールドは、さらに集計しません。例えば [顧客数(当年)] が COUNTD を
+  含むなら、それを使う式では SUM を付けず [顧客数(当年)] と書きます。
+  例: SUM([売上(当年)]) / [顧客数(当年)]
+- 差は ZN(SUM(当年)) - ZN(SUM(昨年))、比は 当年 / 昨年 です。
+
+# 名前・フォルダ・データ型・役割
+- 名前は 指標(当年) / 指標(昨年) / 指標(昨年差) / 指標(昨年比) の形にそろえます。
+  上の一覧にある名前と重ならないようにしてください。
+- フォルダは「01_売上指標」のように、2 桁の番号 + アンダースコア + 日本語名。
+- データ型は string / integer / real / boolean / date / datetime のいずれか。金額・比率は real。
+- 役割は measure か dimension。
+- 参照の順番は気にしなくてかまいません。参照先から先に作られます。循環参照だけ避けてください。
+"""
 
 #: グラフ種類の表示名。仕様 §6.14 の説明に合わせる。
 #: **この並び順がそのまま画面の選択肢の順になる**（2026-09-21。よく使う順）。
@@ -2289,13 +3429,24 @@ _CHART_LABELS = {
     "draw_sheet": "帳票",
     "draw_crosstab": "クロス集計（ヒートマップ）",
     "draw_quadrant": "散布図（四象限）",
+    "build_waterfall": "ウォーターフォール",
+    "draw_info": "インフォメーション",
 }
+
+#: グラフ種類の選択肢（画面の「グラフ種類」プルダウン）には出さない `draw_*()`
+#: （2026-09-23）。`draw_info` はエリア／ノードの「インフォメーションを追加」
+#: チェックボックス（`infoControl()`）経由でのみ使う。`_draw_specs()` の出力自体からは
+#: 消さない——`infoControl()` が `DRAW_SPECS["draw_info"]` から `icon` の選択肢と
+#: 各引数の既定値を読み、表示名の訳し漏れチェックの対象にも含めたいため。
+_HIDDEN_FROM_CHART_LIST = {"draw_info"}
 
 #: フィールドを取る引数が、ディメンションとメジャーのどちらを求めるか。
 #: 載っていない引数は絞り込まず全フィールドを出す。
 _PARAM_ROLES = {
     "item": "dimension",
-    "items": "dimension",
+    # 帳票（draw_sheet）の items はメジャーも選べる（2026-09-21）。
+    # メジャーは集計してからディメンションとして置く。
+    "items": None,
     "x_item": "dimension",
     "y_item": "dimension",
     "index_partition_by": "dimension",
@@ -2303,6 +3454,11 @@ _PARAM_ROLES = {
     "metrics": "measure",
     "main_metric": "measure",
     "sub_metric": "measure",
+    "budget_metric": "measure",
+    "line_metric": "measure",
+    # 帳票の棒・色帯の列（2026-09-22）
+    "bar_metrics": "measure",
+    "color_metrics": "measure",
     "x_metric": "measure",
     "y_metric": "measure",
     "size_metric": "measure",
@@ -2323,10 +3479,16 @@ _PARAM_LABELS = {
     "title": "タイトル",
     "main_metric": "メインメジャー",
     "sub_metric": "サブメジャー",
+    "mode": "モード",
+    "budget_metric": "予算比指標",
+    "budget_threshold": "境界値",
+    "achieved_color": "達成時の色",
+    "missed_color": "未達時の色",
     "main_aggregation": "メインメジャーの集計",
     "sub_aggregation": "サブメジャーの集計",
     "main_color": "メインカラー",
     "value_color": "数値の色",
+    "budget_value_color": "予算比の色",
     "title_background_color": "タイトルの背景色",
     "vertical_alignment": "縦の揃え",
     "negative_color": "減少の色",
@@ -2334,6 +3496,17 @@ _PARAM_LABELS = {
     "ratio_color": "比率の色",
     "mark_type": "マークの種類",
     "bar_color": "棒の色",
+    # 帳票の中の棒・色帯（2026-09-22）
+    "bar_metrics": "棒にするメジャー",
+    "color_metrics": "色付けするメジャー",
+    "bar_colors": "棒の色",
+    "color_starts": "色付けの薄い側",
+    "color_ends": "色付けの濃い側",
+    # 棒グラフの二重軸（2026-09-22）。サブメジャーはバーインバー、
+    # 折れ線メジャーは二重軸の折れ線。どちらか一方しか指定できない
+    "line_metric": "折れ線メジャー",
+    "sub_bar_color": "サブの棒の色",
+    "line_color": "折れ線の色",
     "bar_opacity": "棒の不透明度",
     "axis_min": "軸の最小値",
     "axis_max": "軸の最大値",
@@ -2358,6 +3531,24 @@ _PARAM_LABELS = {
     "max_color": "最大値の色",
     "colors": "四象限の色",
     "opacity": "不透明度",
+    "folder": "計算フィールドのフォルダ",
+    # ウォーターフォール（2026-09-23 追加）。connector_color は画面に出さない固定値
+    # （#cccccc）のため、ここには載せない。
+    "connectors": "連結線を表示する",
+    "landing": "着地バーを追加する",
+    "increase_color": "増加の色",
+    "decrease_color": "減少の色",
+    "landing_color": "着地の色",
+    # インフォメーション（2026-09-23 追加）
+    "icon": "アイコン",
+    "heading": "見出し",
+    "text": "本文",
+}
+
+#: グラフごとの表示名の上書き（2026-09-21 追加）。同じ引数名でもグラフによって
+#: 意味が変わるものだけ置く。散布図の `item` は点 1 つの単位を決める。
+_CHART_PARAM_LABELS: dict[str, dict[str, str]] = {
+    "draw_quadrant": {"item": "点の粒度"},
 }
 
 #: 値が固定の選択肢しか受け付けない引数。(値, 表示ラベル) の一覧。
@@ -2365,6 +3556,12 @@ _PARAM_LABELS = {
 _PARAM_CHOICES: dict[str, list[tuple[str, str]]] = {
     "item_shelf": [("rows", "横棒（行）"), ("columns", "縦棒（列）")],
     "mark_type": [("bar", "棒"), ("text", "テキスト")],
+    # KPI カードのモード（2026-09-21 追加）
+    "mode": [("sub_metric", "サブ指標モード"), ("budget", "予実比較モード")],
+    # インフォメーションのアイコン（2026-09-23 追加）
+    "icon": [
+        ("info", "情報"), ("quest", "疑問"), ("setting", "設定"), ("attention", "注意"),
+    ],
 }
 
 
@@ -2375,6 +3572,10 @@ def _param_kind(name: str, annotation: str) -> str:
         return "field"
     if name in _PARAM_CHOICES:
         return "select"
+    if name == "text":
+        # インフォメーションの本文は複数行になりうるのでテキストエリア（2026-09-23）。
+        # draw.py に "text" という名前の引数は他に無い。
+        return "textarea"
     if name == "colors":
         # draw_quadrant の colors は4色必要。"color" in name の判定に食われて
         # 単一色ピッカーになっていたバグ（2026-09-12 修正）
@@ -2406,24 +3607,41 @@ def _draw_specs() -> dict[str, dict[str, Any]]:
         signature = inspect.signature(getattr(TwbWorkbook, method_name))
         params = []
         for parameter in signature.parameters.values():
-            if _is_skipped(parameter.name):
+            if _is_skipped(parameter.name, method_name):
                 continue
             annotation = str(parameter.annotation)
+            default = parameter.default
+            if default is inspect.Parameter.empty or not isinstance(
+                default, (str, int, float, bool)
+            ):
+                default = None
             params.append(
                 {
                     "name": parameter.name,
-                    "label": _PARAM_LABELS.get(parameter.name, parameter.name),
+                    "label": _CHART_PARAM_LABELS.get(method_name, {}).get(
+                        parameter.name,
+                        _PARAM_LABELS.get(parameter.name, parameter.name),
+                    ),
                     "kind": _param_kind(parameter.name, annotation),
                     "role": _PARAM_ROLES.get(parameter.name),
                     "required": parameter.default is inspect.Parameter.empty,
                     "choices": _PARAM_CHOICES.get(parameter.name),
+                    "default": default,
                 }
             )
         specs[method_name] = {
             "label": _CHART_LABELS.get(method_name, method_name),
             "params": params,
+            "selectable": method_name not in _HIDDEN_FROM_CHART_LIST,
         }
     return specs
+
+
+def _preset_options() -> str:
+    return '<option value="">（選ぶと全項目へ反映）</option>' + "".join(
+        f'<option value="{_escape(name)}">{_escape(name)}</option>'
+        for name in DESIGN_PRESETS
+    )
 
 
 def _font_options(selected: str) -> str:
@@ -2478,17 +3696,34 @@ def _without_object_fields(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+#: 画面へ戻す設定 YAML の節（2026-09-21）。`datasources` は .twb に焼かれていて
+#: そちらから読み直すため戻さない。
+_SCREEN_CONFIG_SECTIONS = ("design", "dashboard", "kpi_tree")
+
+
+def _screen_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(config, dict):
+        return {}
+    return {
+        key: config[key]
+        for key in _SCREEN_CONFIG_SECTIONS
+        if isinstance(config.get(key), dict)
+    }
+
+
 def render_workbook_html(
     data: dict[str, Any],
     *,
     title: str = "twbpatch 設定",
     font: str = "Meiryo UI",
+    config: dict[str, Any] | None = None,
 ) -> str:
     from .html_kpi_tree import KPI_TREE_NAV, KPI_TREE_SCRIPT, KPI_TREE_SECTION, KPI_TREE_STYLE
 
     data = _without_object_fields(data)
     body = (
         _BODY.replace("__FONT_OPTIONS__", _font_options(font))
+        .replace("__PRESET_OPTIONS__", _preset_options())
         .replace("__KPI_TREE_NAV__", KPI_TREE_NAV)
         .replace("__KPI_TREE_SECTION__", KPI_TREE_SECTION)
         .replace("__TITLE__", _escape(title))
@@ -2502,5 +3737,10 @@ def render_workbook_html(
         .replace("__SCRIPT__", _SCRIPT + KPI_TREE_SCRIPT)
         .replace("__DATA__", _embed_json(data))
         .replace("__DRAW_SPECS__", _embed_json(_draw_specs()))
+        # 設定 YAML のうち、.twb に残らない節だけを画面へ戻す（2026-09-21）
+        .replace("__CONFIG__", _embed_json(_screen_config(config)))
+        .replace("__DESIGN_PRESETS__", _embed_json(DESIGN_PRESETS))
+        .replace("__FIELD_PROMPT__", json.dumps(_FIELD_PROMPT, ensure_ascii=False))
+        .replace("__CALC_PROMPT__", json.dumps(_CALC_PROMPT, ensure_ascii=False))
         .replace("__TITLE__", _escape(title))
     )

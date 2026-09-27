@@ -69,6 +69,13 @@ class WorkbookContext:
         #: 余白をグラフごとに変えるために使う（2026-09-21）。.twb には残らないので、
         #: 開き直した後や手で作ったシートでは既定の余白になる。
         self.chart_kinds: dict[str, str] = {}
+        #: 帳票のシート名 → (行に置いた項目のピルの参照, 棒・色帯の列の見出し)
+        #: （2026-09-22）。参照で持つのは、同じメジャーが行にも列にも居ると
+        #: 表示名では一意に決まらないため。
+        #: **Tableau は行に置いた項目の名前は出すが、棒・色帯の列の名前だけ出さない。**
+        #: その消えている分を `build_report()` が浮動テキストで補うのに使う。
+        #: 列幅はゾーンの幅を列数で割って決めるので、ここでは名前だけ覚える。
+        self.sheet_columns: dict[str, tuple[list[str], list[str]]] = {}
 
     def mark_dirty(self) -> None:
         self.revision += 1
@@ -87,6 +94,7 @@ class WorkbookContext:
         self.is_dirty = False
         self.layout_weights.clear()
         self.chart_kinds.clear()
+        self.sheet_columns.clear()
 
 
 class ConnectedModel:

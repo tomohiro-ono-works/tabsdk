@@ -89,6 +89,26 @@ def test_kpi_tree_draws_cards_and_places_them(tmp_path) -> None:
     )
 
 
+def test_kpi_tree_node_info_places_a_floating_icon_over_the_node(tmp_path) -> None:
+    """ノードの `info:` は、build_kpi_tree() が並べた後にそのノードのゾームの右上へ
+    浮動でインフォメーションアイコンを重ねる（2026-09-23）。"""
+    workbook = _workbook(tmp_path)
+    kpi_tree = _kpi_tree()
+    kpi_tree["root"]["info"] = {"text": "全社の売上合計です", "icon": "info"}
+
+    workbook.apply_config({"design": DESIGN, "kpi_tree": kpi_tree})
+
+    dashboard = workbook.get_dashboards(name="KPIツリー")[0]
+    zones = _card_zones(dashboard)
+    all_zones = {zone.name: zone for zone in dashboard.get_zones()}
+    icon_zone = all_zones["info|売上"]
+    assert icon_zone.placement_mode == "floating"
+    assert (icon_zone.width, icon_zone.height) == (30, 30)
+    assert icon_zone.x == zones["売上"].x + zones["売上"].width - 30 - 4
+    assert icon_zone.y == zones["売上"].y + 4
+    assert not [message for message in workbook.validate() if message.severity == "error"]
+
+
 def test_kpi_tree_follows_design_spacing(tmp_path) -> None:
     workbook = _workbook(tmp_path)
 
