@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -56,8 +57,11 @@ dialog#prompt-dialog h3 { margin: 0 0 8px; font-size: 14px; }
 #prompt-text { width: 100%; height: 50vh; font: 12px/1.5 Consolas, monospace;
                padding: 8px; border: 1px solid #c3cad6; border-radius: 4px; }
 #prompt-rule-options { margin: 0 0 10px; }
-#prompt-rule-checkboxes { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 5px; }
-#prompt-rule-checkboxes label { display: inline-flex; align-items: center; gap: 4px; }
+#prompt-rule-checkboxes, #calc-prompt-rule-checkboxes {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 5px; }
+#prompt-rule-checkboxes[hidden], #calc-prompt-rule-checkboxes[hidden] { display: none; }
+#prompt-rule-checkboxes label, #calc-prompt-rule-checkboxes label {
+  display: inline-flex; align-items: center; gap: 4px; }
 /* 行のドラッグ＆ドロップ（2026-09-21） */
 td.grip-cell { text-align: center; padding: 0; cursor: grab; }
 tr.picked > td { background: #e8f0ff; }
@@ -348,6 +352,7 @@ function searchable(select) {
 const FIELD_PROMPT = __FIELD_PROMPT__;
 const CALC_PROMPT = __CALC_PROMPT__;
 const PROMPT_RULES = __PROMPT_RULES__;
+const CALC_PROMPT_RULES = __CALC_PROMPT_RULES__;
 
 /* プロンプトに入れる行。掴み手の列を Ctrl+クリックで拾った行があればそれ、
    無ければ範囲選択した行、それも無ければ（絞り込みで残っている）全行（2026-09-21）。
@@ -454,14 +459,18 @@ function calcPromptText() {
 const promptDialog = document.getElementById("prompt-dialog");
 const promptRuleOptions = document.getElementById("prompt-rule-options");
 const promptRuleCheckboxes = document.getElementById("prompt-rule-checkboxes");
+const calcPromptRuleCheckboxes = document.getElementById("calc-prompt-rule-checkboxes");
 const PROMPT_RULE_START = "\n\n<!-- twbpatch:reference-rules:start -->\n";
 const PROMPT_RULE_END = "<!-- twbpatch:reference-rules:end -->\n";
 let promptRulesManaged = false;
+let activePromptKind = "field";
 
 function selectedPromptRules() {
-  return Array.from(promptRuleCheckboxes.querySelectorAll("input[type=checkbox]"))
+  const group = activePromptKind === "calc" ? calcPromptRuleCheckboxes : promptRuleCheckboxes;
+  const rules = activePromptKind === "calc" ? CALC_PROMPT_RULES : PROMPT_RULES;
+  return Array.from(group.querySelectorAll("input[type=checkbox]"))
     .filter(box => box.checked)
-    .map(box => PROMPT_RULES[Number(box.dataset.ruleIndex)]);
+    .map(box => rules[Number(box.dataset.ruleIndex)]);
 }
 
 function promptRuleSection() {
@@ -499,17 +508,20 @@ function syncPromptRules() {
 }
 
 function renderPromptRuleCheckboxes() {
-  PROMPT_RULES.forEach((rule, index) => {
-    const label = document.createElement("label");
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = rule.default_checked;
-    box.dataset.ruleIndex = String(index);
-    box.addEventListener("change", syncPromptRules);
-    label.appendChild(box);
-    label.appendChild(document.createTextNode(rule.name));
-    promptRuleCheckboxes.appendChild(label);
-  });
+  [[PROMPT_RULES, promptRuleCheckboxes], [CALC_PROMPT_RULES, calcPromptRuleCheckboxes]]
+    .forEach(([rules, group]) => {
+      rules.forEach((rule, index) => {
+        const label = document.createElement("label");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = rule.default_checked;
+        box.dataset.ruleIndex = String(index);
+        box.addEventListener("change", syncPromptRules);
+        label.appendChild(box);
+        label.appendChild(document.createTextNode(rule.name));
+        group.appendChild(label);
+      });
+    });
 }
 renderPromptRuleCheckboxes();
 
@@ -520,15 +532,22 @@ function openPrompt(text, note) {
 }
 document.getElementById("prompt-open").addEventListener("click",
   () => {
+    activePromptKind = "field";
+    promptRuleCheckboxes.hidden = false;
+    calcPromptRuleCheckboxes.hidden = true;
     promptRuleOptions.hidden = PROMPT_RULES.length === 0;
     promptRulesManaged = selectedPromptRules().length > 0;
     openPrompt(fieldPromptText() + promptRuleSection(), selectedFieldRows().length + " 行");
   });
 document.getElementById("calc-prompt-open").addEventListener("click",
   () => {
-    promptRuleOptions.hidden = true;
-    promptRulesManaged = false;
-    openPrompt(calcPromptText(), "「# 作りたい指標」を書いてからコピーする");
+    activePromptKind = "calc";
+    promptRuleCheckboxes.hidden = true;
+    calcPromptRuleCheckboxes.hidden = false;
+    promptRuleOptions.hidden = CALC_PROMPT_RULES.length === 0;
+    promptRulesManaged = selectedPromptRules().length > 0;
+    openPrompt(calcPromptText() + promptRuleSection(),
+      "「# 作りたい指標」を書いてからコピーする");
   });
 document.getElementById("prompt-close").addEventListener("click", () => promptDialog.close());
 document.getElementById("prompt-clear").addEventListener("click", () => {
@@ -3171,6 +3190,7 @@ _BODY = """
     <div id="prompt-rule-options" hidden>
       <span>プロンプトに含める参照ルール</span>
       <div id="prompt-rule-checkboxes"></div>
+      <div id="calc-prompt-rule-checkboxes" hidden></div>
     </div>
     <textarea id="prompt-text"></textarea>
     <p>
@@ -3469,34 +3489,6 @@ __FIELDS__
 売上(当年)||IIF([当年・昨年区分]="当年",[売上],NULL)||01_売上指標||real||measure
 売上(昨年比)||IF ZN(SUM([売上(昨年)])) = 0 THEN NULL ELSE SUM([売上(当年)]) / SUM([売上(昨年)]) END||01_売上指標||real||measure
 顧客数(当年)||COUNTD(IIF([当年・昨年区分]="当年",[顧客ID],NULL))||04_顧客指標||real||measure
-
-# 文字列で絞り込む式（IIF）
-- 特定の文字列のときだけ値を取る式は IIF を使い、文字列は " " で囲みます。
-  例: IIF([当年・昨年区分]="当年",[売上],NULL)
-- 条件に合わない行は 0 ではなく NULL にします。0 にすると平均や件数がずれます。
-- 複数条件は AND / OR でつなぎます。
-  例: COUNTD(IIF([当年・昨年区分]="当年" AND [返品有無]="Yes",[注文ID],NULL))
-- この形の式は明細（行）単位なので、集計関数では包みません。
-
-# 集計してから割る式
-- 割り算は必ず集計してから割ります。明細のまま割ると合計と一致しません。
-  良い例: SUM([売上(当年)]) / SUM([売上(昨年)])
-  悪い例: [売上(当年)] / [売上(昨年)]
-- ゼロ除算は避けます。
-  IF ZN(SUM([売上(昨年)])) = 0 THEN NULL ELSE SUM([売上(当年)]) / SUM([売上(昨年)]) END
-- 件数は COUNTD を使います。
-- 集計済みの計算フィールドは、さらに集計しません。例えば [顧客数(当年)] が COUNTD を
-  含むなら、それを使う式では SUM を付けず [顧客数(当年)] と書きます。
-  例: SUM([売上(当年)]) / [顧客数(当年)]
-- 差は ZN(SUM(当年)) - ZN(SUM(昨年))、比は 当年 / 昨年 です。
-
-# 名前・フォルダ・データ型・役割
-- 名前は 指標(当年) / 指標(昨年) / 指標(昨年差) / 指標(昨年比) の形にそろえます。
-  上の一覧にある名前と重ならないようにしてください。
-- フォルダは「01_売上指標」のように、2 桁の番号 + アンダースコア + 日本語名。
-- データ型は string / integer / real / boolean / date / datetime のいずれか。金額・比率は real。
-- 役割は measure か dimension。
-- 参照の順番は気にしなくてかまいません。参照先から先に作られます。循環参照だけ避けてください。
 """
 
 #: グラフ種類の表示名。仕様 §6.14 の説明に合わせる。
@@ -3748,10 +3740,19 @@ def _embed_json(data: Any) -> str:
     return text.replace("</", "<\\/")
 
 
+def _fill_slots(template: str, values: dict[str, str]) -> str:
+    """テンプレート内の差し込み口だけを一度ずつ置換し、値は再走査しない。"""
+    pattern = re.compile("|".join(re.escape(key) for key in values))
+    return pattern.sub(lambda match: values[match.group()], template)
+
+
 _PROMPT_RULES_DIR = Path(__file__).with_name("prompt_rules")
+_CALC_PROMPT_RULES_DIR = Path(__file__).with_name("calc_prompt_rules")
 
 
-def _load_prompt_rules(directory: Path | None = None) -> list[dict[str, str | bool]]:
+def _load_prompt_rules(
+    directory: Path | None = None, *, default_name: str = "00-common-rules.md"
+) -> list[dict[str, str | bool]]:
     """HTML 生成時に固定フォルダ直下の Markdown ルールを読み込む。"""
     folder = _PROMPT_RULES_DIR if directory is None else directory
     rules: list[dict[str, str | bool]] = []
@@ -3765,7 +3766,7 @@ def _load_prompt_rules(directory: Path | None = None) -> list[dict[str, str | bo
         rules.append({
             "name": path.name,
             "text": content,
-            "default_checked": path.name == "00-common-rules.md",
+            "default_checked": path.name == default_name,
         })
     return rules
 
@@ -3821,27 +3822,32 @@ def render_workbook_html(
     from .html_kpi_tree import KPI_TREE_NAV, KPI_TREE_SCRIPT, KPI_TREE_SECTION, KPI_TREE_STYLE
 
     data = _without_object_fields(data)
-    body = (
-        _BODY.replace("__FONT_OPTIONS__", _font_options(font))
-        .replace("__PRESET_OPTIONS__", _preset_options())
-        .replace("__KPI_TREE_NAV__", KPI_TREE_NAV)
-        .replace("__KPI_TREE_SECTION__", KPI_TREE_SECTION)
-        .replace("__TITLE__", _escape(title))
-        .replace("__DS_COUNT__", str(len(data.get("datasources", []))))
-        .replace("__WS_COUNT__", str(len(data.get("worksheets", []))))
-        .replace("__DB_COUNT__", str(len(data.get("dashboards", []))))
-    )
-    return (
-        _TEMPLATE.replace("__STYLE__", _STYLE + KPI_TREE_STYLE)
-        .replace("__BODY__", body)
-        .replace("__SCRIPT__", _SCRIPT + KPI_TREE_SCRIPT)
-        .replace("__DATA__", _embed_json(data))
-        .replace("__DRAW_SPECS__", _embed_json(_draw_specs()))
+    body = _fill_slots(_BODY, {
+        "__FONT_OPTIONS__": _font_options(font),
+        "__PRESET_OPTIONS__": _preset_options(),
+        "__KPI_TREE_NAV__": KPI_TREE_NAV,
+        "__KPI_TREE_SECTION__": KPI_TREE_SECTION,
+        "__TITLE__": _escape(title),
+        "__DS_COUNT__": str(len(data.get("datasources", []))),
+        "__WS_COUNT__": str(len(data.get("worksheets", []))),
+        "__DB_COUNT__": str(len(data.get("dashboards", []))),
+    })
+    script = _fill_slots(_SCRIPT, {
+        "__FIELD_PROMPT__": _embed_json(_FIELD_PROMPT),
+        "__CALC_PROMPT__": _embed_json(_CALC_PROMPT),
+        "__PROMPT_RULES__": _embed_json(_load_prompt_rules()),
+        "__CALC_PROMPT_RULES__": _embed_json(_load_prompt_rules(
+            _CALC_PROMPT_RULES_DIR, default_name="00-calculation-rules.md"
+        )),
+    })
+    return _fill_slots(_TEMPLATE, {
+        "__STYLE__": _STYLE + KPI_TREE_STYLE,
+        "__BODY__": body,
+        "__SCRIPT__": script + KPI_TREE_SCRIPT,
+        "__DATA__": _embed_json(data),
+        "__DRAW_SPECS__": _embed_json(_draw_specs()),
         # 設定 YAML のうち、.twb に残らない節だけを画面へ戻す（2026-09-21）
-        .replace("__CONFIG__", _embed_json(_screen_config(config)))
-        .replace("__DESIGN_PRESETS__", _embed_json(DESIGN_PRESETS))
-        .replace("__FIELD_PROMPT__", json.dumps(_FIELD_PROMPT, ensure_ascii=False))
-        .replace("__CALC_PROMPT__", json.dumps(_CALC_PROMPT, ensure_ascii=False))
-        .replace("__TITLE__", _escape(title))
-        .replace("__PROMPT_RULES__", _embed_json(_load_prompt_rules()))
-    )
+        "__CONFIG__": _embed_json(_screen_config(config)),
+        "__DESIGN_PRESETS__": _embed_json(DESIGN_PRESETS),
+        "__TITLE__": _escape(title),
+    })

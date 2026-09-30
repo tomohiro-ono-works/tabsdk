@@ -17,6 +17,12 @@ def _embedded_rules(html: str) -> list[dict]:
     return json.loads(match.group(1).replace("<\\/", "</"))
 
 
+def _embedded_calc_rules(html: str) -> list[dict]:
+    match = re.search(r"const CALC_PROMPT_RULES = (\[.*?\]);", html, re.S)
+    assert match is not None
+    return json.loads(match.group(1).replace("<\\/", "</"))
+
+
 def test_prompt_rules_are_embedded_in_filename_order(tmp_path) -> None:
     html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
     rules = _embedded_rules(html)
@@ -73,7 +79,7 @@ def test_prompt_rules_escape_script_terminator(tmp_path, monkeypatch) -> None:
 def test_prompt_rules_preserve_template_tokens(tmp_path, monkeypatch) -> None:
     import twbpatch.html_export as html_export
 
-    original = "Keep __TITLE__ and __FIELD_PROMPT__ literal."
+    original = "Keep __TITLE__, __FIELD_PROMPT__, and __CALC_PROMPT_RULES__ literal."
     (tmp_path / "tokens__TITLE__.md").write_text(original, encoding="utf-8")
     monkeypatch.setattr(html_export, "_PROMPT_RULES_DIR", tmp_path)
     html = TwbWorkbook.open(SAMPLE).export_html(
@@ -96,4 +102,42 @@ def test_prompt_rules_checkbox_ui_is_available_for_field_prompt(tmp_path) -> Non
     assert "function syncPromptRules()" in html
     assert "<!-- twbpatch:reference-rules:start -->" in html
     assert "<!-- twbpatch:reference-rules:end -->" in html
-    assert 'promptRuleOptions.hidden = true;' in html
+    assert 'promptRuleOptions.hidden = PROMPT_RULES.length === 0;' in html
+
+
+def test_calc_prompt_has_its_own_checkbox_group(tmp_path) -> None:
+    html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert 'id="calc-prompt-rule-checkboxes"' in html
+    assert 'calcPromptRuleCheckboxes.hidden = false;' in html
+    assert 'promptRuleOptions.hidden = CALC_PROMPT_RULES.length === 0;' in html
+    assert 'openPrompt(calcPromptText() + promptRuleSection(),' in html
+
+
+def test_calc_prompt_uses_separate_default_checked_md(tmp_path) -> None:
+    html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+
+    assert [rule["name"] for rule in _embedded_rules(html)] == [
+        "00-common-rules.md", "10-customer-data.md", "20-product-data.md"
+    ]
+    calc_rules = _embedded_calc_rules(html)
+    assert [rule["name"] for rule in calc_rules] == ["00-calculation-rules.md"]
+    assert calc_rules[0]["default_checked"] is True
+    assert "# 文字列で絞り込む式（IIF）" in calc_rules[0]["text"]
+    assert "# 集計してから割る式" in calc_rules[0]["text"]
+
+
+def test_calc_prompt_rule_text_is_loaded_from_its_own_folder(tmp_path, monkeypatch) -> None:
+    import twbpatch.html_export as html_export
+
+    content = "Use __TITLE__ and __PROMPT_RULES__ literally. </script>"
+    (tmp_path / "custom.md").write_text(content, encoding="utf-8")
+    monkeypatch.setattr(html_export, "_CALC_PROMPT_RULES_DIR", tmp_path)
+    html = TwbWorkbook.open(SAMPLE).export_html(
+        tmp_path / "config.html", title="Different title"
+    ).read_text(encoding="utf-8")
+
+    assert _embedded_calc_rules(html) == [{
+        "name": "custom.md", "text": content, "default_checked": False,
+    }]
+    assert "</script>" not in html.split("const CALC_PROMPT_RULES = ", 1)[1].split(";", 1)[0]
