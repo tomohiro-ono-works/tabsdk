@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 _STYLE = """
@@ -54,6 +55,9 @@ dialog#prompt-dialog { width: min(900px, 90vw); border: 1px solid #c3cad6; borde
 dialog#prompt-dialog h3 { margin: 0 0 8px; font-size: 14px; }
 #prompt-text { width: 100%; height: 50vh; font: 12px/1.5 Consolas, monospace;
                padding: 8px; border: 1px solid #c3cad6; border-radius: 4px; }
+#prompt-rule-options { margin: 0 0 10px; }
+#prompt-rule-checkboxes { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 5px; }
+#prompt-rule-checkboxes label { display: inline-flex; align-items: center; gap: 4px; }
 /* 行のドラッグ＆ドロップ（2026-09-21） */
 td.grip-cell { text-align: center; padding: 0; cursor: grab; }
 tr.picked > td { background: #e8f0ff; }
@@ -343,6 +347,7 @@ function searchable(select) {
    プロンプトへ差し込む。返ってくる 3 列はそのまま表へ貼り戻せる。 */
 const FIELD_PROMPT = __FIELD_PROMPT__;
 const CALC_PROMPT = __CALC_PROMPT__;
+const PROMPT_RULES = __PROMPT_RULES__;
 
 /* プロンプトに入れる行。掴み手の列を Ctrl+クリックで拾った行があればそれ、
    無ければ範囲選択した行、それも無ければ（絞り込みで残っている）全行（2026-09-21）。
@@ -447,15 +452,84 @@ function calcPromptText() {
 }
 
 const promptDialog = document.getElementById("prompt-dialog");
+const promptRuleOptions = document.getElementById("prompt-rule-options");
+const promptRuleCheckboxes = document.getElementById("prompt-rule-checkboxes");
+const PROMPT_RULE_START = "\n\n<!-- twbpatch:reference-rules:start -->\n";
+const PROMPT_RULE_END = "<!-- twbpatch:reference-rules:end -->\n";
+let promptRulesManaged = false;
+
+function selectedPromptRules() {
+  return Array.from(promptRuleCheckboxes.querySelectorAll("input[type=checkbox]"))
+    .filter(box => box.checked)
+    .map(box => PROMPT_RULES[Number(box.dataset.ruleIndex)]);
+}
+
+function promptRuleSection() {
+  const selected = selectedPromptRules();
+  if (!selected.length) return "";
+  const content = selected.map(rule => "## " + rule.name + "\n" + rule.text).join("\n");
+  return PROMPT_RULE_START + "# 参照ルール\n\n" + content + "\n" + PROMPT_RULE_END;
+}
+
+function syncPromptRules() {
+  if (promptRuleOptions.hidden) return;
+  const area = document.getElementById("prompt-text");
+  const replacement = promptRuleSection();
+  const start = area.value.indexOf(PROMPT_RULE_START);
+  const end = area.value.indexOf(PROMPT_RULE_END);
+  if (promptRulesManaged) {
+    if (start < 0 || end < start || start !== area.value.lastIndexOf(PROMPT_RULE_START)
+        || end !== area.value.lastIndexOf(PROMPT_RULE_END)) {
+      document.getElementById("prompt-copied").textContent =
+        "参照ルールの境界が変更されています。プロンプトを作り直してください。";
+      return;
+    }
+    area.value = area.value.slice(0, start) + replacement
+      + area.value.slice(end + PROMPT_RULE_END.length);
+  } else {
+    if (start >= 0 || end >= 0) {
+      document.getElementById("prompt-copied").textContent =
+        "参照ルールの境界が変更されています。プロンプトを作り直してください。";
+      return;
+    }
+    area.value += replacement;
+  }
+  promptRulesManaged = Boolean(replacement);
+  document.getElementById("prompt-copied").textContent = "";
+}
+
+function renderPromptRuleCheckboxes() {
+  PROMPT_RULES.forEach((rule, index) => {
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = rule.default_checked;
+    box.dataset.ruleIndex = String(index);
+    box.addEventListener("change", syncPromptRules);
+    label.appendChild(box);
+    label.appendChild(document.createTextNode(rule.name));
+    promptRuleCheckboxes.appendChild(label);
+  });
+}
+renderPromptRuleCheckboxes();
+
 function openPrompt(text, note) {
   document.getElementById("prompt-text").value = text;
   document.getElementById("prompt-copied").textContent = note;
   promptDialog.showModal();
 }
 document.getElementById("prompt-open").addEventListener("click",
-  () => openPrompt(fieldPromptText(), selectedFieldRows().length + " 行"));
+  () => {
+    promptRuleOptions.hidden = PROMPT_RULES.length === 0;
+    promptRulesManaged = selectedPromptRules().length > 0;
+    openPrompt(fieldPromptText() + promptRuleSection(), selectedFieldRows().length + " 行");
+  });
 document.getElementById("calc-prompt-open").addEventListener("click",
-  () => openPrompt(calcPromptText(), "「# 作りたい指標」を書いてからコピーする"));
+  () => {
+    promptRuleOptions.hidden = true;
+    promptRulesManaged = false;
+    openPrompt(calcPromptText(), "「# 作りたい指標」を書いてからコピーする");
+  });
 document.getElementById("prompt-close").addEventListener("click", () => promptDialog.close());
 document.getElementById("prompt-clear").addEventListener("click", () => {
   PICKED_FIELDS.clear();
@@ -3094,6 +3168,10 @@ _BODY = """
 
   <dialog id="prompt-dialog">
     <h3>AI 用プロンプト</h3>
+    <div id="prompt-rule-options" hidden>
+      <span>プロンプトに含める参照ルール</span>
+      <div id="prompt-rule-checkboxes"></div>
+    </div>
     <textarea id="prompt-text"></textarea>
     <p>
       <button class="act" id="prompt-copy">クリップボードにコピー</button>
@@ -3665,9 +3743,31 @@ def _escape(value: Any) -> str:
     )
 
 
-def _embed_json(data: dict[str, Any]) -> str:
+def _embed_json(data: Any) -> str:
     text = json.dumps(data, ensure_ascii=False, default=str)
     return text.replace("</", "<\\/")
+
+
+_PROMPT_RULES_DIR = Path(__file__).with_name("prompt_rules")
+
+
+def _load_prompt_rules(directory: Path | None = None) -> list[dict[str, str | bool]]:
+    """HTML 生成時に固定フォルダ直下の Markdown ルールを読み込む。"""
+    folder = _PROMPT_RULES_DIR if directory is None else directory
+    rules: list[dict[str, str | bool]] = []
+    for path in sorted(folder.iterdir(), key=lambda item: item.name):
+        if not path.is_file() or path.suffix.lower() != ".md":
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise ValueError(f"cannot read prompt rule: {path.name}") from exc
+        rules.append({
+            "name": path.name,
+            "text": content,
+            "default_checked": path.name == "00-common-rules.md",
+        })
+    return rules
 
 
 #: データソースそのものを表す擬似フィールド（Tableau のオブジェクト）。
@@ -3743,4 +3843,5 @@ def render_workbook_html(
         .replace("__FIELD_PROMPT__", json.dumps(_FIELD_PROMPT, ensure_ascii=False))
         .replace("__CALC_PROMPT__", json.dumps(_CALC_PROMPT, ensure_ascii=False))
         .replace("__TITLE__", _escape(title))
+        .replace("__PROMPT_RULES__", _embed_json(_load_prompt_rules()))
     )
