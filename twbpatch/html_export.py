@@ -3746,8 +3746,8 @@ def _fill_slots(template: str, values: dict[str, str]) -> str:
     return pattern.sub(lambda match: values[match.group()], template)
 
 
-_PROMPT_RULES_DIR = Path(__file__).with_name("prompt_rules")
-_CALC_PROMPT_RULES_DIR = Path(__file__).with_name("calc_prompt_rules")
+_PROMPT_RULES_DIR = Path(__file__).parent / "template" / "prompt_rules"
+_CALC_PROMPT_RULES_DIR = Path(__file__).parent / "template" / "calc_prompt_rules"
 
 
 def _load_prompt_rules(

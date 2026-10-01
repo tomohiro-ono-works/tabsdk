@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 
@@ -9,6 +10,16 @@ from twbpatch import TwbWorkbook
 
 
 SAMPLE = "tests/sample_minimal.twb"
+
+
+def test_prompt_rule_files_live_under_template_directory() -> None:
+    import twbpatch.html_export as html_export
+
+    template_dir = Path(html_export.__file__).parent / "template"
+    assert html_export._PROMPT_RULES_DIR == template_dir / "prompt_rules"
+    assert html_export._CALC_PROMPT_RULES_DIR == template_dir / "calc_prompt_rules"
+    assert (template_dir / "prompt_rules" / "00-common-rules.md").is_file()
+    assert (template_dir / "calc_prompt_rules" / "00-calculation-rules.md").is_file()
 
 
 def _embedded_rules(html: str) -> list[dict]:
