@@ -46,6 +46,37 @@ def test_prompt_rules_are_embedded_in_filename_order(tmp_path) -> None:
     assert "入力項目：" in rules[1]["text"]
 
 
+def test_field_guidance_is_in_common_md_without_repeating_base_prompt(tmp_path) -> None:
+    import twbpatch.html_export as html_export
+
+    html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+    common = _embedded_rules(html)[0]["text"]
+    base = html_export._FIELD_PROMPT
+
+    for heading in ("# リネーム後名称の決め方", "# フォルダの決め方", "# 階層の決め方"):
+        assert heading not in base
+        assert heading in common
+    assert "出力の例:" not in base
+    assert "入力と同じ行数・同じ並びで、4 列だけ" in base
+    assert "ディメンションとメジャーは別のフォルダ" in common
+    assert "複数の分類ファイル" in common
+
+
+def test_calculation_examples_are_only_in_md_while_output_contract_stays_in_base(tmp_path) -> None:
+    import twbpatch.html_export as html_export
+
+    html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
+    base = html_export._CALC_PROMPT
+    calc_rules = _embedded_calc_rules(html)[0]["text"]
+
+    assert "IIF(" not in base
+    assert "SUM(" not in base
+    assert "5 列を半角の縦棒 2 つ（||）" in base
+    assert "データ型は string / integer / real / boolean / date / datetime" in base
+    assert "IIF([当年・昨年区分]" in calc_rules
+    assert "集計してから割る式" in calc_rules
+
+
 def test_prompt_rules_scan_only_direct_md_files(tmp_path) -> None:
     from twbpatch.html_export import _load_prompt_rules
 

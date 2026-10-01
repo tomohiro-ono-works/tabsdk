@@ -1278,7 +1278,7 @@ def test_export_html_builds_an_ai_prompt_from_the_selected_rows(tmp_path) -> Non
     assert "function pasteByOriginalName(grid, startColumn)" in html
     assert "if (!lines.every(cols => byName.has(cols[0].trim()))) return false;" in html
     assert "const first = Math.min(Math.max(startColumn, 2), 4);" in html
-    assert "Product ID||商品 ID||01_商品||商品階層" in html
+    assert "列は左から **元カラム（入力のまま）** / リネーム後名称 / フォルダ / 階層" in html
     assert html.count("__ROWS__") == 2  # 本文の差し込み口と、置き換える側の 1 つずつ
     # file:// でも動くように、クリップボード API が使えなければ execCommand へ落とす
     assert 'navigator.clipboard && navigator.clipboard.writeText' in html
@@ -1303,7 +1303,7 @@ def test_export_html_paste_accepts_pipes_when_tabs_are_lost(tmp_path) -> None:
     assert "return body.split(mark).map(value => value.trim());" in html
     # プロンプトも二重縦棒で返すよう指示する
     assert "**半角の縦棒 2 つ（||）で区切ります**" in html
-    assert "商品 ID||01_商品||商品階層" in html
+    assert "階層が無い行も区切りは省かず、末尾を空にします。" in html
 
 
 def test_export_html_builds_an_ai_prompt_for_calculated_fields(tmp_path) -> None:
