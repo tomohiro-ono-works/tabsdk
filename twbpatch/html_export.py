@@ -58,10 +58,17 @@ dialog#prompt-dialog h3 { margin: 0 0 8px; font-size: 14px; }
                padding: 8px; border: 1px solid #c3cad6; border-radius: 4px; }
 #prompt-rule-options { margin: 0 0 10px; }
 #prompt-rule-checkboxes, #calc-prompt-rule-checkboxes {
-  display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 5px; }
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
 #prompt-rule-checkboxes[hidden], #calc-prompt-rule-checkboxes[hidden] { display: none; }
 #prompt-rule-checkboxes label, #calc-prompt-rule-checkboxes label {
-  display: inline-flex; align-items: center; gap: 4px; }
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  box-sizing: border-box; padding: 6px 10px; border: 1px solid #c3cad6;
+  border-radius: 8px; background: #fff; cursor: pointer; overflow-wrap: anywhere; }
+#prompt-rule-checkboxes label:has(input:checked),
+#calc-prompt-rule-checkboxes label:has(input:checked) {
+  border-color: #4a7dff; background: #eef4ff; }
+#prompt-rule-checkboxes label:focus-within,
+#calc-prompt-rule-checkboxes label:focus-within { outline: 2px solid #4a7dff; outline-offset: 2px; }
 /* 行のドラッグ＆ドロップ（2026-09-21） */
 td.grip-cell { text-align: center; padding: 0; cursor: grab; }
 tr.picked > td { background: #e8f0ff; }

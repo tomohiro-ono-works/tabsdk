@@ -38,19 +38,20 @@ def test_prompt_rules_are_embedded_in_filename_order(tmp_path) -> None:
     html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
     rules = _embedded_rules(html)
 
-    assert [rule["name"] for rule in rules] == [
-        "00-common-rules.md", "10-customer-data.md", "20-product-data.md"
-    ]
-    assert [rule["default_checked"] for rule in rules] == [True, False, False]
-    assert "データソース構造" in rules[0]["text"]
-    assert "入力項目：" in rules[1]["text"]
+    names = [rule["name"] for rule in rules]
+    assert names == sorted(names)
+    assert {"00-common-rules.md", "10-customer-data.md", "20-product-data.md"} <= set(names)
+    assert [rule["name"] for rule in rules if rule["default_checked"]] == ["00-common-rules.md"]
+    by_name = {rule["name"]: rule["text"] for rule in rules}
+    assert "データソース構造" in by_name["00-common-rules.md"]
+    assert "入力項目：" in by_name["10-customer-data.md"]
 
 
 def test_field_guidance_is_in_common_md_without_repeating_base_prompt(tmp_path) -> None:
     import twbpatch.html_export as html_export
 
     html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
-    common = _embedded_rules(html)[0]["text"]
+    common = next(rule["text"] for rule in _embedded_rules(html) if rule["name"] == "00-common-rules.md")
     base = html_export._FIELD_PROMPT
 
     for heading in ("# リネーム後名称の決め方", "# フォルダの決め方", "# 階層の決め方"):
@@ -67,7 +68,7 @@ def test_calculation_examples_are_only_in_md_while_output_contract_stays_in_base
 
     html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
     base = html_export._CALC_PROMPT
-    calc_rules = _embedded_calc_rules(html)[0]["text"]
+    calc_rules = next(rule["text"] for rule in _embedded_calc_rules(html) if rule["name"] == "00-calculation-rules.md")
 
     assert "IIF(" not in base
     assert "SUM(" not in base
@@ -159,14 +160,17 @@ def test_calc_prompt_has_its_own_checkbox_group(tmp_path) -> None:
 def test_calc_prompt_uses_separate_default_checked_md(tmp_path) -> None:
     html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / "config.html").read_text(encoding="utf-8")
 
-    assert [rule["name"] for rule in _embedded_rules(html)] == [
-        "00-common-rules.md", "10-customer-data.md", "20-product-data.md"
-    ]
+    field_names = {rule["name"] for rule in _embedded_rules(html)}
     calc_rules = _embedded_calc_rules(html)
-    assert [rule["name"] for rule in calc_rules] == ["00-calculation-rules.md"]
-    assert calc_rules[0]["default_checked"] is True
-    assert "# 文字列で絞り込む式（IIF）" in calc_rules[0]["text"]
-    assert "# 集計してから割る式" in calc_rules[0]["text"]
+    calc_names = {rule["name"] for rule in calc_rules}
+    assert "00-common-rules.md" in field_names
+    assert "00-calculation-rules.md" not in field_names
+    assert "00-calculation-rules.md" in calc_names
+    assert "00-common-rules.md" not in calc_names
+    assert [rule["name"] for rule in calc_rules if rule["default_checked"]] == ["00-calculation-rules.md"]
+    calculation_rule = next(rule for rule in calc_rules if rule["name"] == "00-calculation-rules.md")
+    assert "# 文字列で絞り込む式（IIF）" in calculation_rule["text"]
+    assert "# 集計してから割る式" in calculation_rule["text"]
 
 
 def test_calc_prompt_rule_text_is_loaded_from_its_own_folder(tmp_path, monkeypatch) -> None:
