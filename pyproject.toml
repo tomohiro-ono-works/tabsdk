@@ -13,6 +13,10 @@ Repository = "https://github.com/tomohiro-ono-works/tabsdk"
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel.force-include]
+"template/prompt_rules" = "twbpatch/template/prompt_rules"
+"template/calc_prompt_rules" = "twbpatch/template/calc_prompt_rules"
+
 [dependency-groups]
 dev = ["pytest>=9.1.1"]
 

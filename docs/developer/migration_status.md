@@ -1,7 +1,7 @@
 # 移行状況
 
 **このファイルは `/spec-conformance` が生成する。手で編集しない。**
-生成日: 2026-09-13 / 正典: `docs/model_api_spec.md`
+生成日: 2026-09-13 / 正典: `docs/developer/model_api_spec.md`
 
 ## テスト結果
 
@@ -97,7 +97,7 @@ FAIL が無いため、仕様違反の修正は無い。次の 3 点が残って
    `excluded_target_worksheets` / `details` が新 API に無いから」としていたが、
    `TwbDashboardAction` に `excluded_source_worksheet_ids` /
    `excluded_target_worksheet_ids` / `details`（`connected_dashboard.py:761,766,795`）が
-   実装され、穴が埋まっている。`docs/backlog.md` L-6 の「穴を埋めてから消す」が満たされた。
+   実装され、穴が埋まっている。`docs/developer/backlog.md` L-6 の「穴を埋めてから消す」が満たされた。
    `list_dashboard_zones()` は `x_raw` / `parent_id` / `depth` / `to_px` の穴は埋まったが、
    `include_device_layouts=` に相当する新 API がまだ無いので残す
    （`tests/test_dashboard_edit_locality.py:149` が `get_zones()` は

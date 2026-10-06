@@ -3,8 +3,9 @@
 `export_html()` で設定画面を出し、画面で設定し、`apply_config()` で `.twb` へ焼く。
 **計算フィールドを使う場合は 2 周する。**
 
-- 画面そのものの仕様は `docs/html_screen_spec.md`
-- 個々の API は `README.md` の §0 以降
+- 画面そのものの仕様は[設定画面の仕様](../../developer/html_screen_spec.md)
+- 個々の API は[公開 API リファレンス](api_reference.md)の §0 以降
+- Python を書かずに操作する場合は[GUI 利用ガイド](../gui/usage.md)の「計算フィールドを作ってからグラフに使う」を参照
 
 ## なぜ 2 周するのか
 
@@ -104,7 +105,7 @@ logging.basicConfig(level=logging.WARNING)
 | KPI ツリーの親ノードの位置 | `build_kpi_tree(align=)`。上端ならエッジも描き、エッジの .hyper は `save()` が .twb の隣へ置く（指定は要らない） |
 
 **アクションの実行方法は `on-select` しか実物で確かめていない。**
-`on-hover` / `on-menu` は Tableau で一般に使われる値だが未確認（`docs/backlog.md` H-1）。
+`on-hover` / `on-menu` は Tableau で一般に使われる値だが未確認（`docs/developer/backlog.md` H-1）。
 
 # ダッシュボードテンプレートを使う場合
 

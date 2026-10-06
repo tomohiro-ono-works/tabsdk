@@ -3767,8 +3767,12 @@ def _fill_slots(template: str, values: dict[str, str]) -> str:
     return pattern.sub(lambda match: values[match.group()], template)
 
 
-_PROMPT_RULES_DIR = Path(__file__).parent / "template" / "prompt_rules"
-_CALC_PROMPT_RULES_DIR = Path(__file__).parent / "template" / "calc_prompt_rules"
+_TEMPLATE_ROOT = Path(__file__).resolve().parent.parent / "template"
+if not _TEMPLATE_ROOT.is_dir():
+    # Wheels bundle the root rule sources as package resources.
+    _TEMPLATE_ROOT = Path(__file__).resolve().parent / "template"
+_PROMPT_RULES_DIR = _TEMPLATE_ROOT / "prompt_rules"
+_CALC_PROMPT_RULES_DIR = _TEMPLATE_ROOT / "calc_prompt_rules"
 
 
 def _load_prompt_rules(

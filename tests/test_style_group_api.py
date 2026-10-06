@@ -1,6 +1,6 @@
 """A-6: 公開 `update_*()` の `update()` 統合と、取得側のプロパティ化。
 
-根拠: docs/model_api_spec.md §3.3 / §4.1、docs/api_rename_plan.md
+根拠: docs/developer/model_api_spec.md §3.3 / §4.1、docs/api_rename_plan.md
 """
 
 from __future__ import annotations

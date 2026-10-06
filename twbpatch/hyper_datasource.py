@@ -1,7 +1,7 @@
 """Tableau 抽出（.hyper）だけを持つデータソースの作成。
 
 一般的なデータソースの作成（CSV / Excel / BigQuery など、backlog H-2）は不採用のまま。
-KPI ツリーのエッジ用に、.hyper に限って作れるようにした（docs/tasks/I2_kpi_tree.md）。
+KPI ツリーのエッジ用に、.hyper に限って作れるようにした（docs/developer/tasks/I2_kpi_tree.md）。
 
 .hyper の中身はライブラリで読めないため、列は呼び出し側が宣言し、ファイルとは突き合わせない。
 XML は Tableau が「テキストファイルに接続して抽出を作った」ときに保存した形（2026-09-13 実測）に合わせる。

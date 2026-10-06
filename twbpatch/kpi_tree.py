@@ -1,4 +1,4 @@
-"""KPI ツリーダッシュボードの配置（backlog I-2、作業計画は docs/tasks/I2_kpi_tree.md）。
+"""KPI ツリーダッシュボードの配置（backlog I-2、作業計画は docs/developer/tasks/I2_kpi_tree.md）。
 
 既にあるシート（通常は `draw_card()` で作った KPI カード）を親子関係のツリーとして受け取り、
 左から右へ展開するタイル配置で並べる。KPI カード自体は作らない。
@@ -62,7 +62,7 @@ _EDGE_FIELDS = [
     {"name": "x", "datatype": "integer", "role": "measure"},
     {"name": "y", "datatype": "integer", "role": "measure"},
 ]
-#: エッジの表が持つ k の上限（examples/edge.txt）。表を広げたら同時に変える。
+#: エッジの表が持つ k の上限（assets/edge.txt）。表を広げたら同時に変える。
 _EDGE_MAX_OFFSET = 13
 _EDGE_COLOR = "#666666"
 _EDGE_SIZE = 0.29585635662078857

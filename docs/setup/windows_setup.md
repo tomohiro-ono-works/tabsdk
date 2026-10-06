@@ -46,7 +46,11 @@ uv sync --no-dev --system-certs
 
 `--no-dev`は利用時に不要なテスト用パッケージを除外します。`--system-certs`はWindowsに登録された証明書を使ってパッケージをダウンロードします。
 
-## 6. tabsdkを起動する
+## 6. 利用方法に合わせて進む
+
+GUI で使う場合は、次のコマンドでランチャーを起動し、[GUI 利用ガイド](../user/gui/usage.md)に進みます。
+Python のコードから使う場合は、手順 5 までで環境の準備は完了です。
+[ライブラリ利用ガイド](../user/library/usage.md)と[公開 API リファレンス](../user/library/api_reference.md)を参照してください。
 
 同じPowerShellで次の1行を実行します。`1`、`2`、`3`、`4`、`9`のメニューが表示されたら、使いたい番号を入力してEnterキーを押します。`9`は終了です。
 

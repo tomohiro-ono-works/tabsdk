@@ -1,4 +1,4 @@
-"""設定画面の KPI ツリータブ（html_kpi_tree.py、計画は docs/tasks/I2_kpi_tree.md のステップ 4）。
+"""設定画面の KPI ツリータブ（html_kpi_tree.py、計画は docs/developer/tasks/I2_kpi_tree.md のステップ 4）。
 
 既存の画面のテストと同じく、出力した HTML の文字列で確かめる。
 """

@@ -1,7 +1,7 @@
 """B-1: 一度も呼ばれていなかった公開メソッドの動作確認。
 
 「テストを書く」ではなく「動作を確認して、必要なら修正する」ためのテスト。
-根拠: docs/backlog.md B-1
+根拠: docs/developer/backlog.md B-1
 """
 
 from __future__ import annotations

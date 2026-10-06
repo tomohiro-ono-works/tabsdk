@@ -1,10 +1,13 @@
 # タスク: KPI ツリーダッシュボードの生成（画面 → 設定 YAML → .twb）
 
 - 起票日: 2026-09-13
-- 対象: `docs/backlog.md` の I-2
+- 対象: `docs/developer/backlog.md` の I-2
 - 画面の試作: `tmp/kpi_tree_prototype.html`（2026-09-13 承認）。`tmp/` は追跡外なので、
   `html_export.py` へ統合するまでの参照用
-- API の仕様: `docs/model_api_spec.md` §6.14
+- API の仕様: `docs/developer/model_api_spec.md` §6.14
+
+現在の配置（2026-10-06）：実行用 Hyper は `twbpatch/assets/edge.hyper`、
+元のタブ区切りデータは `twbpatch/assets/edge.txt`。以下の `examples/edge.txt` は作成当時の配置を指します。
 
 ## 目的
 
@@ -260,12 +263,12 @@ YAML の形がもう決まるので、先に Python を固めても手戻りし�
 
 - `html_export.py` のタブは「全体（デザインルール）」「データソース」「ダッシュボード」の 3 つ。KPI ツリーの処理は無い
 - 試作 `tmp/kpi_tree_prototype.html` は単独で動く HTML のまま。メジャー候補・デザインルールの色はダミーを直書きしている
-- **`html_export.py`・`tests/test_export_html.py`・`docs/html_screen_spec.md` は別セッションの未コミットの変更が大きい**
+- **`html_export.py`・`tests/test_export_html.py`・`docs/developer/html_screen_spec.md` は別セッションの未コミットの変更が大きい**
   （合計 約 1,600 行）。同じ箇所を触ると取り込みでぶつかる
 - ダウンロードはナビ右端の 1 つで、全タブを 1 ファイルに出す。**`dashboard:` 節は段が 0 でも必ず出る**ので、
   KPI ツリーだけを使って適用すると空のダッシュボード「ダッシュボード」が 1 つ増える
 - 画面はデータソースの既存の計算フィールドとリネームを表に並べて毎回 YAML に出す。**同じデータソースの設定を
-  2 回適用しても止まらず、計算フィールドも増えない**（上書き）。`docs/html_screen_spec.md` と `docs/roundtrip.md` の
+  2 回適用しても止まらず、計算フィールドも増えない**（上書き）。`docs/developer/html_screen_spec.md` と `docs/user/library/roundtrip.md` の
   「フォルダを 2 回渡すと `NotFoundError`」は今の実装と合わない
 - ダッシュボード・KPI ツリーの節は上書きしない。同じ YAML を 2 回適用すると、2 回目は最初のシートで
   `worksheet already exists` になって止まる。名前が別なら、ダッシュボード用と KPI ツリー用を続けて適用して両方作れる
@@ -323,8 +326,8 @@ KPI ツリーの API を `kpi_tree.py` に分けたのと同じ理由で、タ�
 8. **テスト。** 新設の `tests/test_export_html_kpi_tree.py` に、既存のテストと同じく出力 HTML の文字列で確認する
    （タブ・入力欄が `draw_card` の実引数から作られる・YAML 出力・検証）。ダウンロード 1 つ前提の既存テストは
    タブごとへ直す。あわせて、ドキュメントの YAML 例を `apply_config()` に通して .twb まで作れることを確かめる
-9. **ドキュメント。** `docs/html_screen_spec.md` に KPI ツリータブの節を足し、画面構成表・YAML 例・受け手の対応表・
-   ダウンロードの説明を更新。「2 回渡すと `NotFoundError`」の記述を実測に合わせて直す（`docs/roundtrip.md` も）。
+9. **ドキュメント。** `docs/developer/html_screen_spec.md` に KPI ツリータブの節を足し、画面構成表・YAML 例・受け手の対応表・
+   ダウンロードの説明を更新。「2 回渡すと `NotFoundError`」の記述を実測に合わせて直す（`docs/user/library/roundtrip.md` も）。
    README の「3 タブ」「1 ファイルに落ちる」を直す
 10. **確認。** `examples/sample_ec.twb` から HTML を出し、ブラウザで操作 → タブごとに YAML をダウンロード →
     `apply_config()` → Tableau Public で開く（ユーザー確認）
@@ -345,8 +348,8 @@ KPI ツリーの API を `kpi_tree.py` に分けたのと同じ理由で、タ�
 
 ### ステップ 5: 仕上げ
 
-1. ~~`docs/roundtrip.md` の 2 周目に KPI ツリーを足す~~ → ステップ 4 で済
-2. `docs/backlog.md` I-2 と `docs/roadmap.md` の状態を更新する
+1. ~~`docs/user/library/roundtrip.md` の 2 周目に KPI ツリーを足す~~ → ステップ 4 で済
+2. `docs/developer/backlog.md` I-2 と `docs/developer/roadmap.md` の状態を更新する
 3. `/spec-conformance` で §13 と README のドリフトを確認する
 
 各ステップの後に全テストを流す（skip 0）。

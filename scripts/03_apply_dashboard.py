@@ -1,7 +1,7 @@
 """03: データソース定義 YAML と対象の twb/twbx から、
 ダッシュボード・データソース定義を反映した twb を作る CLI。
 
-apply_config() 1 回を呼ぶだけの薄いラッパー。仕様は docs/html_screen_spec.md。
+apply_config() 1 回を呼ぶだけの薄いラッパー。仕様は docs/developer/html_screen_spec.md。
 バッチファイルへの複数ファイルのドラッグ&ドロップで使う想定なので、引数の順序は
 問わず拡張子（.yaml/.yml と .twb/.twbx）で判別し、出力は既定で上書きする。
 

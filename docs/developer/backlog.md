@@ -11,8 +11,8 @@
 複数ステップに分かれるものは、着手前に**個別タスクへ分解して別ファイルへ切り出す**。
 
 ```
-docs/backlog.md              ← 課題の一覧（このファイル）
-docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
+docs/developer/backlog.md              ← 課題の一覧（このファイル）
+docs/developer/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 ```
 
 分解した作業計画には、最低限これを書く。
@@ -62,7 +62,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | F-2 | 低 | `docs/` の文書体系が不明瞭 | 不要 | — |
 | F-3 | **完了** | `api_reference.md` に投影モデル 5 クラスの節が無い | 不要 | §3.12〜3.16（2026-09-07） |
 | G-1 | **完了** | 未使用ファイルの削除（`.twb` / `.py` / `.md`） | 済 | 完了（2026-09-05） |
-| G-2 | **完了** | サンプルスクリプトの削除 | 済 | `docs/tasks/G2_sample_inventory.md` |
+| G-2 | **完了** | サンプルスクリプトの削除 | 済 | `docs/developer/tasks/G2_sample_inventory.md` |
 | G-3 | **完了** | 展開用サンプルの作成 | 済 | `examples/build_dashboard.py` |
 | G-4 | **完了** | `.gitignore` の整理 | 不要 | 完了（2026-09-05） |
 | H-1 | **完了** | ダッシュボードアクションの作成・更新・削除 | **採用** | フィルタと URL の 2 種（2026-09-07） |
@@ -70,7 +70,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | H-3 | 低 | 一部モデルに CRUD の欠け | **採用** | フォルダは L-1 で完了。**残りはペインの削除（L-4）** |
 | H-4 | **完了** | グループ・セット・ビン・階層が未対応 | **採用** | 階層は L-2、グループは L-5 で完了（2026-09-07）。セット・ビンは対象外 |
 | ~~H-4b~~ | — | グループ（セット・ビンは対象外） | — | **L-5 へ統合（2026-09-07）。** 本文は L-5 |
-| H-5 | **完了** | 合計・小計を付けられない | 済 | `docs/tasks/H5_totals.md`（2026-09-06） |
+| H-5 | **完了** | 合計・小計を付けられない | 済 | `docs/developer/tasks/H5_totals.md`（2026-09-06） |
 | H-6 | 低 | 凡例・注釈・ツールチップ文章 | **保留** | 前提あり |
 | H-7 | — | デバイスレイアウト（スマホ・タブレット） | **不採用** | — |
 | H-8 | — | join / union / カスタム SQL / リレーション | **不採用** | 一旦見送り |
@@ -100,7 +100,7 @@ docs/tasks/<ID>_<名前>.md    ← 個別タスクへ分解した作業計画
 | L-4 | 低 | ペインを削除できない | 不要 | 未（H-13 の採否待ち） |
 | L-5 | **完了** | グループを作れない | 不要 | `create_group()`（2026-09-07）。セット・ビンは対象外 |
 | L-6 | 中 | ダッシュボード読み取りの穴 4 件 | **要** | **一部完了**（2026-09-13）。ゾーンの座標・入れ子とアクションの除外は埋まった。デバイスレイアウト・フィルタ値の丸め・配置の値は未（**E-2 の残り 4 件の前提**） |
-| M-1 | 中 | Tableau 定義書を DataFrame / Excel へ出力する API がない | **要** | `docs/tasks/M1_tableau_definition_export.md` |
+| M-1 | 中 | Tableau 定義書を DataFrame / Excel へ出力する API がない | **要** | `docs/developer/tasks/M1_tableau_definition_export.md` |
 
 **残り 20 件**（要分解 9 / そのまま着手可 11）。
 完了 37 件 / 保留 1 件 / 不採用 5 件 / 他課題へ統合 2 件。既存 64 件（2026-09-07 実測）に M-1 を追加。
@@ -588,7 +588,7 @@ from twbpatch.models import TwbWorksheet   # dataclass（旧）
 ### A-6 【完了】公開 `update_*()` の廃止
 
 2026-09-05 完了。作業計画（`docs/api_rename_plan.md`）は役目を終えたので削除した。
-結果は `README.md` §8 に記録している。
+結果は[公開 API リファレンス](../user/library/api_reference.md) §8 に記録している。
 
 - 公開 `update_*()` 5 件を `update(style=...)` / `update(table_style=...)` /
   `update(title_style=...)` / `set_customized_label()` へ統合し、**旧名は削除した**
@@ -712,7 +712,7 @@ A-6 と A-9 で `update_*()` / `set_*()` を `update()` へ畳んだ結果、
 ### B-3 【完了】仕様 §13 の 3 項目が静的検査で判定できない
 
 `/spec-conformance` が `要目視` と判定するもの（2026-09-07 時点で 3 件）。
-**`docs/migration_status.md` は毎回全文を作り直すので、検証の中身はここに置く。**
+**`docs/developer/migration_status.md` は毎回全文を作り直すので、検証の中身はここに置く。**
 
 | 条件 | 何が確認できないか | 足すべきテスト |
 |---|---|---|
@@ -1059,7 +1059,7 @@ A-6 の改名対象は README に 1 件も出てこないため、A-6 起因の�
 `requirements.md` と `metadata_api_scope.md` は正典に取り込み済みか、まだ有効かが不明。
 
 > **次のアクション**: 分解不要。`docs/README.md` で索引を作り、役割終了分をアーカイブする。
-> `docs/tasks/` は作成済み（`J_html_config.md` / `G2_sample_inventory.md`）。
+> `docs/developer/tasks/` は作成済み（`J_html_config.md` / `G2_sample_inventory.md`）。
 
 ---
 
@@ -1113,7 +1113,7 @@ PreToolUse フック（`.claude/hooks/`）の役割も再評価できる。
 
 **決定（2026-09-05・完了）**: 20 本すべてと `ec_site_fields.yaml` を削除した。
 
-- 知見は削除前に `docs/tasks/G2_sample_inventory.md` へ書き出した（6 パターンに整理）。G-3 の入力。
+- 知見は削除前に `docs/developer/tasks/G2_sample_inventory.md` へ書き出した（6 パターンに整理）。G-3 の入力。
 - **PreToolUse フックは残す**。対象スクリプトは消えたが、フックは
   「リポジトリ外の絶対パスを指す `.twb` / `.twbx` への書き込み」を汎用的に止めるので、
   今後書くコードにも効く。役割は「20 本を守る」から「うっかりを止める」へ変わった。
@@ -1276,7 +1276,7 @@ Tableau の主要なフィールド概念のうち、実装に登場しなかっ
 
 `total` / `subtotal` の出現は実装内 **0 箇所**（`validator.py` の要素順定義を除く）だった。
 
-**根拠**: `docs/requirements.md:253` に「ソート、合計、小計は将来拡張とすること」と明記。
+**根拠**: `docs/developer/requirements.md:253` に「ソート、合計、小計は将来拡張とすること」と明記。
 ソート（`add_sort()`）だけが実装済みで、合計・小計は未着手だった。
 
 **決定（2026-09-06・完了）**: 総計と小計で置き場所を分ける。どちらも `TwbWorksheet`。
@@ -1287,7 +1287,7 @@ Tableau の主要なフィールド概念のうち、実装に登場しなかっ
 | 小計 | `set_subtotal_visibility(field=, visible=)` | `<table>/<subtotals>/<column>` |
 
 リポジトリ内に総計・小計を含む実 XML が 1 件も無かったため、Tableau 公式スキーマ
-（`twb_2026.2.0.xsd`）を一次情報にした。経緯と XML の形は `docs/tasks/H5_totals.md`。
+（`twb_2026.2.0.xsd`）を一次情報にした。経緯と XML の形は `docs/developer/tasks/H5_totals.md`。
 
 合計の集計方法（`column-instance/@visual-totals`）は、XSD が値の語彙を絞っておらず
 確定できないため範囲外とした。
@@ -1426,12 +1426,12 @@ H 群が「Tableau の機能に対応する」話なのに対し、I 群は
 | 評価指標・棒グラフのワークシート | **対象外**（2026-09-13 決定）。まず `draw_card` 1 種類で通す |
 
 **ツリーの定義場所は Python の API と設定画面の両方**（2026-09-13 決定）。API を先に出し、
-画面はその上に載せる。作業計画は `docs/tasks/I2_kpi_tree.md`。
+画面はその上に載せる。作業計画は `docs/developer/tasks/I2_kpi_tree.md`。
 
 > **残っていること**
 >
 > 1. **画面でのツリー編集。** ノードの追加・削除と親子関係の操作。段×エリアの 2 階層とは
->    形が違うため、ダッシュボードタブのエリア種別にはせず別タブにする（`docs/html_screen_spec.md` へ節を足す）
+>    形が違うため、ダッシュボードタブのエリア種別にはせず別タブにする（`docs/developer/html_screen_spec.md` へ節を足す）
 > 2. **YAML の `kpi_tree:` 節と `apply_config()` の受け手。** `dashboard:` とは別の節にする
 > 3. ~~ノード間のエッジ（線）~~ → 完了（2026-09-14）。座標だけの .hyper から折れ線のシートを作る。上端揃えのときだけ
 
@@ -1519,7 +1519,7 @@ HTML に整形するだけなので、実装は軽い。API 方式（仕様 §2.
 フィールドの名前・型・役割・計算式・フォルダ ID まで既に返している。
 
 **完了（2026-09-06）**。`TwbWorkbook.export_html()` を新設した。
-画面の仕様は `docs/html_screen_spec.md`。
+画面の仕様は `docs/developer/html_screen_spec.md`。
 
 ### J-2 【完了】HTML 画面で設定し、設定ファイルを出力する
 
@@ -1796,7 +1796,7 @@ Tableau Workbook (`.twb` / `.twbx`) から仕様確認用の定義を抽出し�
 
 対象はダッシュボード一覧、シート一覧と詳細、全データソースのフィールド、パラメータ、
 ダッシュボードアクション。Excel は定義ごとにシートを分け、フィルター・先頭行固定・列幅調整を行う。
-出力の詳細は `docs/requirements.md`、作業計画は `docs/tasks/M1_tableau_definition_export.md` を参照。
+出力の詳細は `docs/developer/requirements.md`、作業計画は `docs/developer/tasks/M1_tableau_definition_export.md` を参照。
 
 > **次のアクション**: 仕様確定後、取得 API の対応状況を調べ、DataFrame 生成と Excel 書き込みを実装する。
 

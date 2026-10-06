@@ -1,9 +1,9 @@
 # タスク: Tableau 定義書出力 API
 
 - 起票日: 2026-09-27
-- 対象: `docs/backlog.md` の M-1
-- 要件: `docs/requirements.md` の「Tableau 定義書出力 API」
-- 公開 API の正典: 実装時に `docs/model_api_spec.md` へ追加する
+- 対象: `docs/developer/backlog.md` の M-1
+- 要件: `docs/developer/requirements.md` の「Tableau 定義書出力 API」
+- 公開 API の正典: 実装時に `docs/developer/model_api_spec.md` へ追加する
 
 ## 目的
 
@@ -39,7 +39,7 @@ export_excel("sample.twbx", "sample_definition.xlsx")
 6. `パラメータ`
 7. `ダッシュボードアクション`
 
-列と抽出内容の詳細は `docs/requirements.md` を参照する。
+列と抽出内容の詳細は `docs/developer/requirements.md` を参照する。
 
 ## 動作上の決定
 
@@ -142,7 +142,7 @@ export_excel("sample.twbx", "sample_definition.xlsx")
 - `.twb` / `.twbx` からのダッシュボード、シート構成、配置フィールド、フィルター、データソースフィールド、パラメータ、ダッシュボードアクションの抽出。
 - DataFrame 辞書の作成と Excel 書き込み。
 - `pandas` および `openpyxl` の依存関係追加。
-- 公開 API の説明を `docs/model_api_spec.md` に追加し、README の利用例を更新する。
+- 公開 API の説明を `docs/developer/model_api_spec.md` に追加し、README の利用例を更新する。
 
 ## フェーズと対象ファイル
 
@@ -155,7 +155,7 @@ export_excel("sample.twbx", "sample_definition.xlsx")
 - `twbpatch/connected_worksheet.py:1071, 1188, 3019, 3530, 3620` — Worksheet の配置 Field / Filter と Pane 色設定の取得。
 - `twbpatch/dashboard_action.py:131`、`twbpatch/action_writer.py:201`、`twbpatch/models.py:230` — アクション種別の列挙、内容の意味付け、要素解決と読み取り用スナップショット。
 - 上記3点の class 読み取り API を追加し、既存の色変更・アクション変更との整合を確認する。アクションのフィールド対応は、種別ごとの Tableau 保存 XML を根拠にする。デバイス別配置の class 修正は行わない。
-- 取得できる値と未取得値の扱いをこの文書および `docs/requirements.md` に照らして確定する。
+- 取得できる値と未取得値の扱いをこの文書および `docs/developer/requirements.md` に照らして確定する。
 
 ### Phase 2: DataFrame 辞書 API
 
@@ -171,7 +171,7 @@ export_excel("sample.twbx", "sample_definition.xlsx")
 
 ### Phase 4: 公開仕様と利用例
 
-- `docs/model_api_spec.md` — 公開 API の正典へ定義書出力 API を追加。
+- `docs/developer/model_api_spec.md` — 公開 API の正典へ定義書出力 API を追加。
 - `README.md` — DataFrame 取得と Excel 出力の使用例を追加。
 - このタスク文書の受け入れ条件と実装を照合する。
 

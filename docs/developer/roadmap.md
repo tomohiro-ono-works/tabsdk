@@ -1,8 +1,8 @@
 # twbpatch 進め方
 
 - 作成日: 2026-09-05
-- 対象: `docs/backlog.md` の全 63 課題
-- 個別の作業計画は `docs/tasks/` へ
+- 対象: `docs/developer/backlog.md` の全 63 課題
+- 個別の作業計画は `docs/developer/tasks/` へ
 
 ## 現状
 
@@ -128,7 +128,7 @@ K 群を A-6 より先にやると、同じコードを 2 度書き直すこと�
 
 `chore/phase0-cleanup` に 5 コミット。`git status` はクリーン、素の `pytest` が通る。
 G-3 は前倒しで実施し、6 パターンを 1 本にまとめた `examples/build_dashboard.py` を作成した。
-知見は `docs/tasks/G2_sample_inventory.md`。
+知見は `docs/developer/tasks/G2_sample_inventory.md`。
 `.pytest_cache` は ACL が壊れていて削除に管理者権限が要るため、`cache_dir` で迂回した。
 
 ---
@@ -211,7 +211,7 @@ Phase 1 と**一部並行**できる。トラックを 3 本に分ける。
 `TwbWorkbook.export_html()` を API 方式で新設。3 タブ（全体・データソース・ダッシュボード）、
 セル状の表に範囲選択・TSV コピペ・undo / redo、ダッシュボードは段とエリアのドラッグ配置。
 グラフの入力欄は `draw_*` の実シグネチャから自動生成する。
-**画面の仕様は `docs/html_screen_spec.md`。**
+**画面の仕様は `docs/developer/html_screen_spec.md`。**
 
 ### 受け手（Python 側）— 完了 2026-09-07
 
@@ -243,7 +243,7 @@ Phase 1 の完了を待たずに着手できるもの。
 | H-9 | `.twbx` 形式で出力 | なし |
 | H-3 | フォルダ名の変更 | なし（`TwbFolder.update()` を足すだけ） |
 | H-4 | 階層を作れるようにする | なし |
-| ~~H-5~~ | ~~合計・小計を付けられるようにする~~ | **完了 2026-09-06**（`docs/tasks/H5_totals.md`） |
+| ~~H-5~~ | ~~合計・小計を付けられるようにする~~ | **完了 2026-09-06**（`docs/developer/tasks/H5_totals.md`） |
 
 ### トラック C: 順番の決まっている機能
 

@@ -182,7 +182,7 @@ Datasource や Field では通常、要素自身の `@caption` を使用する�
 - caption を持たない要素では `id` と `name` が同じ値になる場合がある。
 - **グループフィールドは例外とし、`caption` を付けない。** Tableau は表示名をそのまま
   `@name`（角括弧付き）に書き、階層など他の要素からもその名前で参照する（実測、
-  `docs/backlog.md` L-5）。SDK が caption を足すと Tableau の書き方から外れるため、
+  `docs/developer/backlog.md` L-5）。SDK が caption を足すと Tableau の書き方から外れるため、
   `create_group()` は `id == "[" + name + "]"` として作る。
 - Worksheetでは常に `id == name == XML @name` とする。`worksheet.update(name=...)` は内部IDの変更でもあるため、対応するWindow、Dashboard Zone、Actionなどの参照を同時に更新する。
 - 内部実装では、XML の `@name` を `xml_id`、公開表示名を `display_name` と呼び分ける。
@@ -855,7 +855,7 @@ Tableauはファイルを開く際にコンテナ階層・順序・サイズ制�
 | `apply_field_config()` | YAML でフィールドの改名とフォルダ分類を一括適用 |
 | `apply_config()` | 設定画面が出力した YAML を適用する。受け手が無い節は読み飛ばす |
 | `export_json()` | ワークブックの内容を辞書で取り出す |
-| `export_html()` | 設定画面の HTML を 1 ファイル出力する（`docs/html_screen_spec.md`） |
+| `export_html()` | 設定画面の HTML を 1 ファイル出力する（`docs/developer/html_screen_spec.md`） |
 
 #### 棒グラフの二重軸（2026-09-22）
 
@@ -1058,7 +1058,7 @@ Tableau のダッシュボードには線のオブジェクトが無いため、
   設定画面や YAML で .hyper の場所を指定させないため（2026-09-15。絶対パスを埋め込むと .twb を移したときに線が消える）
 - `edge_hyper=` にパスを渡したときは、そのファイルを利用者が用意する。ライブラリはコピーしない
 - 線 `E-k` は O(0,0) → P-k(1,k) → P2-k(2,k) の 3 点で、k は親の中心から子の中心までの縦位置（ノードの高さの半分、75px 単位）。
-  表（同梱の `twbpatch/assets/edge.hyper`、元データは `examples/edge.txt`）の k の上限は 13 で、1 つの親の下の末端は 7 つまで
+  表（同梱の `twbpatch/assets/edge.hyper`、元データは `twbpatch/assets/edge.txt`）の k の上限は 13 で、1 つの親の下の末端は 7 つまで
 - **上端揃え（`align="top"`）のときだけ描ける。** 中央揃えでは子が親より上に来て k が負になり、表に無い
 - 親ノードとその子の列のあいだに幅 60px のエッジ列を挟む。Dashboard の幅は
   「深さ × 200 +（深さ − 1）× 60 + 台紙の余白 16」になる。線の端とカードのあいだには、カードの外側の余白 4 の灰色の隙間が出る
@@ -1091,7 +1091,7 @@ Tableau のダッシュボードには線のオブジェクトが無いため、
 | `build_waterfall()`（①〜④一括） | `datasource`、`name`、`metrics`（メジャーの複数選択）、`connectors`、`landing`、`increase_color`/`decrease_color`/`landing_color`、`title`、`visible`、`folder` | `TwbWorksheet` |
 
 ①の `TwbField` と②③の `WaterfallMetric` を、そのまま次の関数の引数として渡すだけで
-一通り作れる（README §2.4.2 にコード例がある）。
+一通り作れる（[公開 API リファレンス](../user/library/api_reference.md) §2.4.2 にコード例がある）。
 
 **`build_waterfall()` は設定画面向けの一括版**（2026-09-23 追加）。`index`・`join_to`・
 `path`・`folder`（連番用）を画面から一切出さずに済むよう、①〜④を 1 回の呼び出しに
@@ -1362,7 +1362,7 @@ color="#e15759", visible=True, folder=None) -> TwbWorksheet`。`text` だけが�
   安全に判定できる）。`icon` は `_PARAM_CHOICES` に登録した固定選択肢のプルダウン
 
 **設定画面: グラフのエリア／KPI ツリーのノードに「インフォメーションを追加」
-チェックボックス**（2026-09-23 追加、`docs/html_screen_spec.md` に画面側の詳細）。
+チェックボックス**（2026-09-23 追加、`docs/developer/html_screen_spec.md` に画面側の詳細）。
 `draw_info()` は画面の「グラフ種類」プルダウンには出さない（`_HIDDEN_FROM_CHART_LIST`。
 ユーザーの要望で選択肢から外した）。代わりに、既存グラフに説明アイコンを浮動で重ねる
 チェックボックスとして使う。`_draw_specs()` の出力自体には残す
@@ -1639,7 +1639,7 @@ workbook.is_dirty: bool
 | `list_dashboard_fields()` | `max_filter_value_chars=` |
 | `list_worksheet_fields()` | フィールドの `values` / `mark_type` / `category` / `type` |
 
-穴を埋めてから消す（`docs/backlog.md` L-6）。`list_dashboard_actions()` は穴が埋まったが、消すかどうかは未判断。
+穴を埋めてから消す（`docs/developer/backlog.md` L-6）。`list_dashboard_actions()` は穴が埋まったが、消すかどうかは未判断。
 
 `models.py` の dataclass は**削除しない**。投影層 14 モジュールの戻り値であり、
 接続型モデルの `_snapshot()` がこれを読んでいる。公開するのは新 API の戻り値に
@@ -1812,7 +1812,7 @@ export_excel("sample.twbx", "sample_definition.xlsx")
 
 - 入力は `.twb` / `.twbx`、出力は新規 `.xlsx`。既存ファイルは上書きしない。Excel 出力は `get_definitions()` を一度だけ呼ぶ。
 - Windows 用の `scripts/04定義書作成用.bat` は引数の Workbook を受け取り、省略時には既存のファイル選択ダイアログを使う。出力先は第2引数で指定し、省略時は入力と同じフォルダーの `<ワークブック名>_definition.xlsx` とする。`scripts/04_export_definitions.py` は `export_excel()` を呼ぶ薄い CLI とする。
-- 辞書キーと Excel シート名は `ダッシュボード一覧`、`シート一覧`、`シート詳細`、`シート詳細_フィルタ`、`フィールド`、`パラメータ`、`ダッシュボードアクション`。0 件でも規定の列を維持する。列の定義は `docs/requirements.md` の「Tableau 定義書出力 API」に従う。
+- 辞書キーと Excel シート名は `ダッシュボード一覧`、`シート一覧`、`シート詳細`、`シート詳細_フィルタ`、`フィールド`、`パラメータ`、`ダッシュボードアクション`。0 件でも規定の列を維持する。列の定義は `docs/developer/requirements.md` の「Tableau 定義書出力 API」に従う。
 - API 方式は接続型モデルの読み取り口を組み合わせる。XML やアクションの生の `links` / `params` を定義書 API で解釈しない。
 - `TwbField.original_name` は metadata-record の `remote-name` を返す。計算フィールドや記録のない元列名は `None`。
 - `TwbDrillPath.folder` は階層を含む `TwbFolder` を返し、フォルダに属さなければ `None` を返す。`フィールド` 定義には `階層` 列を設け、ドリルパスの所属とそのフォルダを記録する。

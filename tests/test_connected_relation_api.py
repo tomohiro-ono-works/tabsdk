@@ -3,7 +3,7 @@
 `TwbRelation` / `TwbRelationship` は読み取り専用。join / union / カスタム SQL の
 編集は H-8 として見送っているため、`update()` / `delete()` を持たない。
 
-根拠: docs/backlog.md A-2 / H-8（2026-09-05 決定）
+根拠: docs/developer/backlog.md A-2 / H-8（2026-09-05 決定）
 """
 
 from __future__ import annotations

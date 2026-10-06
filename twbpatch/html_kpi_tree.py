@@ -1,4 +1,4 @@
-"""設定画面の「KPI ツリー」タブ（backlog I-2、計画は docs/tasks/I2_kpi_tree.md のステップ 4）。
+"""設定画面の「KPI ツリー」タブ（backlog I-2、計画は docs/developer/tasks/I2_kpi_tree.md のステップ 4）。
 
 タブの HTML・CSS・JS を文字列で持ち、`html_export.py` の差し込み口からそのままつなぐ。
 JS は `html_export.py` の関数（`el()` / `labeled()` / `paramControl()` / `dsOptions()` /

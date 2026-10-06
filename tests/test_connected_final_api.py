@@ -237,7 +237,7 @@ def test_new_api_signatures_and_models_follow_final_contract(tmp_path) -> None:
         }
 
     # E-2（2026-09-07）で旧 API を削除した。残しているのは新 API に代替が無い
-    # ダッシュボード読み取り系 4 件だけ（docs/backlog.md E-2）。
+    # ダッシュボード読み取り系 4 件だけ（docs/developer/backlog.md E-2）。
     for removed in ("list_datasources", "get_datasource", "set_filter"):
         assert not hasattr(workbook, removed), removed
     for kept in (

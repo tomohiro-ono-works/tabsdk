@@ -1,6 +1,6 @@
 """01データソース作成用: twb / twbx から設定画面 html を出す CLI。
 
-export_html() 1 回を呼ぶだけの薄いラッパー。仕様は docs/html_screen_spec.md。
+export_html() 1 回を呼ぶだけの薄いラッパー。仕様は docs/developer/html_screen_spec.md。
 バッチファイルへのドラッグ&ドロップで使う想定なので、出力は既定で上書きする。
 
     uv run python "scripts/01_export_html.py" <workbook.twb|twbx> [output.html]

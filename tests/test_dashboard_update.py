@@ -1,6 +1,6 @@
 """B-2: `TwbDashboard.update()` を直接検証する。
 
-**テスト中に一度も実行されていなかった**唯一のメソッド（`docs/backlog.md` B-2）。
+**テスト中に一度も実行されていなかった**唯一のメソッド（`docs/developer/backlog.md` B-2）。
 表示名は `<dashboard caption>`、表示・非表示は `/workbook/windows/window` の
 `hidden` 属性に書かれる。
 """

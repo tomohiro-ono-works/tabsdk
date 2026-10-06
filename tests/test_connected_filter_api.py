@@ -1,6 +1,6 @@
 """A-2: フィルタ系 2 リソースの接続型モデル化。
 
-根拠: docs/model_api_spec.md §11、docs/backlog.md A-2（2026-09-05 決定）
+根拠: docs/developer/model_api_spec.md §11、docs/developer/backlog.md A-2（2026-09-05 決定）
 """
 
 from __future__ import annotations

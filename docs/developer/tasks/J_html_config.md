@@ -2,8 +2,8 @@
 
 - 起票日: 2026-09-05
 - 更新日: 2026-09-06（**HTML 側の実装が一巡した。受け手はすべて未着手**）
-- 実装された画面の仕様は `docs/html_screen_spec.md`
-- 対象: `docs/backlog.md` の J-1 / J-2 / J-3 / J-4
+- 実装された画面の仕様は `docs/developer/html_screen_spec.md`
+- 対象: `docs/developer/backlog.md` の J-1 / J-2 / J-3 / J-4
 
 ## 目的
 
@@ -68,7 +68,7 @@ Python 側で依存しているものが何も無いため、画面だけ先に�
 
 # 画面（HTML 側）— 完了 2026-09-06
 
-**実装された画面の仕様は `docs/html_screen_spec.md` にまとめた。** ここには経過だけ残す。
+**実装された画面の仕様は `docs/developer/html_screen_spec.md` にまとめた。** ここには経過だけ残す。
 
 ## 決着した設計判断
 

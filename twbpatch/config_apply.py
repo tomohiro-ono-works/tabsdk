@@ -1,7 +1,7 @@
 """設定画面（`export_html()`）が出力した YAML を Workbook へ適用する。
 
 仕様 §2.0 の API 方式にあたる。XML には触れず、接続型モデルのメソッドだけを呼ぶ。
-YAML の形は `docs/html_screen_spec.md` の「出力する設定ファイル」を正とする。
+YAML の形は `docs/developer/html_screen_spec.md` の「出力する設定ファイル」を正とする。
 
 旧 API の `apply_field_config()` は最上位がデータソース名、こちらは最上位が
 `design` / `datasources` / `dashboard` / `kpi_tree` のセクション。形が違うので別メソッドにし、

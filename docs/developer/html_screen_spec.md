@@ -2,7 +2,7 @@
 
 - 作成日: 2026-09-06
 - 対象: `twbpatch/html_export.py` と `TwbWorkbook.export_html()`
-- 位置づけ: **実装済みの画面の仕様書。** 作業計画は `docs/tasks/J_html_config.md`
+- 位置づけ: **実装済みの画面の仕様書。** 作業計画は `docs/developer/tasks/J_html_config.md`
 
 ## 目的
 
@@ -267,7 +267,7 @@ Excel に合わせて Alt+Enter だけを改行にしていたが、この表で
 - 基礎プロンプトは `html_export.py` の `_FIELD_PROMPT`。入力・出力の形式を定める。
   命名・フォルダ・階層の共通方針は `00-common-rules.md` に一元化し、顧客・商品などの
   分類ファイルには固有の対応辞書とデータソース構造だけを置く
-- `twbpatch/template/prompt_rules/` 直下の UTF-8 `.md` を HTML 生成時にファイル名順で読み、
+- `template/prompt_rules/` 直下の UTF-8 `.md` を HTML 生成時にファイル名順で読み、
   ファイル名をチェックボックスに表示する。本文は生成 HTML 内へ安全に埋め込み、
   `file://` でも動作する。サブフォルダは対象外。ファイルを変更した場合は HTML を再生成する
 - 初期状態では `00-common-rules.md` のみチェック済み。顧客・商品などの分類は利用者が手動で選び、
@@ -302,7 +302,7 @@ Excel に合わせて Alt+Enter だけを改行にしていたが、この表で
 **計算フィールドの表にも同じボタンがある**（「AI 用プロンプトを作る」、2026-09-21）。
 基礎本文は `_CALC_PROMPT`。リネーム・フォルダ設定で選んだフィールドと、いま計算フィールドの表に
 入っている名前を一覧にして渡し、返ってくる 5 列（名前 / 式 / フォルダ / データ型 / 役割）を
-この表の左上へ貼り付ける。`twbpatch/template/calc_prompt_rules/` 直下の UTF-8 `.md` を
+この表の左上へ貼り付ける。`template/calc_prompt_rules/` 直下の UTF-8 `.md` を
 計算専用の参照ルールとしてファイル名順に表示する。`00-calculation-rules.md` は初期チェック済み。
 IIF で文字列を絞る式、集計後の割り算、ゼロ除算、二重集計の回避などはこの MD に置く。
 基礎本文には具体的な計算式例を重ねず、5 列の出力形式とデータ型・役割の選択肢を残す。
@@ -618,7 +618,7 @@ KPI ツリーのノードも同じ `info:` を持てる（`kpi_tree.root` / `chi
 - **`aggregation` / `*_aggregation`** — フィールドの役割とデータ型、それに式の中身が
   分かっていれば `draw.py` の `_auto_metric_aggregation()` が決められる。人が選ぶ必要がない。
   **式の中に集計関数があるものは合計ではなく集計（`agg`）として置く**
-  （2026-09-22 に棒グラフも統一。`docs/model_api_spec.md`）
+  （2026-09-22 に棒グラフも統一。`docs/developer/model_api_spec.md`）
 - **`draw_card` の `value_color` / `budget_value_color` /
   `title_background_color`**（2026-09-12, 2026-09-13, 2026-09-22）— 画面では
   `main_color` の1つだけ入力させ、残りは YAML 出力時にデザインルールから当てる
@@ -649,7 +649,7 @@ KPI ツリーのノードも同じ `info:` を持てる（`kpi_tree.root` / `chi
 **棒グラフのサブメジャーと折れ線メジャーは同時に選べる**（2026-09-22）。Tableau の二重軸は
 2 軸までだが、3 つそろったときは受け手（`draw_bar()`）が棒の軸をメジャーバリューに
 まとめるため、画面では何も止めない。ただしそのときは棒 2 本が同じ太さ・メジャーネームの
-配色になり、「棒の色」「サブの棒の色」は効かない（`docs/model_api_spec.md`）。
+配色になり、「棒の色」「サブの棒の色」は効かない（`docs/developer/model_api_spec.md`）。
 
 ### フィールドの候補は役割で絞る
 
@@ -727,7 +727,7 @@ KPI ツリーのノードも同じ `info:` を持てる（`kpi_tree.root` / `chi
 `twbpatch/html_kpi_tree.py` に HTML・CSS・JS を置き、`html_export.py` の差し込み口からつなぐ
 （ダッシュボードタブの関数をそのまま使う）。受け手は `apply_config()` の `kpi_tree` 節 →
 `build_kpi_tree()`（仕様 §6.14）。画面の形は承認済みの試作（2026-09-13）に合わせた。
-経緯と決定は `docs/tasks/I2_kpi_tree.md`。
+経緯と決定は `docs/developer/tasks/I2_kpi_tree.md`。
 
 ### 上部の設定
 

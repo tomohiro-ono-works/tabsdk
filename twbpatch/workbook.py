@@ -846,7 +846,7 @@ class TwbWorkbook:
         """設定画面が出力した YAML を適用する。
 
         受け手がある節だけを適用し、無い節は名前をログへ出して読み飛ばす。
-        形式は `docs/html_screen_spec.md`。
+        形式は `docs/developer/html_screen_spec.md`。
         """
         return apply_workbook_config(self, config, field_grouping=field_grouping,
                                      template_root=template_root)

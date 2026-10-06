@@ -387,7 +387,7 @@ class TwbDatasource(ConnectedModel):
 
         `folder=` を渡すと、そのフォルダへ `type="drillpath"` の項目として入れる。
         **このとき、階層に入れたフィールドの `folder-item` は取り除く。**
-        Tableau がそう書くため（実測、`docs/backlog.md` L-2）。
+        Tableau がそう書くため（実測、`docs/developer/backlog.md` L-2）。
         """
         name = name.strip() if isinstance(name, str) else name
         if not isinstance(name, str) or not name:
@@ -430,7 +430,7 @@ class TwbDatasource(ConnectedModel):
         """元フィールドの値をまとめたグループフィールドを 1 つ作る。
 
         `groups` は グループ名 → まとめる値。**まとめない値は書かなくてよい。**
-        Tableau が単独の値として扱う（実測、`docs/backlog.md` L-5）。
+        Tableau が単独の値として扱う（実測、`docs/developer/backlog.md` L-5）。
 
         `name` を省くと `<元フィールドの表示名> (グループ)` になる。この名前は
         **caption ではなく内部 ID** になる。Tableau がそう書くため。

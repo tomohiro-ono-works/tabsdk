@@ -15,7 +15,7 @@ SAMPLE = "tests/sample_minimal.twb"
 def test_prompt_rule_files_live_under_template_directory() -> None:
     import twbpatch.html_export as html_export
 
-    template_dir = Path(html_export.__file__).parent / "template"
+    template_dir = Path(html_export.__file__).resolve().parent.parent / "template"
     assert html_export._PROMPT_RULES_DIR == template_dir / "prompt_rules"
     assert html_export._CALC_PROMPT_RULES_DIR == template_dir / "calc_prompt_rules"
     assert (template_dir / "prompt_rules" / "00-common-rules.md").is_file()
