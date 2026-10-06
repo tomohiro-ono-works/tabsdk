@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import pytest
+import copy
 import yaml
 
 from twbpatch import TwbWorkbook
@@ -35,6 +36,106 @@ def _workbook(tmp_path):
     path = tmp_path / "report.twb"
     path.write_text(SOURCE, encoding="utf-8")
     return TwbWorkbook.open(str(path))
+
+
+def _template(tmp_path):
+    from test_dashboard_layout_template import _layout_workbook, _template_root
+    return _template_root(tmp_path, _layout_workbook(tmp_path))
+
+
+def test_template_stacks_generated_charts_below_template(tmp_path):
+    from test_dashboard_layout_template import _nodes
+    baseline = _workbook(tmp_path)
+    baseline.apply_config(_config())
+    original = next(n for n in _nodes(baseline.get_dashboards()[0].layout) if n['kind'] == 'worksheet')
+    workbook = _workbook(tmp_path)
+    config = _config()
+    config['design'].update(dashboard_template='sales', dashboard_template_dashboard='Source')
+    workbook.apply_config(config, template_root=_template(tmp_path))
+    dashboard = workbook.get_dashboards()[0]
+    assert (dashboard.layout['width'], dashboard.layout['height']) == (1600, 1100)
+    generated = next(n for n in _nodes(dashboard.layout) if n['kind'] == 'worksheet')
+    for key in ('x', 'width', 'height'):
+        assert generated[key] == pytest.approx(original[key], abs=0.02)
+    assert generated['y'] == pytest.approx(original['y'] + 200, abs=0.02)
+    assert any(r['text'] == 'グラフ' for n in _nodes(dashboard.layout) for r in n.get('text_runs', []))
+    assert dashboard.get_actions()
+    assert dashboard.get_worksheets()
+    assert len(dashboard.get_containers()) == 1
+
+
+def test_template_only_has_no_content_region(tmp_path):
+    workbook = _workbook(tmp_path)
+    workbook.apply_config({'design': {'dashboard_template': 'sales'},
+                           'dashboard': {'name': 'Template only', 'rows': []}}, template_root=_template(tmp_path))
+    layout = workbook.get_dashboards()[0].layout
+    assert (layout['width'], layout['height']) == (1000, 200)
+    assert not workbook.get_worksheets()
+
+
+@pytest.mark.parametrize('with_content', [False, True])
+def test_template_and_generated_content_save_with_validation(tmp_path, with_content):
+    workbook = _workbook(tmp_path)
+    config = _config() if with_content else {'design': {}, 'dashboard': {'name': 'Template only', 'rows': []}}
+    config['design']['dashboard_template'] = 'sales'
+    workbook.apply_config(config, template_root=_template(tmp_path))
+    errors = [m.code for m in workbook.validate() if m.severity == 'error']
+    assert errors == []
+    output = tmp_path / 'validated.twb'
+    workbook.save(str(output))
+    assert TwbWorkbook.open(str(output)).get_dashboards()[0].layout == workbook.get_dashboards()[0].layout
+
+
+def test_invalid_template_does_not_mutate_workbook(tmp_path):
+    from lxml import etree as ET
+    workbook = _workbook(tmp_path)
+    before = ET.tostring(workbook.tree)
+    config = _config()
+    config['design']['dashboard_template'] = 'missing'
+    with pytest.raises(ValueError):
+        workbook.apply_config(config, template_root=tmp_path)
+    assert ET.tostring(workbook.tree) == before
+
+
+def test_template_stack_handles_different_widths_and_floating_nodes(tmp_path):
+    from twbpatch.dashboard_layout import stack_dashboard_layouts
+    from test_dashboard_layout_template import _layout_workbook, _nodes
+    layout = _layout_workbook(tmp_path).get_dashboards()[0].layout
+    small = dict(layout, width=600)
+    combined = stack_dashboard_layouts(layout, small)
+    assert (combined['width'], combined['height']) == (1000, 400)
+    floating = [n for n in combined['nodes'] if n['placement'] == 'floating']
+    assert [n['y'] for n in floating] == [10, 210]
+    original = next(n for n in _nodes(layout) if n['kind'] == 'worksheet')
+    sheets = [n for n in _nodes(combined) if n['kind'] == 'worksheet']
+    assert [n['y'] for n in sheets] == [original['y'], original['y'] + 200]
+    assert all(n['width'] == original['width'] for n in sheets)
+
+
+def test_template_stack_preserves_dashboard_background_in_upper_region(tmp_path):
+    from twbpatch.dashboard_layout import stack_dashboard_layouts
+    from test_dashboard_layout_template import _layout_workbook, _nodes
+    layout = _layout_workbook(tmp_path).get_dashboards()[0].layout
+    layout['style']['dashboard'] = {'background-color': '#112233'}
+    content = copy.deepcopy(layout)
+    content['style']['dashboard'] = {'background-color': '#ffffff'}
+    stacked = stack_dashboard_layouts(layout, content)
+    upper = [n for n in _nodes(stacked) if n.get('style', {}).get('background_color') == '#112233']
+    assert upper and upper[0]['y'] == 0 and upper[0]['height'] == 200
+    layout['style'] = {'all': {'background-color': '#445566'}}
+    stacked = stack_dashboard_layouts(layout, content)
+    assert any(n.get('style', {}).get('background_color') == '#445566' for n in _nodes(stacked))
+    assert all(n['attributes']['fixed-size'].isdigit() for n in _nodes(stacked)
+               if 'fixed-size' in n.get('attributes', {}))
+
+
+def test_template_stack_uses_integer_fixed_sizes(tmp_path):
+    from twbpatch.dashboard_layout import stack_dashboard_layouts
+    from test_dashboard_layout_template import _layout_workbook, _nodes
+    layout = _layout_workbook(tmp_path).get_dashboards()[0].layout
+    stacked = stack_dashboard_layouts(layout, layout)
+    assert all(n['attributes']['fixed-size'].isdigit() for n in _nodes(stacked)
+               if 'fixed-size' in n.get('attributes', {}))
 
 
 def _config(**overrides):

@@ -11,6 +11,38 @@ from twbpatch import TwbWorkbook
 SAMPLE = "tests/sample_minimal.twb"
 
 
+def test_html_embeds_template_catalog(tmp_path):
+    from test_dashboard_layout_template import _template_root
+    html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / 'config.html',
+               template_root=_template_root(tmp_path)).read_text(encoding='utf-8')
+    match = re.search(r'id="dashboard-templates">(.*?)</script>', html, re.S)
+    assert match
+    catalog = json.loads(match.group(1))
+    assert catalog == [{'key': 'sales', 'dashboards': [{'id': 'Source', 'name': 'Source'}]}]
+    assert '<select id="d-template">' in html
+    assert '<select id="d-template-dashboard">' in html
+
+
+def test_html_template_selection_yaml_restore(tmp_path):
+    from test_dashboard_layout_template import _template_root
+    config = {'design': {'dashboard_template': 'sales', 'dashboard_template_dashboard': 'Source'}}
+    html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / 'config.html', config=config,
+               template_root=_template_root(tmp_path)).read_text(encoding='utf-8')
+    assert 'restoreTemplateSelection(design.dashboard_template, design.dashboard_template_dashboard)' in html
+    assert '  dashboard_template: ' in html
+    assert '  dashboard_template_dashboard: ' in html
+
+
+def test_html_retains_missing_template_selection(tmp_path):
+    config = {'design': {'dashboard_template': '</script>missing', 'dashboard_template_dashboard': 'Gone'}}
+    html = TwbWorkbook.open(SAMPLE).export_html(tmp_path / 'config.html', config=config,
+               template_root=tmp_path / 'empty').read_text(encoding='utf-8')
+    embedded = json.loads(re.search(r'id="config-data">(.*?)</script>', html, re.S).group(1))
+    assert embedded == config
+    assert '見つかりません' in html
+    assert 'HTML を再出力' in html
+
+
 def _embedded_data(html: str) -> dict:
     match = re.search(
         r'<script type="application/json" id="wb-data">(.*?)</script>', html, re.S
@@ -933,9 +965,9 @@ def test_export_html_keeps_japanese_and_escapes_markup(tmp_path) -> None:
     assert "<script>売上" in names
     assert "売上&分析" == data["datasources"][0]["name"]
     # 生の </script> が埋め込みデータを閉じてしまわないこと
-    # （wb-data / draw-specs / config-data / design-presets / 本体の 5 つ。
+    # （wb-data / draw-specs / config-data / design-presets / dashboard-templates / 本体の 6 つ。
     # 2026-09-21 に 3 から 4、2026-09-25 に 5）
-    assert html.count("</script>") == 5
+    assert html.count("</script>") == 6
 
 
 def test_export_html_refuses_to_overwrite(tmp_path) -> None:

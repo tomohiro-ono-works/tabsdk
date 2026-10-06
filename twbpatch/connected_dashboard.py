@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 import uuid
 from typing import Any
+from .dashboard_layout import DashboardLayout
 
 from lxml import etree as ET
 
-from .connected import get_datasources, get_display_name, _matches, _validate_get_args
+from .connected import TwbDatasource, get_datasources, get_display_name, _matches, _validate_get_args
+from .connected_parameter import TwbParameter
+from .field_ref import field_name_from_token
 from .connected_worksheet import (
     TwbWorksheet,
     TwbWorksheetField,
@@ -341,9 +345,8 @@ def _set_show_apply(zone_el: ET._Element, show_apply: bool) -> None:
 def _zone_kind(zone_el: ET._Element, worksheet_ids: set[str]) -> str:
     if _is_container(zone_el):
         return "container"
-    if (zone_el.get("type-v2") or zone_el.get("type")) == "filter":
-        return "filter"
-    if zone_el.get("name") in worksheet_ids:
+    zone_type = zone_el.get("type-v2") or zone_el.get("type") or ""
+    if zone_el.get("name") in worksheet_ids and zone_type in {"", "worksheet"}:
         return "worksheet"
     return {
         "text": "text",
@@ -352,7 +355,9 @@ def _zone_kind(zone_el: ET._Element, worksheet_ids: set[str]) -> str:
         "dashboard-object": "dashboard_object",
         "filter": "filter",
         "paramctrl": "parameter_control",
-    }.get(zone_el.get("type-v2") or zone_el.get("type") or "", "unknown")
+        "color": "legend", "size": "legend", "shape": "legend",
+        "legend": "legend", "color-legend": "legend", "size-legend": "legend",
+    }.get(zone_type, "unknown")
 
 
 def _direct_zones(parent: ET._Element) -> list[ET._Element]:
@@ -784,7 +789,7 @@ def _sync_dashboard_window(context: WorkbookContext, dashboard_id: str) -> None:
     worksheet_zones = [
         zone
         for zone in _default_zone_elements(dashboards[0])
-        if zone.get("name") in worksheet_ids
+        if _zone_kind(zone, worksheet_ids) == 'worksheet'
     ]
     windows_el = _direct_child(root, "windows")
     windows = [] if windows_el is None else windows_el.xpath(
@@ -928,6 +933,48 @@ class TwbDashboardAction(ConnectedModel):
         return self._snapshot().command
 
     @property
+    def tag(self) -> str:
+        return self._snapshot().tag
+
+    def _field_name(self, reference: str | None) -> str | None:
+        match = re.fullmatch(r"\[([^\]]+)\]\.\[([^\]]+)\]", reference or "")
+        if match is None:
+            return None
+        datasource_id, token = match.groups()
+        if datasource_id == "Parameters":
+            return None
+        try:
+            datasource = TwbDatasource(self._context, datasource_id)
+            for field_id in (f"[{token}]", f"[{field_name_from_token(token)}]"):
+                fields = datasource.get_fields(id=field_id)
+                if len(fields) == 1:
+                    return fields[0].name
+        except DetachedModelError:
+            return None
+        return None
+
+    @property
+    def field_mappings(self) -> list[dict[str, str | None]]:
+        result: list[dict[str, str | None]] = []
+        for item in self._snapshot().field_mappings:
+            source = self._field_name(item.get("source_field"))
+            target = self._field_name(item.get("target_field"))
+            if source is not None and (item.get("target_field") is None or target is not None):
+                result.append({"source_field": source, "target_field": target})
+        return result
+
+    @property
+    def target_parameter_name(self) -> str | None:
+        reference = self._snapshot().target_parameter_id
+        match = re.fullmatch(r"\[Parameters\]\.\[(.+)\]", reference or "")
+        if match is None:
+            return None
+        try:
+            return TwbParameter(self._context, f"[{match.group(1)}]").name
+        except DetachedModelError:
+            return None
+
+    @property
     def source_worksheet_ids(self) -> list[str]:
         return list(self._snapshot().source_worksheet_ids)
 
@@ -983,7 +1030,8 @@ class TwbDashboardAction(ConnectedModel):
         return dict(self._snapshot().params)
 
     def _resolve_element(self) -> ET._Element:
-        self._snapshot()
+        if self.tag != "action":
+            raise UnsupportedFeatureError("update/delete is not supported for this action type")
         return resolve_action_element(self._context.tree.getroot(), self._id)
 
     def update(
@@ -1078,6 +1126,12 @@ class TwbDashboard(ConnectedModel):
     @property
     def sizing_mode(self) -> str:
         return _dashboard_size(self._resolve_element())[0]
+
+    @property
+    def layout(self) -> DashboardLayout:
+        from .dashboard_layout_xml import read_dashboard_layout
+
+        return read_dashboard_layout(self._context, self._resolve_element())
 
     @property
     def width(self) -> int | None:
@@ -1843,6 +1897,7 @@ class TwbDashboard(ConnectedModel):
         *,
         name: str | None | _UnsetType = UNSET,
         visible: bool | _UnsetType = UNSET,
+        layout: DashboardLayout | _UnsetType = UNSET,
     ) -> TwbDashboard:
         dashboard_el = self._resolve_element()
         if name is not UNSET and name is not None:
@@ -1866,6 +1921,11 @@ class TwbDashboard(ConnectedModel):
                 updated_dashboard.attrib.pop("caption", None)
             elif name != get_display_name(updated_dashboard):
                 updated_dashboard.set("caption", name)
+        if layout is not UNSET:
+            from .dashboard_layout_xml import write_dashboard_layout
+
+            updated_context = WorkbookContext(ET.ElementTree(updated_root))
+            write_dashboard_layout(updated_context, updated_dashboard, layout)
         if visible is not UNSET:
             windows = updated_root.xpath(
                 "/workbook/windows/window[@class='dashboard'][@name=$id]",
@@ -1885,6 +1945,14 @@ class TwbDashboard(ConnectedModel):
         if not xml_equal(root, updated_root):
             self._context.tree._setroot(updated_root)
             self._context.mark_dirty()
+        if layout is not UNSET:
+            from .dashboard_layout_xml import restore_layout_viewpoints
+
+            self._context.layout_weights = {
+                key: value for key, value in self._context.layout_weights.items() if key[0] != self._id
+            }
+            _sync_dashboard_window(self._context, self._id)
+            restore_layout_viewpoints(self._context, self._id, layout)
         return self
 
     def delete(self) -> None:

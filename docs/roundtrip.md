@@ -105,3 +105,21 @@ logging.basicConfig(level=logging.WARNING)
 
 **アクションの実行方法は `on-select` しか実物で確かめていない。**
 `on-hover` / `on-menu` は Tableau で一般に使われる値だが未確認（`docs/backlog.md` H-1）。
+
+# ダッシュボードテンプレートを使う場合
+
+`template/dashboard_template/sales/template.twb`（または `template.twbx`）を配置する。
+TWB の画像は同じ `sales` フォルダ配下に相対パスで配置する。
+`workbook.export_html("config.html", template_root=...)` でカタログを画面へ渡す。
+デザインルールでテンプレートと内部ダッシュボードを選択し、通常通りグラフや KPI カードを指定する。
+
+```yaml
+design:
+  dashboard_template: sales
+  dashboard_template_dashboard: Source dashboard
+```
+
+`workbook.apply_config(config, template_root=...)` → `workbook.save(...)` で適用・画像保存する。
+テンプレートのグラフは文字枠に変換され、指定した生成グラフはその下に追加される。
+画像を含むテンプレートは TWBX にすると関連画像をまとめて管理できる。
+テンプレート追加・フォルダ名変更後は HTML を再出力し、保存済み YAML のキーも更新する。

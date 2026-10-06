@@ -15,6 +15,8 @@
 
 from .workbook import TwbWorkbook
 from .export import write_dicts_csv
+from .definitions import get_definitions
+from .excel_export import export_excel
 
 # 接続型モデル（新 API）
 from .connected import (
@@ -70,6 +72,8 @@ from .errors import (
 __all__ = [
     "TwbWorkbook",
     "write_dicts_csv",
+    "get_definitions",
+    "export_excel",
     "BigQuerySource",
     "ExcelSource",
     "CsvSource",

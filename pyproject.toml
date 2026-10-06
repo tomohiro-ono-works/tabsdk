@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "TWB/TWBX inspector, patcher, and editor"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["lxml>=5.0.0", "PyYAML>=6.0"]
+dependencies = ["lxml>=5.0.0", "PyYAML>=6.0", "pandas>=2.0", "openpyxl>=3.1"]
 
 [project.urls]
 Repository = "https://github.com/tomohiro-ono-works/tabsdk"

@@ -1801,6 +1801,31 @@ right.add_worksheet(kpi_sheet, order=0, weight=1)
 
 この例では左右を `2:1` に分割し、左側を上下 `1:1` に分割する。SDKはDashboardサイズ、コンテナ階層、順序、比率からタイルの座標とサイズを計算する。
 
+### 12.1 Tableau 定義書出力 API
+
+```python
+from twbpatch import get_definitions, export_excel
+
+definitions = get_definitions("sample.twbx")  # dict[str, pandas.DataFrame]
+export_excel("sample.twbx", "sample_definition.xlsx")
+```
+
+- 入力は `.twb` / `.twbx`、出力は新規 `.xlsx`。既存ファイルは上書きしない。Excel 出力は `get_definitions()` を一度だけ呼ぶ。
+- Windows 用の `scripts/04定義書作成用.bat` は引数の Workbook を受け取り、省略時には既存のファイル選択ダイアログを使う。出力先は第2引数で指定し、省略時は入力と同じフォルダーの `<ワークブック名>_definition.xlsx` とする。`scripts/04_export_definitions.py` は `export_excel()` を呼ぶ薄い CLI とする。
+- 辞書キーと Excel シート名は `ダッシュボード一覧`、`シート一覧`、`シート詳細`、`シート詳細_フィルタ`、`フィールド`、`パラメータ`、`ダッシュボードアクション`。0 件でも規定の列を維持する。列の定義は `docs/requirements.md` の「Tableau 定義書出力 API」に従う。
+- API 方式は接続型モデルの読み取り口を組み合わせる。XML やアクションの生の `links` / `params` を定義書 API で解釈しない。
+- `TwbField.original_name` は metadata-record の `remote-name` を返す。計算フィールドや記録のない元列名は `None`。
+- `TwbDrillPath.folder` は階層を含む `TwbFolder` を返し、フォルダに属さなければ `None` を返す。`フィールド` 定義には `階層` 列を設け、ドリルパスの所属とそのフォルダを記録する。
+- DataFrame と Excel は `シート一覧`: ダッシュボード名→シート名、`シート詳細`: ダッシュボード名→シート名→フィールド→キー、`シート詳細_フィルタ`: ダッシュボード名→シート名→フィールド、`フィールド`: データソース名→フォルダ→階層→データ型→フィールド名、`パラメータ`: パラメータ名、`ダッシュボードアクション`: ダッシュボード→アクション種別の昇順で返す。空欄は末尾に置く。
+- `TwbPane.mark_color` と `get_continuous_colors(field)` は明示的な固定色と 2 色/3 色パレットを返す。`get_categorical_colors(field)` は明示的なカテゴリ別色を返す。自動配色は推測しない。
+- `シート詳細` の同一ダッシュボード・シート・フィールドの `ペイン：色` は1行にまとめ、カテゴリ値または最小・中間・最大と色コードの対応をカンマ区切りで `値` に記録する。
+- `シート詳細` のフィールド配置行には `field.table_calculation` と `field.discrete` を独立列で出力する。ペインの `mark_opacity` は `1 - mark_opacity` をパーセント表記に変換し、`ペイン：透過率` のキー・値行に出力する。
+- フィルターは `シート詳細_フィルタ` に分け、ダッシュボード・シート・フィルターフィールドにつき1行にする。選択値、種別、適用範囲、選択方式、ダッシュボード上のフィルターカードの `mode`、フィールド配置の表計算・不連続フラグを列に出力する。ワークシートのフィルター一覧にないカードもカードの情報で1行にする。選択値と複数の表示形式はカンマ区切りにし、取得できない設定は空欄にする。
+- `パラメータ` は `データ型` を独立列に出力する。選択型は許容値をカンマ区切り、範囲指定型は `最小=...`, `最大=...`, `間隔=...` をカンマ区切りで `パラメータ値` へ出力する。最小値・最大値・間隔の独立列は設けない。
+- `TwbDashboardAction.field_mappings` は判定できた `source_field` / `target_field` の表示名の組を返す。`target_parameter_name` は対象パラメータの表示名。異なるフィールドを結ぶフィルターは Tableau 保存例で対応方向を検証するまで空リストとする。取得できないフィールド・パラメータは空欄にする。
+- アクションは旧 `<action>` に加え、`<edit-parameter-action>`、`<edit-group-action>`、`<nav-action>` を読み取る。新形式に対する既存 `update()` / `delete()` は非対応とする。
+- ダッシュボードのシート所属は既定レイアウトのみを使い、未配置シートも一覧・詳細へ出力する。
+
 ## 13. 受け入れ条件
 
 - 公開 API に `list_*()` が存在しない。
@@ -1844,3 +1869,31 @@ right.add_worksheet(kpi_sheet, order=0, weight=1)
 - 削除または無効化されたモデルの操作が `DetachedModelError` になる。
 - 非公開コンテキストが JSON 出力へ含まれない。
 - 既存の対応機能について、旧 API と同等の XML 編集結果を得られる。
+
+# ダッシュボードレイアウトテンプレート（承認済み追加契約）
+
+`TwbDashboard.layout -> DashboardLayout` は独立した型付き辞書を返す。
+`TwbDashboard.update(layout=...)` は既定レイアウトを一括適用し、ID と window を同期する。
+XML の取得・構築はクラス層内で行う。従来 API は維持する。
+
+- `DashboardLayout`: `width` / `height`（正の有限ピクセル寸法）、`size`（sizing-mode と min/max 寸法）、`nodes`、`style`（要素別書式）、`viewpoints`（シート ID 別 zoom 属性）。サイズが未指定なら 1200×800、範囲指定では最大寸法を座標換算に用いる。
+- `LayoutNode`: `kind`、`placement`（tiled/floating）、絶対ピクセルの `x` / `y` / `width` / `height`、`attributes`（対応する配置属性）、`style`、順序付き `children`、`text_runs`、相対 `image_path`。タイルの最上位コンテナは最大1個。
+- `TextRun`: `text`、対応する文字書式の `style`、`dynamic`。静的な文字適用では動的参照を除去する。通常レイアウトのシート参照は保持する。
+- `TemplateSelection`: `key` と省略可能な `dashboard_id`。`TemplateCatalogEntry`: `key` と `dashboards`（`id` / `name` の配列）。
+
+`export_html(..., template_root=None)` / `apply_config(..., template_root=None)` を追加する。
+既定ルートはプロジェクトの `template/dashboard_template`。キーは単一フォルダ名、ファイルは `template.twb` または `template.twbx` の一方だけとする。
+YAML は `design.dashboard_template` と `design.dashboard_template_dashboard` にキーとダッシュボード XML ID を保存する。
+単一ダッシュボードなら ID を省略できる。欠落・曖昧な選択・必須画像の欠落は適用前に入力エラーとする。
+
+テンプレートは既定レイアウトのコンテナ・静的文字・画像のみを取り込む。
+シート／フィルター／パラメーターは元の寸法の中央揃え文字「グラフ」／「フィルター」／「パラメーター」に置換する（12pt、#333333、太字なし）。
+凡例・アクション・未対応物・データ定義は取り込まず警告も出さない。除外タイルは透明スペーサーで空間を保持する。
+テンプレートの書式を保持し、通常の design は下部生成領域に適用する。
+生成グラフはプレースホルダーへ対応付けず、テンプレート全体の下に追加する。
+最終寸法は最大幅と高さの合計、左揃えで拡大縮小しない。`dashboard.width/height` は下部の寸法、生成エリアが無ければテンプレートだけとする。
+KPI ツリーは独立した生成経路を維持する。
+
+画像はテンプレートフォルダ内の相対参照、TWBX では内部 TWB と必要画像だけを選択的に読む。
+ハッシュ名と画像バイトをメモリ保持し、`save()` 時に TWB の隣または TWBX の内部 TWB の隣へ保存する。
+再保存に画像を利用でき、`reload()` は未保存画像を破棄する。既存の保存・上書き契約と TWBX 保存条件は維持する。

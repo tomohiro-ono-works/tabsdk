@@ -8,16 +8,38 @@
 
 | 見たいもの | 場所 |
 |---|---|
+| Windowsで初期設定する | [Windowsでの初期設定](docs/windows_setup.md) |
 | まず動かす | [基本的な使い方](#基本的な使い方) |
 | 画面で設定して `.twb` を作る | [設定画面を HTML で出す](#設定画面を-html-で出す) |
 | クラスとメソッドの一覧 | [§3 接続型モデル](#3-接続型モデル) |
 | 設計の決まりごと（正典） | [docs/model_api_spec.md](docs/model_api_spec.md) |
+
+## ダッシュボードのデザインをテンプレートから取り込む
+
+`template/dashboard_template/<フォルダ名>/template.twb` または `template.twbx` に
+Tableau で作ったテンプレートを配置し、設定画面のデザインルールで選択できます。
+コンテナ・静的な文字・画像を保持し、シート・フィルター・パラメーターを文字枠に変換します。
+通常指定するグラフ・KPI カードはテンプレート全体の下に追加します。
+
+```python
+wb.export_html("config.html", template_root="template/dashboard_template")
+wb.apply_config("config.yaml", template_root="template/dashboard_template")
+wb.save("output.twb")
+```
+
+`template_root` を省略すると、このプロジェクトの `template/dashboard_template` を使います。
+追加・変更後は HTML を再出力してください。
+[配置・画像・YAML の詳しい手順](template/dashboard_template/README.md)を参照してください。
+レイアウト値は `dashboard.layout` で取得し、`dashboard.update(layout=layout)` で一括適用できます。
+型は `twbpatch.dashboard_layout` の `DashboardLayout` / `LayoutNode` / `TextRun` です。
 
 ## 動作要件
 
 - Python 3.10 以上
 - `lxml` 5.0.0 以上
 - `PyYAML` 6.0 以上
+- `pandas` 2.0 以上
+- `openpyxl` 3.1 以上
 
 リポジトリを使う場合は、ルートで `uv sync` を実行して依存関係を入れます。
 `uv` を使わない場合は `python -m pip install -e .` で開発用にインストールできます。
@@ -40,6 +62,23 @@ for datasource in wb.get_datasources():
 ```
 
 `.twb` と `.twbx` のどちらも同じ API で開けます。
+
+### 定義書を取得・Excel に出力
+
+```python
+from twbpatch import get_definitions, export_excel
+
+definitions = get_definitions("sample.twbx")
+sheet_detail = definitions["シート詳細"]  # pandas.DataFrame
+export_excel("sample.twbx", "sample_definition.xlsx")
+```
+
+7 種類の定義を DataFrame で取得し、Excel には各定義を同名のシートとして新規出力します。既存の `.xlsx` は上書きしません。色やアクションの参照は Workbook に明示された情報のみ出力し、取得できない値は空欄です。
+`シート詳細` はフィールド配置ごとの `field.table_calculation` / `field.discrete` 列と、ペインの透過率を含みます。フィルター設定は `シート詳細_フィルタ` に1フィールド1行で出力します。`パラメータ` にはデータ型を記録し、選択値および範囲指定の最小・最大・間隔は `パラメータ値` にカンマ区切りで出力します。
+同じフィールドの `ペイン：色` はカテゴリ値や最小・中間・最大と色コードの対応をカンマ区切りで1行にまとめます。
+定義書の行はシートごとに規定の順序で並べます。`フィールド` には Tableau の階層（ドリルパス）を表す `階層` 列も出力します。
+
+Windows では `scripts/04定義書作成用.bat` をダブルクリックして Workbook を選択するか、Workbook を bat にドラッグ&ドロップできます。出力先を省略すると、入力と同じフォルダーに `<ワークブック名>_definition.xlsx` を新規作成して開きます。コマンドからは `scripts/04定義書作成用.bat "入力.twbx" "出力.xlsx"` と指定できます。既存の出力先は上書きしません。
 
 ### 編集と保存
 
@@ -133,7 +172,8 @@ uv run python examples/build_dashboard.py
 ```
 
 Windows では `scripts/tabsdk.bat` からも実行できます。メニューの 1 は設定 HTML の出力、
-2 は YAML を適用した設定 HTML の出力、3 は YAML を適用したダッシュボード `.twb` の作成です。
+2 は YAML を適用した設定 HTML の出力、3 は YAML を適用したダッシュボード `.twb` の作成、
+4 は Tableau Workbook から定義書 Excel の作成、9 は終了です。9 を選ぶと挨拶をランダムに表示して閉じます。
 
 ---
 
@@ -148,7 +188,7 @@ Windows では `scripts/tabsdk.bat` からも実行できます。メニュー�
 |---|---|
 | `UNSET` | 非公開センチネル。「指定なし＝変更しない」を `None`（値の削除）と区別する |
 
-リソースを取得する `get_*()` はキーワード専用の `id=` / `name=` で絞り込み、常に `list` を返す。
+クラス方式でリソースを取得する `get_*()` はキーワード専用の `id=` / `name=` で絞り込み、常に `list` を返す。
 `id` と `name` の同時指定は `ValueError`。一致なしは空リスト。
 引数を取らない属性の読み取りはプロパティで公開する（§4.1）。
 
@@ -596,6 +636,7 @@ areas:
 |---|---|---|
 | `id` | `str` | 内部 ID（例 `[Sales]`） |
 | `name` | `str` | 表示名。caption がなければ `id` 由来の既定名 |
+| `original_name` | `str \| None` | 接続先の元列名（`remote-name`）。内部 ID とは別 |
 | `datasource_id` | `str` | 所属データソースの ID |
 | `datatype` | `str \| None` | `string` / `integer` / `real` / `date` など |
 | `role` | `str \| None` | `dimension` / `measure` |
@@ -717,6 +758,7 @@ areas:
 | `id` | `str` | Pane ID |
 | `name` | `str` | 表示名。無ければ Pane ID |
 | `mark_type` | `str` | `bar` / `line` / `circle` / `square` / `text` など |
+| `mark_color` | `str \| None` | Workbook に明示された固定マーク色 |
 | `mark_opacity` | `float \| None` | 不透明度 |
 | `line_interpolation` | `str` | 線マークの補間。`"linear"`（既定）/ `"step"`（階段） |
 | `customized_label` | `dict \| None` | カスタムラベル構成 |
@@ -729,6 +771,7 @@ areas:
 | `add_field` | `field: TwbField, *, encoding: str, aggregation=None, discrete=None, table_calculation=None, table_calculation_field=None` | `TwbWorksheetField` | エンコーディングへ配置。`encoding` は `color` / `label` / `tooltip` / `size` / `shape` / `detail` / `path` / `angle` |
 | `set_customized_label` | `*, main_metric: TwbWorksheetField, sub_metric: TwbWorksheetField \| None, main_color: str, value_color="#333333", sub_metrics=None, sub_value_color="#666666", vertical_alignment="center"` | `TwbPane` | カード用のラベル構成を組み立てる。文字の大きさは指標名 12 / メイン指標 16 / サブ指標 10 / 予実比較の行 12。`sub_metrics` の組は先頭が値（太字なし・`sub_value_color`）、2 つ目以降が文言（太字・組の色）。**旧 `update_customized_label()`。自身の値の更新ではなく他フィールドを受け取る操作のため動詞名へ** |
 | `get_categorical_colors` | `field: TwbWorksheetField` | `dict[str, str]` | カテゴリ別の色割り当てを取得 |
+| `get_continuous_colors` | `field: TwbWorksheetField` | `dict[str, str]` | 明示された連続色パレットの `min_color` / `mid_color` / `max_color` を取得 |
 | `set_categorical_colors` | `field: TwbWorksheetField, colors: dict[str, str]` | `TwbPane` | カテゴリ別の色を設定 |
 | `set_continuous_colors` | `field: TwbWorksheetField, *, min_color, mid_color, max_color` | `TwbPane` | 連続値の3色グラデーションを設定 |
 | `update` | `*, mark_type=UNSET, mark_color=UNSET, mark_size=UNSET, mark_opacity=UNSET, mark_scaling=UNSET, stacked=UNSET, label_style=UNSET, line_interpolation=UNSET` | `TwbPane` | 自身の値を更新。`label_style` は `show` / `cull` / `align`（ラベルの揃え）。`stacked` はマークの積み上げ（`<view><breakdown>` の `on` / `off`。既定の `auto` では棒が積み上がるので、重ねるなら `False`）。**旧 `set_mark_color()` / `set_mark_size()` / `set_mark_opacity()` / `set_mark_sizing()` / `set_label_style()` を統合済み（A-9）** |
@@ -850,6 +893,7 @@ struct={
 | `id` / `name` | `str` | 階層名。角括弧は付かない |
 | `datasource_id` | `str` | 所属データソースの `id` |
 | `field_ids` | `list[str]` | 並ぶフィールドの内部 ID。**ドリルの階層順** |
+| `folder` | `TwbFolder \| None` | 階層を含むフォルダ。未配置なら `None` |
 
 **メソッド**
 
@@ -941,6 +985,9 @@ struct={
 `excluded_source_worksheet_ids: list[str]` / `excluded_target_worksheet_ids: list[str]`（**Tableau は対象シートを除外リストで書く**）/
 `dashboard_id` / `source_type` / `target_type` / `source_dashboard_id` / `target_dashboard_id: str \| None` /
 `attrs: dict[str, str]`（`<action>` の属性）/ `details: dict`（`<action>` の中身を属性と子要素ごと辞書にしたもの）
+
+`tag: str` / `field_mappings: list[dict[str, str \| None]]`（`source_field` / `target_field`）/
+`target_parameter_name: str \| None` も取得できる。別タグのアクションは読み取り専用。
 
 **メソッド**
 
@@ -1088,6 +1135,8 @@ struct={
 | 関数 | 引数 | 説明 |
 |---|---|---|
 | `write_dicts_csv` | `rows: list[dict], path: str \| Path, *, fieldnames=None, encoding="utf-8-sig"` | 辞書のリストを CSV へ書き出す。既定は Excel 互換の BOM 付き UTF-8 |
+| `get_definitions` | `input_path: str` | `.twb` / `.twbx` の 7 定義を `dict[str, pandas.DataFrame]` で返す |
+| `export_excel` | `input_path: str, output_path: str` | 7 定義を新規 `.xlsx` に出力。既存ファイルは拒否 |
 
 ---
 

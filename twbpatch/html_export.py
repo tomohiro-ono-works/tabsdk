@@ -1854,6 +1854,10 @@ function bindColor(id) {
 function designYaml() {
   const value = id => document.getElementById(id).value.trim();
   let out = "design:\n";
+  if (document.getElementById("d-template").value) {
+    out += "  dashboard_template: " + yamlKey(document.getElementById("d-template").value) + "\n";
+    out += "  dashboard_template_dashboard: " + yamlKey(document.getElementById("d-template-dashboard").value) + "\n";
+  }
   out += "  font: " + yamlKey(value("d-font")) + "\n";
   out += "  main_color: " + yamlKey(value("d-main")) + "\n";
   out += "  sub_color_1: " + yamlKey(value("d-sub1")) + "\n";
@@ -2002,6 +2006,41 @@ const CHART_TYPES = Object.keys(DRAW_SPECS).filter(name => DRAW_SPECS[name].sele
    .twb にはデザインルール・ダッシュボードの組み立て・KPI ツリーが残らないため、
    画面を作り直すときは YAML から戻す。 */
 const CONFIG = JSON.parse(document.getElementById("config-data").textContent);
+const DASHBOARD_TEMPLATES = JSON.parse(document.getElementById("dashboard-templates").textContent);
+
+function templateOption(select, value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  select.appendChild(option);
+}
+function restoreTemplateSelection(key, dashboardId) {
+  const template = document.getElementById("d-template");
+  const dashboard = document.getElementById("d-template-dashboard");
+  key = key || "";
+  dashboardId = dashboardId || "";
+  template.replaceChildren();
+  templateOption(template, "", "使用しない");
+  DASHBOARD_TEMPLATES.forEach(entry => templateOption(template, entry.key, entry.key));
+  const entry = DASHBOARD_TEMPLATES.find(entry => entry.key === key);
+  if (key && !entry) templateOption(template, key, key + "（見つかりません）");
+  template.value = key;
+  dashboard.replaceChildren();
+  templateOption(dashboard, "", key ? "選択してください" : "テンプレートを選択してください");
+  const choices = entry ? entry.dashboards : [];
+  choices.forEach(item => {
+    const duplicate = choices.filter(other => other.name === item.name).length > 1;
+    templateOption(dashboard, item.id, duplicate ? item.name + "（" + item.id + "）" : item.name);
+  });
+  if (dashboardId && !choices.some(item => item.id === dashboardId)) {
+    templateOption(dashboard, dashboardId, dashboardId + "（見つかりません）");
+  }
+  dashboard.value = dashboardId || (choices.length === 1 ? choices[0].id : "");
+  dashboard.disabled = !key;
+}
+document.getElementById("d-template").addEventListener("change", event => {
+  restoreTemplateSelection(event.target.value, "");
+});
 
 const DASH = { rows: [] };
 let rowSeq = 0;
@@ -2798,7 +2837,8 @@ document.getElementById("row-add").addEventListener("click", () => {
    デザインルール・ダッシュボード・KPI ツリーは .twb に残らないので、
    YAML を読み込んで作った画面ではここで入力欄へ戻す。 */
 function restoreDesign(design) {
-  if (!design) return;
+  design = design || {};
+  restoreTemplateSelection(design.dashboard_template, design.dashboard_template_dashboard);
   const setValue = (id, value) => {
     const node = document.getElementById(id);
     if (node && value !== undefined && value !== null && value !== "") node.value = value;
@@ -3087,10 +3127,14 @@ _BODY = """
 <section id="tab-design">
   <div class="panel">
     <h2>全体の書式設定 <span class="todo">受け手はフォントのみ実装済み</span></h2>
-    <p class="note">ここで設定した内容を Python 側へ渡す API は未実装。今は YAML の案を出力するだけ。</p>
+    <p class="note">テンプレートの追加・変更後は HTML を再出力してください。生成するグラフや KPI カードはテンプレート領域の下に配置します。</p>
     <div class="grid">
       <label for="d-preset">プリセット</label>
       <select id="d-preset">__PRESET_OPTIONS__</select>
+      <label for="d-template">ダッシュボードテンプレート</label>
+      <select id="d-template"></select>
+      <label for="d-template-dashboard">テンプレート内のダッシュボード</label>
+      <select id="d-template-dashboard"></select>
       <label for="d-font">フォント</label>
       <select id="d-font">__FONT_OPTIONS__</select>
       <label for="d-main">メインカラーコード</label>
@@ -3300,6 +3344,7 @@ __BODY__
 <script type="application/json" id="wb-data">__DATA__</script>
 <script type="application/json" id="draw-specs">__DRAW_SPECS__</script>
 <script type="application/json" id="config-data">__CONFIG__</script>
+<script type="application/json" id="dashboard-templates">__DASHBOARD_TEMPLATES__</script>
 <script type="application/json" id="design-presets">__DESIGN_PRESETS__</script>
 <script>__SCRIPT__</script>
 """
@@ -3794,6 +3839,7 @@ def render_workbook_html(
     title: str = "twbpatch 設定",
     font: str = "Meiryo UI",
     config: dict[str, Any] | None = None,
+    template_catalog: list[dict[str, Any]] | None = None,
 ) -> str:
     from .html_kpi_tree import KPI_TREE_NAV, KPI_TREE_SCRIPT, KPI_TREE_SECTION, KPI_TREE_STYLE
 
@@ -3824,6 +3870,7 @@ def render_workbook_html(
         "__DRAW_SPECS__": _embed_json(_draw_specs()),
         # 設定 YAML のうち、.twb に残らない節だけを画面へ戻す（2026-09-21）
         "__CONFIG__": _embed_json(_screen_config(config)),
+        "__DASHBOARD_TEMPLATES__": _embed_json(template_catalog or []),
         "__DESIGN_PRESETS__": _embed_json(DESIGN_PRESETS),
         "__TITLE__": _escape(title),
     })

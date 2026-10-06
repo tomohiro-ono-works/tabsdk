@@ -39,6 +39,8 @@ _DESIGN_APPLIED = ("font",)
 
 #: `design` のうち、`dashboard` を組むときに使うもの。単独では届かない。
 _DESIGN_FOR_DASHBOARD = (
+    "dashboard_template",
+    "dashboard_template_dashboard",
     "main_color",
     "sub_color_1",
     "sub_color_2",
@@ -658,6 +660,7 @@ def _apply_dashboard(
     workbook: TwbWorkbook,
     dashboard: dict[str, Any],
     design: dict[str, Any],
+    template=None,
 ) -> None:
     if not isinstance(dashboard, dict):
         raise ValueError("dashboard must be a mapping")
@@ -673,6 +676,13 @@ def _apply_dashboard(
             raise ValueError("dashboard row must be a mapping")
         if not isinstance(row.get("areas") or [], list):
             raise ValueError("row areas must be a list")
+    if template is not None and not any(row.get('areas') for row in rows):
+        from .dashboard_layout import stack_dashboard_layouts
+
+        connected = workbook.create_dashboard(name=name)
+        connected.update(layout=stack_dashboard_layouts(template.layout, None))
+        workbook._add_image_assets(template.images)
+        return
     names = _row_names(rows)
 
     # 1 周目: シートを作り、フィルタを登録する。
@@ -763,6 +773,11 @@ def _apply_dashboard(
     # 対象ゾーンの実際の px 位置が決まらないため、最後に浮動で重ねる（2026-09-23）。
     for sheet, area in infos:
         _apply_info(workbook, connected, sheet, area, design)
+    if template is not None:
+        from .dashboard_layout import stack_dashboard_layouts
+
+        connected.update(layout=stack_dashboard_layouts(template.layout, connected.layout))
+        workbook._add_image_assets(template.images)
 
 
 def _apply_actions(
@@ -889,6 +904,7 @@ def apply_workbook_config(
     config: str | Path | dict[str, Any],
     *,
     field_grouping: str = "folder",
+    template_root: str | Path | None = None,
 ) -> TwbWorkbook:
     data = _load(config)
 
@@ -899,6 +915,13 @@ def apply_workbook_config(
     dashboard = data.get("dashboard")
     kpi_tree = data.get("kpi_tree")
     design = data.get("design")
+    template = None
+    if isinstance(design, dict) and design.get('dashboard_template'):
+        from .dashboard_template import load_dashboard_template
+
+        # Resolve all required inputs before font/datasource/dashboard changes.
+        template = load_dashboard_template(template_root, design['dashboard_template'],
+                                           design.get('dashboard_template_dashboard'))
     if design is not None:
         _apply_design(workbook, design, has_dashboard=bool(dashboard) or bool(kpi_tree))
 
@@ -907,7 +930,7 @@ def apply_workbook_config(
         _apply_datasources(workbook, datasources, field_grouping=field_grouping)
 
     if dashboard:
-        _apply_dashboard(workbook, dashboard, design if isinstance(design, dict) else {})
+        _apply_dashboard(workbook, dashboard, design if isinstance(design, dict) else {}, template)
     if kpi_tree:
         _apply_kpi_tree(workbook, kpi_tree, design if isinstance(design, dict) else {})
     return workbook

@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from lxml import etree as ET
 
-from .errors import NotFoundError
+from .errors import NotFoundError, UnsupportedFeatureError
 
 ACTION_KINDS = ("filter", "url")
 
@@ -204,5 +204,12 @@ def resolve_action_element(root: ET._Element, action_id: str) -> ET._Element:
         id=action_id,
     )
     if not hits:
+        newer = root.xpath(
+            "./*[local-name()='actions']/*[local-name()='edit-parameter-action' or "
+            "local-name()='edit-group-action' or local-name()='nav-action'][@name=$id]",
+            id=action_id,
+        )
+        if newer:
+            raise UnsupportedFeatureError("update/delete is not supported for this action type")
         raise NotFoundError(f"dashboard action not found: {action_id}")
     return hits[0]

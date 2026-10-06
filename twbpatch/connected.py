@@ -1234,6 +1234,14 @@ class TwbField(ConnectedModel):
         return _field_display_name(definition)
 
     @property
+    def original_name(self) -> str | None:
+        """接続先の元列名。Tableau 内部 ID や表示名からは推測しない。"""
+        _, definition = self._resolve_definition()
+        if self.is_calculated or definition.metadata is None:
+            return None
+        return _metadata_text(definition.metadata, "remote-name") or None
+
+    @property
     def datatype(self) -> str | None:
         _, definition = self._resolve_definition()
         if definition.column is not None:
@@ -1582,6 +1590,19 @@ class TwbDrillPath(ConnectedModel):
     def field_ids(self) -> list[str]:
         """階層に並ぶフィールドの内部 ID。ドリルの階層順。"""
         return drill_path_field_ids(self._resolve_element())
+
+    @property
+    def folder(self) -> TwbFolder | None:
+        """階層を含むフォルダ。フォルダに置かれていなければ ``None``。"""
+        for folder_el in _folder_elements(self._resolve_datasource_element()):
+            if folder_el.xpath(
+                "./*[local-name()='folder-item'][@type='drillpath'][@name=$name]",
+                name=self._id,
+            ):
+                folder_name = folder_el.get("name")
+                if folder_name:
+                    return TwbFolder(self._context, self._datasource_id, folder_name)
+        return None
 
     def get_fields(self) -> list[TwbField]:
         """階層に並ぶフィールド。**並び順は階層の順**で、XML の出現順ではない。"""

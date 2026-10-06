@@ -66,6 +66,40 @@ class TwbWorkbook:
     def open(cls, path: str) -> "TwbWorkbook":
         return cls(open_workbook_file(path))
 
+    @classmethod
+    def _open_template(cls, path: str) -> "TwbWorkbook":
+        from .parser import open_template_workbook_file
+        from zipfile import BadZipFile
+
+        try:
+            return cls(open_template_workbook_file(path))
+        except (ET.XMLSyntaxError, BadZipFile) as error:
+            raise ValueError(f'invalid template workbook: {path}') from error
+
+    def _read_template_image(self, reference: str) -> bytes:
+        """Resolve an image within the source folder/package, without extraction."""
+        import zipfile
+        from pathlib import PurePosixPath
+        from .writer import validate_attachment_name
+
+        try:
+            # Tableau may store Windows separators in a packaged relative path.
+            reference = reference.replace('\\', '/')
+            validate_attachment_name(reference)
+            if self._parsed.is_twbx:
+                member = str(PurePosixPath(self._parsed.twb_inner_path).parent / reference)
+                with zipfile.ZipFile(self._parsed.source_path) as package:
+                    if package.namelist().count(member) != 1:
+                        raise ValueError(f'missing or ambiguous image: {reference}')
+                    return package.read(member)
+            folder = Path(self._parsed.source_path).parent.resolve()
+            image = (folder / reference).resolve()
+            if not image.is_relative_to(folder):
+                raise ValueError(f'image is outside template folder: {reference}')
+            return image.read_bytes()
+        except (OSError, KeyError, ValueError) as error:
+            raise ValueError(f'template image cannot be read: {reference}') from error
+
     @property
     def is_dirty(self) -> bool:
         return self._context.is_dirty
@@ -131,6 +165,7 @@ class TwbWorkbook:
 
         # ライブラリが同梱したファイル（KPI ツリーのエッジの .hyper）を .twb の隣 / .twbx の中へ置く
         attachments = bundled_attachments(self.tree.getroot())
+        attachments = [*attachments, *self._context.pending_image_assets.items()]
         if path.lower().endswith(".twbx"):
             if not self._parsed.is_twbx or not self._parsed.extract_dir or not self._parsed.twb_inner_path:
                 raise SaveError(".twbx 保存には .twbx から開いたワークブックが必要です。")
@@ -146,6 +181,21 @@ class TwbWorkbook:
             save_twb(self.tree, path, overwrite=overwrite, attachments=attachments)
         self._context.mark_saved()
 
+    def _add_image_assets(self, images: dict[str, bytes]) -> None:
+        """テンプレート組み合わせ層から受け取った添付をクラス層で管理する。"""
+        from .writer import validate_attachment_name
+
+        for name, data in images.items():
+            validate_attachment_name(name)
+            if not isinstance(data, bytes):
+                raise TypeError("image assets must contain bytes")
+            existing = self._context.pending_image_assets.get(name)
+            if existing is not None and existing != data:
+                raise ValueError(f"image asset name collision: {name}")
+        if images:
+            self._context.pending_image_assets.update(images)
+            self._context.mark_dirty()
+
     def export_json(self) -> dict:
         return serialize_workbook(self)
 
@@ -156,6 +206,7 @@ class TwbWorkbook:
         title: str = "twbpatch 設定",
         overwrite: bool = False,
         config: str | Path | dict[str, Any] | None = None,
+        template_root: str | Path | None = None,
     ) -> Path:
         """設定画面の html を書き出す。
 
@@ -173,9 +224,10 @@ class TwbWorkbook:
                 config = yaml.safe_load(file)
         if config is not None and not isinstance(config, dict):
             raise TypeError("config must be a mapping or a path to a YAML file")
-        html = render_workbook_html(
-            serialize_workbook(self), title=title, config=config
-        )
+        from .dashboard_template import list_dashboard_templates
+
+        html = render_workbook_html(serialize_workbook(self), title=title, config=config,
+                                   template_catalog=list_dashboard_templates(template_root))
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(html, encoding="utf-8")
         return target
@@ -789,13 +841,15 @@ class TwbWorkbook:
         config: str | Path | dict[str, Any],
         *,
         field_grouping: str = "folder",
+        template_root: str | Path | None = None,
     ) -> TwbWorkbook:
         """設定画面が出力した YAML を適用する。
 
         受け手がある節だけを適用し、無い節は名前をログへ出して読み飛ばす。
         形式は `docs/html_screen_spec.md`。
         """
-        return apply_workbook_config(self, config, field_grouping=field_grouping)
+        return apply_workbook_config(self, config, field_grouping=field_grouping,
+                                     template_root=template_root)
 
 
 

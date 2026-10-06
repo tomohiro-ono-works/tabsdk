@@ -3025,6 +3025,11 @@ class TwbPane(ConnectedModel):
             normalized,
         )
 
+    @property
+    def mark_color(self) -> str | None:
+        style = _direct_child(self._resolve_element(), "style")
+        return _style_value(style, "mark", "mark-color") if style is not None else None
+
     def get_fields(
         self,
         *,
@@ -3531,8 +3536,7 @@ class TwbPane(ConnectedModel):
         self,
         field: TwbWorksheetField,
     ) -> dict[str, str]:
-        if not isinstance(field, TwbWorksheetField):
-            raise TypeError("field must be TwbWorksheetField")
+        self._validate_color_field(field)
         reference = field._resolve_placement().reference
         worksheet_el = self._resolve_worksheet_element()
         encodings = worksheet_el.xpath(
@@ -3553,6 +3557,46 @@ class TwbPane(ConnectedModel):
                 label = label[1:-1]
             result[label] = mapping.get("to") or ""
         return result
+
+    def _validate_color_field(self, field: TwbWorksheetField) -> None:
+        if not isinstance(field, TwbWorksheetField):
+            raise TypeError("field must be TwbWorksheetField")
+        if (
+            field._context is not self._context
+            or field._worksheet_id != self._worksheet_id
+            or field.pane_id != self._id
+        ):
+            raise ValueError("field must belong to the pane")
+        if field.encoding != "color":
+            raise ValueError("field must use the color encoding")
+
+    def get_continuous_colors(self, field: TwbWorksheetField) -> dict[str, str]:
+        """色エンコーディングが参照する明示的な 2 色/3 色パレット。"""
+        self._validate_color_field(field)
+        reference = field._resolve_placement().reference
+        encodings = self._resolve_worksheet_element().xpath(
+            "./*[local-name()='table']/*[local-name()='style']"
+            "/*[local-name()='style-rule' and @element='mark']"
+            "/*[local-name()='encoding' and @attr='color' and @field=$reference]",
+            reference=reference,
+        )
+        if len(encodings) != 1 or not encodings[0].get("palette"):
+            return {}
+        palettes = self._context.tree.getroot().xpath(
+            "./*[local-name()='preferences']/*[local-name()='color-palette'][@name=$name]",
+            name=encodings[0].get("palette"),
+        )
+        if len(palettes) != 1:
+            return {}
+        colors = [
+            (node.text or "").strip()
+            for node in palettes[0].xpath("./*[local-name()='color']")
+        ]
+        if len(colors) == 2 and all(colors):
+            return {"min_color": colors[0], "max_color": colors[1]}
+        if len(colors) == 3 and all(colors):
+            return {"min_color": colors[0], "mid_color": colors[1], "max_color": colors[2]}
+        return {}
 
     def set_categorical_colors(
         self,

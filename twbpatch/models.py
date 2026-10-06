@@ -235,6 +235,9 @@ class TwbDashboardAction:
     type: str | None = None
     activation: str | None = None
     command: str | None = None
+    tag: str = "action"
+    field_mappings: list[dict[str, str | None]] = dataclass_field(default_factory=list)
+    target_parameter_id: str | None = None
     source_type: str | None = None
     source_dashboard: str | None = None
     source_dashboard_id: str | None = None

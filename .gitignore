@@ -48,10 +48,17 @@ desktop.ini
 .codex/
 .agents/
 .claude/
+.superpowers/
 CLAUDE.md
 
 # Generated workbooks (examples/ の出力先。成果物は追跡しない)
 outputs/
+
+# Local validation inputs and generated HTML (not release assets)
+examples/Customer Support Case Demo #VOTD.twbx
+examples/Funnel Dashboard.twbx
+examples/Viz Extensions Gallery.twbx
+examples/sample_ec_config.html
 
 # Tableau の復旧ファイル
 ~*.twbr

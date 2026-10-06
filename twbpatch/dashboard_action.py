@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from urllib.parse import unquote
+
 from lxml import etree as ET
 
 from .field_ref import attrs
@@ -46,7 +49,7 @@ def _normalized_action_type(command: str | None) -> str | None:
     value = (command or "").lower()
     if "filter" in value:
         return "filter"
-    if "highlight" in value:
+    if "highlight" in value or "brush" in value:
         return "highlight"
     if "url" in value:
         return "url"
@@ -57,6 +60,28 @@ def _normalized_action_type(command: str | None) -> str | None:
     if "set" in value:
         return "set"
     return command
+
+
+_FILTER_PAIR = re.compile(
+    r"(\[[^\]]+\]\.\[[^\]]+\])~s\d+=<(\[[^\]]+\]\.\[[^\]]+\])~na>"
+)
+
+
+def _field_mappings(kind: str | None, links: list[dict[str, str]], params: dict[str, str]) -> list[dict[str, str | None]]:
+    if kind == "parameter" and params.get("source-field"):
+        return [{"source_field": params["source-field"], "target_field": None}]
+    if kind != "filter":
+        return []
+    result: list[dict[str, str | None]] = []
+    for link in links:
+        expression = unquote(link.get("expression", ""))
+        if not expression.startswith("tsl:"):
+            continue
+        for target, source in _FILTER_PAIR.findall(expression):
+            # 異なるフィールドの対応方向は Tableau 保存例で確定するまで推測しない。
+            if target == source:
+                result.append({"source_field": source, "target_field": target})
+    return result
 
 
 def _identifier(value: str | None, candidates: dict[str, str]) -> str | None:
@@ -82,7 +107,7 @@ def _dashboard_indexes(
         dashboard_labels[dashboard_id] = dashboard.get("caption") or dashboard_id
         seen: set[str] = set()
         dashboard_worksheets[dashboard_id] = []
-        for value in dashboard.xpath(".//@name"):
+        for value in dashboard.xpath("./*[local-name()='zones']//*[local-name()='zone']/@name"):
             worksheet_id = str(value)
             if worksheet_id in worksheet_labels and worksheet_id not in seen:
                 dashboard_worksheets[dashboard_id].append(worksheet_id)
@@ -169,14 +194,23 @@ def _materialize_action(
         target, target_dashboard_id, worksheet_labels, dashboard_worksheets, excluded_target_ids
     )
 
+    tag = _local_name(action)
+    kind = {
+        "edit-parameter-action": "parameter",
+        "edit-group-action": "set",
+        "nav-action": "navigation",
+    }.get(tag) or _action_type(command, link_els)
     return TwbDashboardAction(
         dashboard=dashboard_labels.get(source_dashboard_id, source_dashboard_id),
         dashboard_id=source_dashboard_id,
         id=action.get("name") or action.get("id"),
         caption=action.get("caption") or action.get("name"),
-        type=_action_type(command, link_els),
+        type=kind,
         activation=activation.get("type") if activation is not None else None,
         command=command,
+        tag=tag,
+        field_mappings=_field_mappings(kind, links, params),
+        target_parameter_id=params.get("target-parameter") if kind == "parameter" else None,
         source_type=source.get("type") if source is not None else None,
         source_dashboard=dashboard_labels.get(source_dashboard_id, source_dashboard_id),
         source_dashboard_id=source_dashboard_id,
@@ -205,7 +239,11 @@ def list_actions_from_tree(
     dashboard_labels, worksheet_labels, dashboard_worksheets = _dashboard_indexes(tree)
     actions = [
         _materialize_action(action, dashboard_labels, worksheet_labels, dashboard_worksheets)
-        for action in tree.getroot().xpath("//*[local-name()='actions']/*[local-name()='action']")
+        for action in tree.getroot().xpath(
+            "./*[local-name()='actions']/*[local-name()='action' or "
+            "local-name()='edit-parameter-action' or local-name()='edit-group-action' or "
+            "local-name()='nav-action']"
+        )
     ]
     if dashboard_el is None:
         return actions
